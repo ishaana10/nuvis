@@ -1,0 +1,157 @@
+<?php
+// nuBuilder Next - Setup / Installer
+// Run this file once to verify environment and create database
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+$step = $_GET['step'] ?? 'check';
+$errors = [];
+$warnings = [];
+
+function checkRequirement($name, $check, $required = true) {
+    global $errors, $warnings;
+    if ($check) {
+        return '<span style="color:var(--success)">✓ ' . $name . '</span>';
+    } else {
+        if ($required) {
+            $errors[] = $name;
+            return '<span style="color:var(--danger)">✗ ' . $name . ' (Required)</span>';
+        } else {
+            $warnings[] = $name;
+            return '<span style="color:var(--warning)">⚠ ' . $name . ' (Recommended)</span>';
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nuBuilder Next - Setup</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/nubuilder-next.css">
+    <style>
+        body { background: var(--bg-secondary); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .setup-card { width: 100%; max-width: 600px; background: var(--bg-elevated); border-radius: var(--radius-xl); padding: 40px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); }
+        .setup-brand { text-align: center; margin-bottom: 32px; }
+        .setup-logo { width: 56px; height: 56px; background: var(--accent); color: #fff; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; margin: 0 auto 16px; }
+        .setup-brand h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+        .setup-brand p { color: var(--text-secondary); font-size: 14px; }
+        .setup-step { margin-bottom: 24px; }
+        .setup-step h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+        .setup-checks { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+        .setup-actions { display: flex; gap: 10px; margin-top: 24px; }
+        .setup-success { background: var(--success-light); color: var(--success); padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; }
+        .setup-error { background: var(--danger-light); color: var(--danger); padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <div class="setup-card">
+        <div class="setup-brand">
+            <div class="setup-logo">nu</div>
+            <h1>nuBuilder Next Setup</h1>
+            <p>Version 5.0.0 - Environment Check</p>
+        </div>
+
+        <?php if ($step === 'check'): ?>
+        <div class="setup-step">
+            <h3>System Requirements</h3>
+            <div class="setup-checks">
+                <?php echo checkRequirement('PHP 7.4+', version_compare(PHP_VERSION, '7.4.0', '>=')); ?>
+                <?php echo checkRequirement('PDO Extension', extension_loaded('pdo')); ?>
+                <?php echo checkRequirement('PDO MySQL', extension_loaded('pdo_mysql')); ?>
+                <?php echo checkRequirement('JSON Extension', extension_loaded('json')); ?>
+                <?php echo checkRequirement('MBString', extension_loaded('mbstring'), false); ?>
+                <?php echo checkRequirement('GD/Image', extension_loaded('gd'), false); ?>
+            </div>
+        </div>
+
+        <div class="setup-step">
+            <h3>File Permissions</h3>
+            <div class="setup-checks">
+                <?php echo checkRequirement('Config file readable', is_readable('config.php')); ?>
+                <?php echo checkRequirement('Uploads directory writable', is_writable('uploads') || @mkdir('uploads', 0755)); ?>
+                <?php echo checkRequirement('Logs directory writable', is_writable('logs') || @mkdir('logs', 0755)); ?>
+            </div>
+        </div>
+
+        <div class="setup-step">
+            <h3>Database Connection</h3>
+            <div class="setup-checks">
+                <?php
+                $dbOk = false;
+                try {
+                    require_once 'config.php';
+                    $dsn = "mysql:host={$nuConfig['dbHost']};dbname={$nuConfig['dbName']};charset={$nuConfig['dbCharset']}";
+                    $pdo = new PDO($dsn, $nuConfig['dbUser'], $nuConfig['dbPassword']);
+                    $dbOk = true;
+                    echo checkRequirement('Database connection', true);
+                    echo checkRequirement('Database "' . $nuConfig['dbName'] . '" exists', true);
+                } catch (Exception $e) {
+                    echo checkRequirement('Database connection', false);
+                    echo '<span style="color:var(--danger);font-size:12px;">Error: ' . htmlspecialchars($e->getMessage()) . '</span>';
+                }
+                ?>
+            </div>
+        </div>
+
+        <?php if (empty($errors)): ?>
+            <div class="setup-success">
+                <strong>All requirements met!</strong> You can proceed with installation.
+            </div>
+            <div class="setup-actions">
+                <a href="setup.php?step=install" class="nu-btn nu-btn-primary">Install Database</a>
+                <a href="index.php" class="nu-btn nu-btn-ghost">Go to Application</a>
+            </div>
+        <?php else: ?>
+            <div class="setup-error">
+                <strong>Please fix the errors above before continuing.</strong>
+            </div>
+        <?php endif; ?>
+
+        <?php elseif ($step === 'install'): ?>
+            <?php
+            $sqlFile = 'install.sql';
+            if (!file_exists($sqlFile)) {
+                echo '<div class="setup-error">install.sql not found</div>';
+            } else {
+                try {
+                    require_once 'config.php';
+                    $dsn = "mysql:host={$nuConfig['dbHost']};dbname={$nuConfig['dbName']};charset={$nuConfig['dbCharset']}";
+                    $pdo = new PDO($dsn, $nuConfig['dbUser'], $nuConfig['dbPassword']);
+                    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+                    $sql = file_get_contents($sqlFile);
+                    $statements = array_filter(array_map('trim', explode(';', $sql)));
+
+                    foreach ($statements as $stmt) {
+                        if (!empty($stmt)) {
+                            try {
+                                $pdo->exec($stmt);
+                            } catch (PDOException $e) {
+                                // Skip "already exists" errors, fail on others
+                                $msg = $e->getMessage();
+                                if (strpos($msg, 'already exists') === false && strpos($msg, 'Duplicate entry') === false) {
+                                    throw $e;
+                                }
+                            }
+                        }
+                    }
+
+                    echo '<div class="setup-success">Database installed successfully!</div>';
+                    echo '<div class="setup-actions">';
+                    echo '<a href="index.php" class="nu-btn nu-btn-primary">Launch Application</a>';
+                    echo '</div>';
+                    echo '<p style="margin-top:16px;font-size:13px;color:var(--text-secondary);">Default login: <strong>globeadmin</strong> / <strong>password</strong> (change immediately)</p>';
+                } catch (Exception $e) {
+                    echo '<div class="setup-error">Installation failed: ' . htmlspecialchars($e->getMessage()) . '</div>';
+                    echo '<div class="setup-actions"><a href="setup.php?step=check" class="nu-btn nu-btn-ghost">Back to Check</a></div>';
+                }
+            }
+            ?>
+        <?php endif; ?>
+    </div>
+</body>
+</html>
