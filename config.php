@@ -21,7 +21,8 @@ $nuConfig['lockoutDuration']       = 900;
 $nuConfig['csrfTokenName']         = 'nu_csrf';
 $nuConfig['sessionCookieSecure']   = true;
 $nuConfig['sessionCookieHttpOnly'] = true;
-$nuConfig['sessionCookieSameSite'] = 'Strict';
+// Lax (NOT Strict) - Strict blocks the cookie being sent on the GET redirect after POST login
+$nuConfig['sessionCookieSameSite'] = 'Lax';
 $nuConfig['passwordMinLength']     = 10;
 
 // ─── Features ──────────────────────────────────────────────────────────────────
@@ -50,17 +51,16 @@ ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
 ini_set('log_errors', '1');
-ini_set('error_log', $nuConfig['logPath'] . 'php_errors.log');
 
 // ─── Session Hardening + Start ─────────────────────────────────────────────────────────
 if (session_status() === PHP_SESSION_NONE) {
-    // ALL ini_set and session_name MUST be called before session_start()
     ini_set('session.use_strict_mode',  '1');
     ini_set('session.cookie_httponly',  '1');
-    ini_set('session.cookie_samesite',  $nuConfig['sessionCookieSameSite']);
+    ini_set('session.cookie_samesite',  'Lax');
     ini_set('session.cookie_secure',    $nuConfig['sessionCookieSecure'] ? '1' : '0');
     ini_set('session.use_only_cookies', '1');
     ini_set('session.gc_maxlifetime',   (string)$nuConfig['sessionTimeout']);
+    ini_set('session.cookie_path',      '/');
     session_name('nu5sess');
     session_start();
 }
