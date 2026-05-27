@@ -3,10 +3,6 @@ declare(strict_types=1);
 /**
  * NuAuth - Authentication, Session Management & Permission Engine
  * PHP 7.4 compatible
- *
- * Class names provided:
- *   NuAuth  - primary class (used by index.php, all API files)
- *   Auth    - alias for backward compatibility
  */
 
 require_once __DIR__ . '/Audit.php';
@@ -22,9 +18,6 @@ class NuAuth {
         $this->db     = NuDatabase::getInstance();
     }
 
-    /**
-     * @return NuAuth
-     */
     public static function getInstance() {
         if (self::$instance === null) {
             self::$instance = new self();
@@ -49,7 +42,6 @@ class NuAuth {
             return $this->fail('Invalid credentials.');
         }
 
-        // Lockout check
         $maxAttempts    = (int)($this->config['maxLoginAttempts'] ?? 5);
         $lockoutSeconds = (int)($this->config['lockoutDuration']  ?? 900);
 
@@ -62,13 +54,11 @@ class NuAuth {
             $this->resetAttempts((int)$user['usr_id']);
         }
 
-        // Password verify
         if (!password_verify($password, $user['usr_password'])) {
             $this->incrementAttempts((int)$user['usr_id']);
             return $this->fail('Invalid credentials.');
         }
 
-        // Password rehash if needed
         if (password_needs_rehash($user['usr_password'], PASSWORD_BCRYPT, ['cost' => 12])) {
             $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
             $this->db->query(
@@ -77,14 +67,12 @@ class NuAuth {
             );
         }
 
-        // 2FA
         if (!empty($this->config['enable2FA']) && !empty($user['usr_2fa_secret'])) {
             if ($otp === '' || !$this->verifyTOTP($user['usr_2fa_secret'], $otp)) {
                 return ['success' => false, 'message' => 'Invalid or missing 2FA code.', 'requires2FA' => true];
             }
         }
 
-        // Success
         $this->resetAttempts((int)$user['usr_id']);
         $this->createSession($user);
         $this->logAudit('login', 'nu_users', (int)$user['usr_id']);
@@ -94,7 +82,9 @@ class NuAuth {
 
     // --- Logout ---
     public function logout() {
-        $this->ensureSession();
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
         if (!empty($_SESSION['nu_user_id'])) {
             $this->logAudit('logout', 'nu_users', (int)$_SESSION['nu_user_id']);
         }
@@ -112,7 +102,9 @@ class NuAuth {
 
     // --- Session Check ---
     public function checkAuth() {
-        $this->ensureSession();
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
         if (empty($_SESSION['nu_user_id'])) return false;
         $timeout = (int)($this->config['sessionTimeout'] ?? 3600);
         if (time() - (int)($_SESSION['nu_last_activity'] ?? 0) > $timeout) {
@@ -139,7 +131,9 @@ class NuAuth {
 
     // --- CSRF ---
     public function getCsrfToken() {
-        $this->ensureSession();
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
         if (empty($_SESSION['nu_csrf'])) {
             $_SESSION['nu_csrf'] = bin2hex(random_bytes(32));
         }
@@ -147,7 +141,9 @@ class NuAuth {
     }
 
     public function verifyCsrf($token) {
-        $this->ensureSession();
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
         return isset($_SESSION['nu_csrf']) && hash_equals($_SESSION['nu_csrf'], $token);
     }
 
@@ -195,24 +191,14 @@ class NuAuth {
     }
 
     // --- Private Helpers ---
-
-    /**
-     * Ensure a PHP session is active. Safe to call multiple times.
-     */
-    private function ensureSession() {
+    private function createSession($user) {
+        // NOTE: session_regenerate_id() is intentionally NOT called here.
+        // The session is already fresh (started by config.php on every request).
+        // Calling session_regenerate_id() before header('Location:') causes the
+        // new session ID cookie to be lost in the redirect on some PHP 7.4 hosts.
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-    }
-
-    private function createSession($user) {
-        // Make sure session is started before touching it
-        $this->ensureSession();
-
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_regenerate_id(true);
-        }
-
         $_SESSION['nu_user_id']       = $user['usr_id'];
         $_SESSION['nu_username']      = $user['usr_username'];
         $_SESSION['nu_role']          = $user['usr_role'];
@@ -249,12 +235,10 @@ class NuAuth {
         return $user;
     }
 
-    // PHP 7.4 compatible: replaced str_starts_with() and str_contains() with strpos()
     private function isApiRequest() {
         $uri = $_SERVER['REQUEST_URI'] ?? '';
         return (
             !empty($_SERVER['HTTP_X_REQUESTED_WITH']) ||
-            strpos($uri, '/api/') === 0 ||
             strpos($uri, '/api/') !== false
         );
     }
@@ -272,7 +256,6 @@ class NuAuth {
         return false;
     }
 
-    // PHP 7.4 compatible: replaced $hm[-1] with substr($hm, -1) and 1_000_000 with 1000000
     private function generateTOTP($secret, $timeSlice) {
         $secret = $this->base32Decode($secret);
         $time   = pack('N*', 0) . pack('N*', $timeSlice);
@@ -308,7 +291,6 @@ class NuAuth {
     public function __wakeup() { throw new RuntimeException('Cannot unserialize NuAuth.'); }
 }
 
-// Backward-compatible alias
 if (!class_exists('Auth')) {
     class_alias('NuAuth', 'Auth');
 }
