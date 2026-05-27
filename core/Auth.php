@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * NuAuth - Authentication, Session Management & Permission Engine
- * Industry-grade: OWASP session hardening, lockout, CSRF, 2FA-ready, audit hooks
+ * PHP 7.4 compatible
  *
  * Class names provided:
  *   NuAuth  - primary class (used by index.php, all API files)
@@ -45,7 +45,6 @@ class NuAuth {
         );
 
         if (!$user) {
-            // Constant-time fake verify to prevent user enumeration
             password_verify($password, '$2y$12$invalidhashpadding...............');
             return $this->fail('Invalid credentials.');
         }
@@ -69,7 +68,7 @@ class NuAuth {
             return $this->fail('Invalid credentials.');
         }
 
-        // Password rehash if algorithm changed
+        // Password rehash if needed
         if (password_needs_rehash($user['usr_password'], PASSWORD_BCRYPT, ['cost' => 12])) {
             $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
             $this->db->query(
@@ -95,6 +94,7 @@ class NuAuth {
 
     // --- Logout ---
     public function logout() {
+        $this->ensureSession();
         if (!empty($_SESSION['nu_user_id'])) {
             $this->logAudit('logout', 'nu_users', (int)$_SESSION['nu_user_id']);
         }
@@ -104,12 +104,15 @@ class NuAuth {
             setcookie(session_name(), '', time() - 42000,
                 $p['path'], $p['domain'], $p['secure'], $p['httponly']);
         }
-        session_destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
         return true;
     }
 
     // --- Session Check ---
     public function checkAuth() {
+        $this->ensureSession();
         if (empty($_SESSION['nu_user_id'])) return false;
         $timeout = (int)($this->config['sessionTimeout'] ?? 3600);
         if (time() - (int)($_SESSION['nu_last_activity'] ?? 0) > $timeout) {
@@ -136,6 +139,7 @@ class NuAuth {
 
     // --- CSRF ---
     public function getCsrfToken() {
+        $this->ensureSession();
         if (empty($_SESSION['nu_csrf'])) {
             $_SESSION['nu_csrf'] = bin2hex(random_bytes(32));
         }
@@ -143,6 +147,7 @@ class NuAuth {
     }
 
     public function verifyCsrf($token) {
+        $this->ensureSession();
         return isset($_SESSION['nu_csrf']) && hash_equals($_SESSION['nu_csrf'], $token);
     }
 
@@ -190,8 +195,24 @@ class NuAuth {
     }
 
     // --- Private Helpers ---
+
+    /**
+     * Ensure a PHP session is active. Safe to call multiple times.
+     */
+    private function ensureSession() {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+    }
+
     private function createSession($user) {
-        session_regenerate_id(true);
+        // Make sure session is started before touching it
+        $this->ensureSession();
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+
         $_SESSION['nu_user_id']       = $user['usr_id'];
         $_SESSION['nu_username']      = $user['usr_username'];
         $_SESSION['nu_role']          = $user['usr_role'];
