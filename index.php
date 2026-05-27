@@ -1,15 +1,21 @@
 <?php
 declare(strict_types=1);
 
-// ─── Bootstrap ────────────────────────────────────────────────────────────────
-$bootError  = '';
-$loginError = '';
-$isLoggedIn = false;
-$currentUser = null;
-$auth = null;
+// Start session immediately before anything else
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-function h(mixed $v): string {
-    return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
+$bootError   = '';
+$loginError  = '';
+$isLoggedIn  = false;
+$currentUser = null;
+$auth        = null;
+
+// PHP 7.4 compatible - removed 'mixed' type hint and ENT_SUBSTITUTE (PHP 8.1+)
+function h($v): string {
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
 try {
@@ -24,8 +30,14 @@ try {
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout'])) {
-    if ($auth) $auth->logout();
-    else { $_SESSION = []; session_destroy(); }
+    if ($auth) {
+        $auth->logout();
+    } else {
+        $_SESSION = [];
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
+    }
     header('Location: index.php');
     exit;
 }
@@ -48,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
             $loginError = $result['message'] ?? 'Login failed.';
         } catch (Throwable $e) {
             error_log('[index.php login] ' . $e->getMessage());
-            $loginError = 'Login error. Please try again.';
+            $loginError = 'Login error: ' . $e->getMessage();
         }
     }
 }
@@ -56,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
 // ─── Auth Check ───────────────────────────────────────────────────────────────
 if ($auth) {
     try {
-        $isLoggedIn  = $auth->checkAuth();
+        $isLoggedIn  = (bool)$auth->checkAuth();
         $currentUser = $isLoggedIn ? $auth->getCurrentUser() : null;
     } catch (Throwable $e) {
         error_log('[index.php auth check] ' . $e->getMessage());
@@ -64,26 +76,26 @@ if ($auth) {
     }
 }
 
-$csrfToken   = $auth ? $auth->getCsrfToken() : '';
+$csrfToken   = ($auth && $isLoggedIn) ? $auth->getCsrfToken() : '';
 $userDisplay = 'User';
 if (is_array($currentUser)) {
     $userDisplay = $currentUser['usr_name'] ?? $currentUser['usr_username'] ?? 'User';
 }
 
 // ─── Asset helpers ────────────────────────────────────────────────────────────
-function nu_asset(string $path): string {
+function nu_asset($path) {
     $full = __DIR__ . '/' . ltrim($path, '/');
     $v    = is_file($full) ? filemtime($full) : time();
     return h(ltrim($path, '/')) . '?v=' . $v;
 }
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?= h($nuConfig['theme'] ?? 'auto') ?>">
+<html lang="en" data-theme="<?= h(isset($nuConfig) ? ($nuConfig['theme'] ?? 'auto') : 'auto') ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title><?= h($nuConfig['siteTitle'] ?? 'NuBuilder 5') ?></title>
+    <title><?= h(isset($nuConfig) ? ($nuConfig['siteTitle'] ?? 'NuBuilder 5') : 'NuBuilder 5') ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="<?= nu_asset('assets/css/nubuilder-next.css') ?>">
@@ -98,13 +110,13 @@ function nu_asset(string $path): string {
     <div class="nu-login-card">
         <div class="nu-login-brand">
             <div class="nu-logo">nu</div>
-            <h1><?= h($nuConfig['siteTitle'] ?? 'NuBuilder 5') ?></h1>
+            <h1><?= h(isset($nuConfig) ? ($nuConfig['siteTitle'] ?? 'NuBuilder 5') : 'NuBuilder 5') ?></h1>
             <p>Modern Low-Code Platform</p>
         </div>
 
         <?php if ($bootError !== ''): ?>
             <div class="nu-login-error" style="background:rgba(255,193,7,.12);border-color:rgba(255,193,7,.4);color:#ffe9a8;display:block">
-                ⚠ <?= h($bootError) ?>
+                &#9888; <?= h($bootError) ?>
             </div>
         <?php endif; ?>
 
@@ -115,7 +127,6 @@ function nu_asset(string $path): string {
         <?php endif; ?>
 
         <form method="post" action="index.php" autocomplete="off" novalidate>
-            <input type="hidden" name="nu_csrf" value="<?= h($csrfToken) ?>">
             <div class="nu-field">
                 <label for="nu_username">Username</label>
                 <input id="nu_username" name="username" type="text"
@@ -132,6 +143,7 @@ function nu_asset(string $path): string {
                 Sign In
             </button>
         </form>
+        <p style="margin-top:16px;font-size:12px;color:var(--text-tertiary);text-align:center;">Default: globeadmin / password</p>
     </div>
 </div>
 
@@ -143,7 +155,7 @@ function nu_asset(string $path): string {
     <aside class="nu-sidebar" id="sidebar">
         <div class="nu-sidebar-header">
             <div class="nu-logo">nu</div>
-            <span class="nu-version">v<?= NU_VERSION ?></span>
+            <span class="nu-version">v5.1</span>
         </div>
 
         <nav class="nu-nav">
@@ -236,10 +248,9 @@ function nu_asset(string $path): string {
         <div class="nu-sidebar-footer">
             <div class="nu-user-info">
                 <div class="nu-user-name"><?= h($userDisplay) ?></div>
-                <div class="nu-user-role"><?= h($currentUser['usr_role'] ?? '') ?></div>
+                <div class="nu-user-role"><?= h(is_array($currentUser) ? ($currentUser['usr_role'] ?? '') : '') ?></div>
             </div>
             <form method="post" action="index.php" style="margin:0">
-                <input type="hidden" name="nu_csrf" value="<?= h($csrfToken) ?>">
                 <button type="submit" name="logout" value="1"
                         class="nu-btn nu-btn-ghost nu-btn-sm" style="margin-top:8px;width:100%">
                     Logout
@@ -295,12 +306,10 @@ function nu_asset(string $path): string {
 <script src="<?= nu_asset('assets/js/select2.min.js') ?>"></script>
 <script>
 (function(){
-    // Restore saved theme
     try {
         var t = localStorage.getItem('nu-theme');
         if (t) document.documentElement.setAttribute('data-theme', t);
     } catch(e) {}
-    // Load module from URL hash
     var hash = location.hash.replace('#','');
     if (hash && window.NuApp) NuApp.loadModule(hash);
     else if (window.NuApp) NuApp.loadModule('dashboard');
@@ -308,14 +317,11 @@ function nu_asset(string $path): string {
 </script>
 <?php endif; ?>
 
-<?php if (!$isLoggedIn): ?>
 <script>
-// Register SW for PWA
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function(){});
 }
 </script>
-<?php endif; ?>
 
 </body>
 </html>
