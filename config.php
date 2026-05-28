@@ -14,12 +14,12 @@ $nuConfig['dbPassword'] = getenv('NU_DB_PASS')    ?: 'your_db_password';
 $nuConfig['dbCharset']  = 'utf8mb4';
 $nuConfig['dbPort']     = (int)(getenv('NU_DB_PORT') ?: 3306);
 
-// ─── Security ──────────────────────────────────────────────────────────────────
+// ─── Security ─────────────────────────────────────────────────────────────────
 $nuConfig['sessionTimeout']        = 3600;
 $nuConfig['maxLoginAttempts']      = 5;
 $nuConfig['lockoutDuration']       = 900;
 $nuConfig['csrfTokenName']         = 'nu_csrf';
-$nuConfig['sessionCookieSecure']   = false; // set to true only when running on HTTPS
+$nuConfig['sessionCookieSecure']   = true;
 $nuConfig['sessionCookieHttpOnly'] = true;
 // Lax (NOT Strict) - Strict blocks cookie on POST->redirect
 $nuConfig['sessionCookieSameSite'] = 'Lax';
@@ -69,7 +69,8 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_secure',    $nuConfig['sessionCookieSecure'] ? '1' : '0');
     ini_set('session.use_only_cookies', '1');
     ini_set('session.gc_maxlifetime',   (string)$nuConfig['sessionTimeout']);
-    ini_set('session.cookie_path',      '/');
+    // Use the app subdirectory path so cookie is sent on redirects within /nbv5u/m/
+    ini_set('session.cookie_path',      '/nbv5u/m/');
     session_save_path($sessionPath);
     session_name('nu5sess');
     session_start();
