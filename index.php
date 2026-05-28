@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+ob_start(); // Buffer all output - prevents 'headers already sent' from any whitespace or warnings
 // config.php handles session_name('nu5sess') + session_start() - DO NOT call session_start() here
 
 function h($v): string {
@@ -11,6 +12,7 @@ $loginError  = '';
 $isLoggedIn  = false;
 $currentUser = null;
 $auth        = null;
+$nuConfig    = [];
 
 try {
     require_once __DIR__ . '/config.php';
@@ -32,6 +34,7 @@ $_baseHref = $_scheme . '://' . $_host . $_self . '/';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout'])) {
     if ($auth) { $auth->logout(); }
     else { $_SESSION = []; session_destroy(); }
+    ob_end_clean();
     header('Location: ' . $_baseHref . 'index.php');
     exit;
 }
@@ -48,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
         try {
             $result = $auth->login($username, $password);
             if (!empty($result['success'])) {
-                // Use absolute URL so shared-host proxies resolve correctly
+                ob_end_clean();
                 header('Location: ' . $_baseHref . 'index.php');
                 exit;
             }
@@ -78,18 +81,22 @@ if (is_array($currentUser)) {
 }
 
 function nu_asset($path) {
+    global $nuConfig;
     $full = __DIR__ . '/' . ltrim($path, '/');
     $v    = is_file($full) ? filemtime($full) : time();
     return h(ltrim($path, '/')) . '?v=' . $v;
 }
+
+$_theme = $nuConfig['theme'] ?? 'auto';
+$_siteTitle = $nuConfig['siteTitle'] ?? 'NuBuilder 5';
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?= h($nuConfig['theme'] ?? 'auto') ?>">
+<html lang="en" data-theme="<?= h($_theme) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title><?= h($nuConfig['siteTitle'] ?? 'NuBuilder 5') ?></title>
+    <title><?= h($_siteTitle) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="<?= nu_asset('assets/css/nubuilder-next.css') ?>">
@@ -101,7 +108,7 @@ function nu_asset($path) {
     <div class="nu-login-card">
         <div class="nu-login-brand">
             <div class="nu-logo">nu</div>
-            <h1><?= h($nuConfig['siteTitle'] ?? 'NuBuilder 5') ?></h1>
+            <h1><?= h($_siteTitle) ?></h1>
             <p>Modern Low-Code Platform</p>
         </div>
         <?php if ($bootError !== ''): ?>
@@ -112,7 +119,7 @@ function nu_asset($path) {
         <?php if ($loginError !== ''): ?>
             <div class="nu-login-error" style="display:block"><?= h($loginError) ?></div>
         <?php endif; ?>
-        <form method="post" action="index.php" autocomplete="off" novalidate>
+        <form method="post" action="<?= h($_baseHref) ?>index.php" autocomplete="off" novalidate>
             <div class="nu-field">
                 <label for="nu_username">Username</label>
                 <input id="nu_username" name="username" type="text" class="nu-input"
@@ -126,7 +133,7 @@ function nu_asset($path) {
             <button type="submit" name="login_submit" value="1"
                     class="nu-btn nu-btn-primary nu-btn-block">Sign In</button>
         </form>
-        <p style="margin-top:16px;font-size:12px;color:var(--text-tertiary);text-align:center;">Default: globeadmin / password</p>
+        <p style="margin-top:16px;font-size:12px;color:var(--text-tertiary);text-align:center;">Default: globeadmin / password123</p>
     </div>
 </div>
 <?php else: ?>
@@ -153,7 +160,7 @@ function nu_asset($path) {
                 <div class="nu-user-name"><?= h($userDisplay) ?></div>
                 <div class="nu-user-role"><?= h(is_array($currentUser) ? ($currentUser['usr_role'] ?? '') : '') ?></div>
             </div>
-            <form method="post" action="index.php" style="margin:0">
+            <form method="post" action="<?= h($_baseHref) ?>index.php" style="margin:0">
                 <button type="submit" name="logout" value="1"
                         class="nu-btn nu-btn-ghost nu-btn-sm" style="margin-top:8px;width:100%">Logout</button>
             </form>
@@ -199,3 +206,4 @@ function nu_asset($path) {
 <?php endif; ?>
 </body>
 </html>
+<?php ob_end_flush(); ?>
