@@ -77,6 +77,13 @@ class NuAuth {
         $this->createSession($user);
         $this->logAudit('login', 'nu_users', (int)$user['usr_id']);
 
+        // Force the session to disk NOW, before the redirect response is sent.
+        // This guarantees the session file exists when the browser's GET request
+        // arrives a few milliseconds after the 302. Without this, there is a
+        // window where PHP has queued the Set-Cookie + Location headers but has
+        // not yet flushed the session file (it normally writes on shutdown).
+        session_write_close();
+
         return ['success' => true, 'user' => $this->sanitizeUser($user)];
     }
 
@@ -108,6 +115,10 @@ class NuAuth {
             $this->logout();
             return false;
         }
+        // Re-open session for writing if it was closed after login flush
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
         $_SESSION['nu_last_activity'] = time();
         return true;
     }
@@ -129,6 +140,7 @@ class NuAuth {
     // --- CSRF ---
     public function getCsrfToken() {
         if (empty($_SESSION['nu_csrf'])) {
+            if (session_status() !== PHP_SESSION_ACTIVE) session_start();
             $_SESSION['nu_csrf'] = bin2hex(random_bytes(32));
         }
         return $_SESSION['nu_csrf'];
@@ -183,19 +195,20 @@ class NuAuth {
 
     // --- Private Helpers ---
     private function createSession($user) {
-        // Regenerate session ID to replace any stale browser cookie and
-        // prevent session fixation. DO NOT call session_write_close() here -
-        // the session must stay open so index.php can read $_SESSION after
-        // the redirect. PHP closes and writes the session automatically at
-        // the end of the request.
-        session_regenerate_id(true);
+        // Use delete_old_session=false to avoid the session-regeneration race:
+        // With true, PHP deletes the old file immediately. If the browser's
+        // GET request (after the 302) arrives before the new file is flushed,
+        // it opens the deleted old ID and gets an empty session.
+        // With false, the old file stays readable until it expires via GC.
+        session_regenerate_id(false);
 
         $_SESSION['nu_user_id']       = $user['usr_id'];
         $_SESSION['nu_username']      = $user['usr_username'];
         $_SESSION['nu_role']          = $user['usr_role'];
         $_SESSION['nu_last_activity'] = time();
         $_SESSION['nu_csrf']          = bin2hex(random_bytes(32));
-        // Session is written to disk automatically when PHP exits this request.
+        // session_write_close() is called in login() AFTER logAudit(),
+        // guaranteeing the file is on disk before the redirect is sent.
     }
 
     private function incrementAttempts($userId) {
