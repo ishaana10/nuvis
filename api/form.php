@@ -611,7 +611,9 @@ function nu_handle_list() {
     $offset = ($page - 1) * $pageSize;
 
     $sortSql = trim((string)($form[$c['browse_default_sort']] ?? ''));
-    $orderSql = $sortSql !== '' ? " ORDER BY {$sortSql}" : " ORDER BY id DESC";
+    // Use actual PK for default sort — avoids 1054 when PK is not named 'id'
+    $pk = nu_get_pk($table);
+    $orderSql = $sortSql !== '' ? " ORDER BY {$sortSql}" : " ORDER BY `{$pk}` DESC";
 
     $sql = "SELECT * FROM `{$table}`" . $whereSql . $orderSql . " LIMIT {$pageSize} OFFSET {$offset}";
     $records = nu_q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
