@@ -4,8 +4,6 @@ window.NuApp = {
   init() {
     this.bindEvents();
     this.loadTheme();
-    // NOTE: loadModule is intentionally NOT called here.
-    // index.php _boot() is the sole trigger for the initial module load.
   },
 
   bindEvents() {
@@ -13,12 +11,10 @@ window.NuApp = {
     if (themeToggle) {
       themeToggle.addEventListener('click', () => this.toggleTheme());
     }
-
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
       logoutBtn.addEventListener('click', () => this.logout());
     }
-
     window.addEventListener('hashchange', () => {
       const module = (window.location.hash || '').replace('#', '');
       if (module && module !== this.currentModule) {
@@ -36,9 +32,7 @@ window.NuApp = {
 
   loadTheme() {
     let saved = 'auto';
-    try {
-      saved = localStorage.getItem('nu-theme') || 'auto';
-    } catch (e) {}
+    try { saved = localStorage.getItem('nu-theme') || 'auto'; } catch (e) {}
     document.documentElement.setAttribute('data-theme', saved);
   },
 
@@ -46,9 +40,7 @@ window.NuApp = {
     const current = document.documentElement.getAttribute('data-theme');
     const next = current === 'light' ? 'dark' : current === 'dark' ? 'auto' : 'light';
     document.documentElement.setAttribute('data-theme', next);
-    try {
-      localStorage.setItem('nu-theme', next);
-    } catch (e) {}
+    try { localStorage.setItem('nu-theme', next); } catch (e) {}
   },
 
   setActiveNavByModule(module) {
@@ -64,12 +56,10 @@ window.NuApp = {
       container.className = 'nu-toast-container';
       document.body.appendChild(container);
     }
-
     const toast = document.createElement('div');
     toast.className = 'nu-toast ' + (type || 'success');
     toast.textContent = message;
     container.appendChild(toast);
-
     setTimeout(() => {
       if (toast.parentNode) toast.parentNode.removeChild(toast);
     }, 4000);
@@ -79,49 +69,32 @@ window.NuApp = {
     this.currentModule = module;
     const container = document.getElementById('contentArea');
     const pageTitle = document.getElementById('pageTitle');
-
-    if (!container) {
-      console.error('contentArea not found');
-      return;
-    }
-
+    if (!container) { console.error('contentArea not found'); return; }
     if (pageTitle) {
       pageTitle.textContent = module.charAt(0).toUpperCase() + module.slice(1);
     }
-
     this.setActiveNavByModule(module);
     container.innerHTML = '<div class="nu-spinner" style="margin:40px auto;"></div>';
-
     try {
-      const res = await fetch('modules/' + module + '/' + module + '.php', {
-        credentials: 'same-origin'
-      });
-
+      const res = await fetch('modules/' + module + '/' + module + '.php', { credentials: 'same-origin' });
       const html = await res.text();
-
       if (!res.ok) {
         container.innerHTML =
           '<div style="padding:24px;border:2px solid red;background:#fee;">' +
-          '<h3>Module load failed</h3>' +
-          '<p>Status: ' + res.status + '</p>' +
-          '<pre style="font-size:12px;overflow:auto;">' + html.substring(0, 2000) + '</pre>' +
-          '</div>';
+          '<h3>Module load failed</h3><p>Status: ' + res.status + '</p>' +
+          '<pre style="font-size:12px;overflow:auto;">' + html.substring(0, 2000) + '</pre></div>';
         return;
       }
-
       container.innerHTML = html;
       container.style.display = 'block';
       container.style.visibility = 'visible';
       container.style.opacity = '1';
-
       this.initModuleScripts(module);
     } catch (err) {
       console.error('loadModule error', err);
       container.innerHTML =
         '<div style="padding:24px;border:2px solid red;background:#fee;">' +
-        '<h3>Error</h3>' +
-        '<p>' + String(err.message || err) + '</p>' +
-        '</div>';
+        '<h3>Error</h3><p>' + String(err.message || err) + '</p></div>';
     }
   },
 
@@ -137,18 +110,12 @@ window.NuApp = {
     const res = await fetch(url, options || {});
     const text = await res.text();
     console.log('api raw response:', url, text);
-
     let json = null;
-    try {
-      json = JSON.parse(text);
-    } catch (e) {
-      throw new Error('Invalid JSON response');
-    }
-
+    try { json = JSON.parse(text); } catch (e) { throw new Error('Invalid JSON response'); }
     return json;
   },
 
-  // ── helper: dispatch nu:form:opened so nuSubform.initAll bootstraps subforms ──
+  // ── dispatch nu:form:opened so nuSubform.initAll bootstraps subforms ──
   _dispatchFormOpened(box) {
     if (window.nuSubform && typeof window.nuSubform.initAll === 'function') {
       window.nuSubform.initAll(box);
@@ -162,39 +129,26 @@ window.NuApp = {
         'api/form.php?action=render&code=' + encodeURIComponent(code),
         { credentials: 'same-origin' }
       );
-
-      if (!json.success) {
-        this.toast(json.error || 'Preview failed', 'error');
-        return;
-      }
+      if (!json.success) { this.toast(json.error || 'Preview failed', 'error'); return; }
 
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
       overlay.style.cssText =
         'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
-
       const box = document.createElement('div');
       box.style.cssText =
         'background:#fff;border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
-
       box.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
         '<h3 style="margin:0;">Preview</h3>' +
         '<button type="button" onclick="this.closest(\'.nu-form-overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>' +
-        '</div>' +
-        json.html;
-
+        '</div>' + json.html;
       overlay.appendChild(box);
       document.body.appendChild(overlay);
-
-      // Bootstrap subforms inside this overlay
       this._dispatchFormOpened(box);
-
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
-        if (formEl) {
-          window.nuForm.init(formEl.dataset.formCode || code, {}, true);
-        }
+        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, true);
       }
     } catch (err) {
       console.error('previewForm error', err);
@@ -208,39 +162,26 @@ window.NuApp = {
         'api/form.php?action=render&code=' + encodeURIComponent(code) + '&id=' + encodeURIComponent(id),
         { credentials: 'same-origin' }
       );
-
-      if (!json.success) {
-        this.toast(json.error || 'Failed', 'error');
-        return;
-      }
+      if (!json.success) { this.toast(json.error || 'Failed', 'error'); return; }
 
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
       overlay.style.cssText =
         'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
-
       const box = document.createElement('div');
       box.style.cssText =
         'background:#fff;border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
-
       box.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
         '<h3 style="margin:0;">Edit Record</h3>' +
         '<button type="button" onclick="this.closest(\'.nu-form-overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>' +
-        '</div>' +
-        json.html;
-
+        '</div>' + json.html;
       overlay.appendChild(box);
       document.body.appendChild(overlay);
-
-      // Bootstrap subforms inside this overlay — sets parent_id from the record
       this._dispatchFormOpened(box);
-
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
-        if (formEl) {
-          window.nuForm.init(formEl.dataset.formCode || code, {}, false);
-        }
+        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, false);
       }
     } catch (err) {
       console.error('editRecord error', err);
@@ -256,19 +197,13 @@ window.NuApp = {
     try {
       page = page || 1;
       query = query || '';
-
       const json = await this.apiJson(
-        'api/form.php?action=list&code=' +
-          encodeURIComponent(code) +
+        'api/form.php?action=list&code=' + encodeURIComponent(code) +
           '&page=' + encodeURIComponent(page) +
           '&q=' + encodeURIComponent(query),
         { credentials: 'same-origin' }
       );
-
-      if (!json.success) {
-        this.toast(json.error || 'Browse failed', 'error');
-        return;
-      }
+      if (!json.success) { this.toast(json.error || 'Browse failed', 'error'); return; }
 
       const data = json.data || {};
       const layout = Array.isArray(data.layout) ? data.layout : [];
@@ -278,62 +213,47 @@ window.NuApp = {
       const searchPlaceholder = data.browsesearchplaceholder || 'Search...';
 
       const container = document.getElementById('contentArea');
-      if (!container) {
-        this.toast('Content area not found', 'error');
-        return;
-      }
-
+      if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
 
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
       header.innerHTML = '<h3 style="margin:0;">Browse ' + code + '</h3>';
-
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;';
-
       const addBtn = document.createElement('button');
       addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
       addBtn.textContent = 'Add';
       addBtn.onclick = () => this.addRecord(code);
       btnGroup.appendChild(addBtn);
-
       const backBtn = document.createElement('button');
       backBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
       backBtn.textContent = 'Back';
       backBtn.onclick = () => this.loadModule('forms');
       btnGroup.appendChild(backBtn);
-
       header.appendChild(btnGroup);
       container.appendChild(header);
 
       if (searchEnabled) {
         const searchWrap = document.createElement('div');
         searchWrap.style.cssText = 'margin-bottom:16px;display:flex;gap:8px;';
-
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
         searchInput.className = 'nu-input';
         searchInput.placeholder = searchPlaceholder;
         searchInput.value = currentQuery;
         searchInput.style.flex = '1';
-
         const searchBtn = document.createElement('button');
         searchBtn.className = 'nu-btn nu-btn-primary';
         searchBtn.textContent = 'Search';
         searchBtn.onclick = () => this.browseForm(code, 1, searchInput.value.trim());
-
         const clearBtn = document.createElement('button');
         clearBtn.className = 'nu-btn nu-btn-ghost';
         clearBtn.textContent = 'Clear';
         clearBtn.onclick = () => this.browseForm(code, 1, '');
-
         searchInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            this.browseForm(code, 1, searchInput.value.trim());
-          }
+          if (e.key === 'Enter') this.browseForm(code, 1, searchInput.value.trim());
         });
-
         searchWrap.appendChild(searchInput);
         searchWrap.appendChild(searchBtn);
         searchWrap.appendChild(clearBtn);
@@ -342,31 +262,25 @@ window.NuApp = {
 
       const tableWrap = document.createElement('div');
       tableWrap.style.cssText = 'overflow-x:auto;';
-
       const table = document.createElement('table');
       table.style.cssText = 'width:100%;border-collapse:collapse;';
-
       const thead = document.createElement('thead');
       const headRow = document.createElement('tr');
       headRow.style.cssText = 'border-bottom:1px solid var(--border-color, #ddd);';
-
       layout.forEach((f) => {
         const th = document.createElement('th');
         th.style.cssText = 'padding:12px;text-align:left;font-size:13px;';
         th.textContent = f.fieldlabel || f.label || f.fieldname || f.name || '';
         headRow.appendChild(th);
       });
-
       const actionTh = document.createElement('th');
       actionTh.textContent = 'Actions';
       actionTh.style.cssText = 'padding:12px;text-align:left;font-size:13px;';
       headRow.appendChild(actionTh);
-
       thead.appendChild(headRow);
       table.appendChild(thead);
 
       const tbody = document.createElement('tbody');
-
       if (!records.length) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
@@ -379,39 +293,31 @@ window.NuApp = {
         records.forEach((row) => {
           const tr = document.createElement('tr');
           tr.style.cssText = 'border-bottom:1px solid var(--border-color, #ddd);';
-
           layout.forEach((f) => {
             const td = document.createElement('td');
             td.style.cssText = 'padding:12px;';
-
             const fieldName = f.fieldname || f.name;
             const displayKey = fieldName + '_display';
             let value = '';
-
             if ((f.fieldtype || f.type) === 'lookup' && row[displayKey] !== undefined && row[displayKey] !== null) {
               value = row[displayKey];
             } else if (row[fieldName] !== undefined && row[fieldName] !== null) {
               value = row[fieldName];
             }
-
             td.textContent = String(value);
             tr.appendChild(td);
           });
-
           const actionTd = document.createElement('td');
           actionTd.style.cssText = 'padding:12px;display:flex;gap:8px;';
-
           const editBtn = document.createElement('button');
           editBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
           editBtn.textContent = 'Edit';
           editBtn.onclick = () => this.editRecord(code, row.id);
           actionTd.appendChild(editBtn);
-
           tr.appendChild(actionTd);
           tbody.appendChild(tr);
         });
       }
-
       table.appendChild(tbody);
       tableWrap.appendChild(table);
       container.appendChild(tableWrap);
@@ -419,14 +325,12 @@ window.NuApp = {
       if ((data.pages || 1) > 1) {
         const pagination = document.createElement('div');
         pagination.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:16px;';
-
         const prevBtn = document.createElement('button');
         prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
         prevBtn.textContent = 'Prev';
         prevBtn.disabled = (data.page || 1) <= 1;
         prevBtn.onclick = () => this.browseForm(code, (data.page || 1) - 1, currentQuery);
         pagination.appendChild(prevBtn);
-
         for (let i = 1; i <= (data.pages || 1); i++) {
           const pageBtn = document.createElement('button');
           pageBtn.className = 'nu-btn ' + (i === (data.page || 1) ? 'nu-btn-primary' : 'nu-btn-ghost') + ' nu-btn-sm';
@@ -434,19 +338,16 @@ window.NuApp = {
           pageBtn.onclick = () => this.browseForm(code, i, currentQuery);
           pagination.appendChild(pageBtn);
         }
-
         const nextBtn = document.createElement('button');
         nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
         nextBtn.textContent = 'Next';
         nextBtn.disabled = (data.page || 1) >= (data.pages || 1);
         nextBtn.onclick = () => this.browseForm(code, (data.page || 1) + 1, currentQuery);
         pagination.appendChild(nextBtn);
-
         const meta = document.createElement('span');
         meta.style.cssText = 'margin-left:8px;color:#666;font-size:13px;';
         meta.textContent = 'Total ' + (data.total || 0);
         pagination.appendChild(meta);
-
         container.appendChild(pagination);
       }
     } catch (err) {
@@ -462,28 +363,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
 window.closeNuForm = function (btn) {
   const overlay = btn ? btn.closest('.nu-form-overlay') : null;
-  if (overlay) {
-    overlay.remove();
-    return;
-  }
+  if (overlay) { overlay.remove(); return; }
   NuApp.loadModule('forms');
 };
 
 window.submitNuForm = async function (formElement) {
-  if (!formElement) {
-    NuApp.toast('Form element not found', 'error');
-    return;
-  }
-
+  if (!formElement) { NuApp.toast('Form element not found', 'error'); return; }
   const formCode = formElement.dataset.formCode;
   const recordId = formElement.dataset.recordId;
-  const url =
-    'api/form.php?action=save&code=' + encodeURIComponent(formCode) +
+  const url = 'api/form.php?action=save&code=' + encodeURIComponent(formCode) +
     (recordId ? '&id=' + encodeURIComponent(recordId) : '');
-
   const formData = new FormData(formElement);
   const data = {};
-
   formData.forEach((value, key) => {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
       if (!Array.isArray(data[key])) data[key] = [data[key]];
@@ -492,13 +383,9 @@ window.submitNuForm = async function (formElement) {
       data[key] = value;
     }
   });
-
   formElement.querySelectorAll('input[type="checkbox"]').forEach((el) => {
-    if (!Object.prototype.hasOwnProperty.call(data, el.name)) {
-      data[el.name] = '';
-    }
+    if (!Object.prototype.hasOwnProperty.call(data, el.name)) data[el.name] = '';
   });
-
   try {
     const json = await NuApp.apiJson(url, {
       method: 'POST',
@@ -506,17 +393,10 @@ window.submitNuForm = async function (formElement) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-
-    if (!json.success) {
-      NuApp.toast(json.error || 'Save failed', 'error');
-      return;
-    }
-
+    if (!json.success) { NuApp.toast(json.error || 'Save failed', 'error'); return; }
     NuApp.toast(recordId ? 'Updated' : 'Saved');
-
     const overlay = formElement.closest('.nu-form-overlay');
     if (overlay) overlay.remove();
-
     if (typeof NuApp.browseForm === 'function' && formCode) {
       NuApp.browseForm(formCode, 1, '');
     } else {
@@ -528,7 +408,7 @@ window.submitNuForm = async function (formElement) {
   }
 };
 
-// ─── nbFormBuilder ─────────────────────────────────────────────────────────────────────────────
+// ─── nbFormBuilder ──────────────────────────────────────────────────────────
 window.nbFormBuilder = (function () {
 
   function _esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -616,7 +496,7 @@ window.nbFormBuilder = (function () {
       var lkSrc = lk.table ? lk.table + '.' + (lk.display_column || lk.displaycolumn || 'name') : '';
       html += '<div class="nb-fp nb-fp-full"><label>Source (table.column)</label>' +
         '<input type="text" class="nu-input nu-lookup-source" value="' + _esc(lkSrc) + '" placeholder="customers.name"></div>' +
-        _row('ID Column',    '<input type="text" class="nu-input nu-lookup-id"     value="' + _esc(lk.id_column || lk.idcolumn || 'id') + '" placeholder="id">')     +
+        _row('ID Column',    '<input type="text" class="nu-input nu-lookup-id"     value="' + _esc(lk.id_column || lk.idcolumn || 'id') + '" placeholder="id">') +
         _row('Filter SQL',   '<input type="text" class="nu-input nu-lookup-filter" value="' + _esc(lk.filter || '')                    + '" placeholder="active=1">') +
         '<div class="nb-fp nb-fp-full"><label>Extra Mapping (src:field, comma-sep)</label>' +
         '<input type="text" class="nu-input nu-lookup-extra" value="' + _esc(lk.extra || '') + '" placeholder="dept_id:department"></div>';
@@ -624,7 +504,6 @@ window.nbFormBuilder = (function () {
     if (type === 'subform') {
       var sf  = extra.subform || {};
       var sfv = sf.form_code ? sf.form_code + '.' + (sf.fk_field || '') : '';
-      // All three view options — grid (default), form (cards), inline (editable rows)
       html += '<div class="nb-fp nb-fp-full"><label>Config (form_code.fk_field)</label>' +
         '<input type="text" class="nu-input nu-subform-config" value="' + _esc(sfv) + '" placeholder="order_items.order_id"></div>' +
         '<div class="nb-fp"><label>View</label>' +
@@ -670,10 +549,7 @@ window.nbFormBuilder = (function () {
   function _initCanvasDrop() {
     var canvas = _el('formCanvas');
     if (!canvas) return;
-    canvas.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      canvas.classList.add('drag-over');
-    });
+    canvas.addEventListener('dragover', function (e) { e.preventDefault(); canvas.classList.add('drag-over'); });
     canvas.addEventListener('dragleave', function () { canvas.classList.remove('drag-over'); });
     canvas.addEventListener('drop', function (e) {
       e.preventDefault();
@@ -842,14 +718,13 @@ window.nbFormBuilder = (function () {
         if (!json.success || !form) { NuApp.toast('Could not load form', 'error'); return; }
 
         nbFormBuilder.open();
-
         _el('editFormId').value         = id;
         _el('builderTitle').textContent = 'Edit Form';
         _el('builderFormName').value    = form.form_name  || '';
         _el('builderFormTable').value   = form.form_table || '';
 
-        function sv(id, v) { var e = _el(id); if (e) e.value = v || ''; }
-        function sc(id, v) { var e = _el(id); if (e) e.checked = parseInt(v || 0) === 1; }
+        function sv(eid, v) { var e = _el(eid); if (e) e.value = v || ''; }
+        function sc(eid, v) { var e = _el(eid); if (e) e.checked = parseInt(v || 0) === 1; }
 
         sv('formCustomJs',                form.form_custom_js);
         sv('formJsBeforeSave',            form.form_js_before_save);
@@ -868,9 +743,7 @@ window.nbFormBuilder = (function () {
         try {
           var layout = JSON.parse(form.form_layout || '[]');
           if (Array.isArray(layout) && layout.length) {
-            layout.forEach(function (f) {
-              _addField(f.type || 'text', f.label, f.name, !!f.required, f);
-            });
+            layout.forEach(function (f) { _addField(f.type || 'text', f.label, f.name, !!f.required, f); });
           } else {
             _el('formCanvas').innerHTML = '<div class="nb-canvas-empty" id="canvasEmpty">&#x2B06; Drag or click a field type to add it here</div>';
           }
@@ -887,14 +760,15 @@ window.nbFormBuilder = (function () {
 
 })();
 
-// ─── saveForm ────────────────────────────────────────────────────────────────────────────
+// ─── saveForm ───────────────────────────────────────────────────────────────
 window.saveForm = async function () {
+  function _elv(eid) { var e = document.getElementById(eid); return e ? e.value : ''; }
+  function _elc(eid) { var e = document.getElementById(eid); return e ? e.checked : false; }
+
   const id        = _elv('editFormId');
   const formName  = (_elv('builderFormName') || '').trim();
   const formTable = (_elv('builderFormTable') || '').trim();
   const formCode  = formName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-
-  function _elv(id) { var e = document.getElementById(id); return e ? e.value : ''; }
 
   if (!formName) { NuApp.toast('Form name required', 'error'); return; }
 
@@ -917,4 +791,140 @@ window.saveForm = async function () {
       sort_order:      parseInt(el.dataset.sortOrder || (index + 1), 10),
       tab:             el.dataset.tab            || '',
       section:         el.dataset.section        || '',
-      visibility_rule: el.dataset.visibilityRul
+      visibility_rule: el.dataset.visibilityRule || '',
+      readonly_rule:   el.dataset.readonlyRule   || '',
+      css:             el.dataset.css            || '',
+      js_onchange:     el.dataset.onchange       || '',
+      rows:            parseInt(el.dataset.rows  || 3, 10),
+      min:             el.dataset.min            || '',
+      max:             el.dataset.max            || '',
+      step:            el.dataset.step           || '',
+      accept:          el.dataset.accept         || '',
+      multiple_upload: el.dataset.multipleUpload === '1' ? 1 : 0,
+      html_content:    el.dataset.htmlContent    || '',
+      button_action:   el.dataset.buttonAction   || '',
+      legend:          el.dataset.legend         || '',
+      select2:         el.dataset.select2 === '1' ? 1 : 0
+    };
+
+    const type = field.type;
+
+    if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
+      const sourceType = el.querySelector('.nu-select-source-type');
+      const sqlInput   = el.querySelector('.nu-select-sql');
+      const multiBox   = el.querySelector('.nu-field-multiple');
+      const select2Box = el.querySelector('.nu-field-select2');
+      const txt        = el.querySelector('.nu-select-static');
+      if (multiBox)   field.multiple = multiBox.checked;
+      if (select2Box) field.select2  = select2Box.checked ? 1 : 0;
+      if (sourceType && sourceType.value === 'sql') {
+        field.sourcetype = 'sql';
+        field.sqlsource  = sqlInput ? sqlInput.value.trim() : '';
+      } else {
+        field.sourcetype = 'static';
+        if (txt) {
+          field.options = txt.value.split('\n').filter(Boolean).map(function (v) {
+            const parts = v.split('|');
+            return { value: parts[0].trim(), label: parts[1] ? parts[1].trim() : parts[0].trim() };
+          });
+        }
+      }
+    }
+
+    if (type === 'lookup') {
+      const txt         = el.querySelector('.nu-lookup-source');
+      const idCol       = el.querySelector('.nu-lookup-id');
+      const filterInput = el.querySelector('.nu-lookup-filter');
+      const extraInput  = el.querySelector('.nu-lookup-extra');
+      if (txt && txt.value.indexOf('.') !== -1) {
+        const parts = txt.value.split('.');
+        field.lookup = {
+          table:          parts[0],
+          id_column:      idCol        ? idCol.value        : 'id',
+          display_column: parts[1]     || 'name',
+          filter:         filterInput  ? filterInput.value  : '',
+          extra:          extraInput   ? extraInput.value   : ''
+        };
+      }
+    }
+
+    if (type === 'subform') {
+      const txt  = el.querySelector('.nu-subform-config');
+      const view = el.querySelector('.nu-subform-view');
+      if (txt && txt.value.indexOf('.') !== -1) {
+        const parts = txt.value.split('.');
+        field.subform = {
+          form_code: parts[0],
+          fk_field:  parts[1],
+          view:      view ? view.value : 'grid'
+        };
+      }
+    }
+
+    if (type === 'calculated') {
+      const txt = el.querySelector('.nu-calc-expression');
+      if (txt) field.calculated = txt.value;
+    }
+
+    fields.push(field);
+  });
+
+  const payload = {
+    form_name:                formName,
+    form_code:                formCode,
+    form_table:               formTable,
+    form_layout:              JSON.stringify(fields),
+    form_active:              1,
+    form_custom_js:           _elv('formCustomJs'),
+    form_js_before_save:      _elv('formJsBeforeSave'),
+    form_js_after_save:       _elv('formJsAfterSave'),
+    form_custom_php:          _elv('formCustomPhp'),
+    form_custom_css:          _elv('formCustomCss'),
+    browse_sql:               _elv('formBrowseSql'),
+    browse_columns:           _elv('formBrowseColumns'),
+    browse_search_enabled:    _elc('formBrowseSearchEnabled') ? 1 : 0,
+    browse_search_placeholder:_elv('formBrowseSearchPlaceholder'),
+    browse_search_fields:     _elv('formBrowseSearchFields'),
+    browse_page_size:         _elv('formBrowsePageSize') || 20,
+    browse_default_sort:      _elv('formBrowseDefaultSort')
+  };
+
+  try {
+    const endpoint = id
+      ? 'api/crud.php?table=nu_forms&id=' + encodeURIComponent(id)
+      : 'api/crud.php?table=nu_forms';
+    const method = id ? 'PUT' : 'POST';
+    const json = await NuApp.apiJson(endpoint, {
+      method: method,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!json.success) { NuApp.toast(json.error || 'Save failed', 'error'); return; }
+
+    const formId = id || json.id;
+
+    if (formTable) {
+      try {
+        const setupRes = await fetch('api/form-setup.php', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ form_id: formId, form_code: formCode, form_table: formTable, fields: fields })
+        });
+        const setupJson = await setupRes.json();
+        if (!setupJson.success) NuApp.toast('Table setup: ' + setupJson.error, 'error');
+      } catch (setupErr) {
+        console.error('Table setup error', setupErr);
+      }
+    }
+
+    NuApp.toast('Form saved' + (formTable ? ' — table ' + formTable : ''));
+    const card = document.getElementById('formBuilderCard');
+    if (card) card.style.display = 'none';
+    NuApp.loadModule('forms');
+  } catch (err) {
+    NuApp.toast('Error: ' + err.message, 'error');
+  }
+};
