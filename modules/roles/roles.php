@@ -1,33 +1,29 @@
 <?php
-require_once '../../config.php';
-require_once '../../core/Database.php';
-require_once '../../core/Auth.php';
+declare(strict_types=1);
+require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
-$auth = new NuAuth();
-if (!$auth->checkAuth()) exit('Unauthorized');
-if (!$auth->hasPermission('roles.view')) exit('Access denied');
+if (!$auth->hasPermission('roles.view')) {
+    http_response_code(403);
+    exit('Access denied');
+}
 
-$db = NuDatabase::getInstance();
-$roles = $db->fetchAll("SELECT * FROM nu_roles ORDER BY role_name");
+$db          = NuDatabase::getInstance();
+$roles       = $db->fetchAll("SELECT * FROM nu_roles ORDER BY role_name");
 $permissions = $db->fetchAll("SELECT * FROM nu_permissions ORDER BY perm_category, perm_name");
 ?>
 
 <div class="nu-roles">
     <div class="nu-card">
         <div class="nu-card-header">
-            <h3 class="nu-card-title">Roles & Permissions</h3>
+            <h3 class="nu-card-title">Roles &amp; Permissions</h3>
         </div>
         <div class="nu-table-wrap">
             <table class="nu-table">
                 <thead>
-                    <tr>
-                        <th>Role</th>
-                        <th>Description</th>
-                        <th>Permissions</th>
-                    </tr>
+                    <tr><th>Role</th><th>Description</th><th>Permissions</th></tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($roles as $role): 
+                    <?php foreach ($roles as $role):
                         $rolePerms = $db->fetchAll(
                             "SELECT p.perm_name, p.perm_category FROM nu_permissions p
                              JOIN nu_role_permissions rp ON p.perm_id = rp.rp_perm_id

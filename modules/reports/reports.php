@@ -1,21 +1,10 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-require_once '../../config.php';
-require_once '../../core/Database.php';
-require_once '../../core/Auth.php';
-require_once '../../core/ReportRenderer.php';
+declare(strict_types=1);
+require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
+require_once dirname(__DIR__, 2) . '/core/ReportRenderer.php';
 
-$auth = new NuAuth();
-if (!$auth->checkAuth()) {
-    http_response_code(401);
-    echo '<p style="color:red;">Unauthorized</p>';
-    exit;
-}
-
-$db = NuDatabase::getInstance();
+$db   = NuDatabase::getInstance();
 $view = $_GET['view'] ?? 'list';
-$reportCode = $_GET['code'] ?? '';
 ?>
 
 <?php if ($view === 'list'): ?>
@@ -24,8 +13,8 @@ $reportCode = $_GET['code'] ?? '';
         <h2 style="margin:0;font-size:20px;font-weight:600;">Reports</h2>
         <button class="nu-btn nu-btn-primary" onclick="openReportBuilder()">+ New Report</button>
     </div>
-    
-    <?php 
+
+    <?php
     try {
         $reports = $db->fetchAll("SELECT * FROM nu_reports WHERE report_active = 1 ORDER BY report_name");
     } catch (Exception $e) {
@@ -33,7 +22,7 @@ $reportCode = $_GET['code'] ?? '';
         $reports = [];
     }
     ?>
-    
+
     <div style="background:var(--bg-elevated);border:1px solid var(--border-color);border-radius:12px;overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;">
             <thead>

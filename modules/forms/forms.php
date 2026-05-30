@@ -1,10 +1,7 @@
 <?php
-require_once '../../config.php';
-require_once '../../core/Database.php';
-require_once '../../core/Auth.php';
-
-$auth = new NuAuth();
-if (!$auth->checkAuth()) exit('Unauthorized');
+declare(strict_types=1);
+require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
+// $auth, $nuConfig, session open under 'nu5sess'
 
 $db    = NuDatabase::getInstance();
 $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY form_id DESC");

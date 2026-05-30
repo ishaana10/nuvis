@@ -1,21 +1,21 @@
 <?php
-require_once '../../config.php';
-require_once '../../core/Database.php';
-require_once '../../core/Auth.php';
+declare(strict_types=1);
+require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
-$auth = new NuAuth();
-if (!$auth->checkAuth()) exit('Unauthorized');
-if (!$auth->hasPermission('audit.view')) exit('Access denied');
+if (!$auth->hasPermission('audit.view')) {
+    http_response_code(403);
+    exit('Access denied');
+}
 
-$db = NuDatabase::getInstance();
-$page = (int)($_GET['page'] ?? 1);
+$db      = NuDatabase::getInstance();
+$page    = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 25;
-$offset = ($page - 1) * $perPage;
+$offset  = ($page - 1) * $perPage;
 
-$logs = $db->fetchAll("SELECT * FROM nu_audit_log ORDER BY audit_timestamp DESC LIMIT :limit OFFSET :offset", 
+$logs  = $db->fetchAll("SELECT * FROM nu_audit_log ORDER BY audit_timestamp DESC LIMIT :limit OFFSET :offset",
     [':limit' => $perPage, ':offset' => $offset]);
 $total = $db->fetchOne("SELECT COUNT(*) as total FROM nu_audit_log")['total'];
-$pages = ceil($total / $perPage);
+$pages = (int)ceil($total / $perPage);
 ?>
 
 <div class="nu-audit">
@@ -28,12 +28,7 @@ $pages = ceil($total / $perPage);
             <table class="nu-table">
                 <thead>
                     <tr>
-                        <th>Action</th>
-                        <th>Table</th>
-                        <th>Record</th>
-                        <th>User</th>
-                        <th>IP</th>
-                        <th>Time</th>
+                        <th>Action</th><th>Table</th><th>Record</th><th>User</th><th>IP</th><th>Time</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -53,7 +48,8 @@ $pages = ceil($total / $perPage);
         <?php if ($pages > 1): ?>
         <div style="display:flex;gap:8px;justify-content:center;padding:16px;">
             <?php for ($i = 1; $i <= $pages; $i++): ?>
-            <button class="nu-btn <?php echo $i === $page ? 'nu-btn-primary' : 'nu-btn-ghost'; ?> nu-btn-sm" onclick="NuApp.loadModule('audit?page=<?php echo $i; ?>')"><?php echo $i; ?></button>
+            <button class="nu-btn <?php echo $i === $page ? 'nu-btn-primary' : 'nu-btn-ghost'; ?> nu-btn-sm"
+                    onclick="NuApp.loadModule('audit?page=<?php echo $i; ?>')"><?php echo $i; ?></button>
             <?php endfor; ?>
         </div>
         <?php endif; ?>

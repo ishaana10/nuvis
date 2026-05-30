@@ -1,12 +1,8 @@
 <?php
-require_once '../../config.php';
-require_once '../../core/Database.php';
-require_once '../../core/Auth.php';
+declare(strict_types=1);
+require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
-$auth = new NuAuth();
-if (!$auth->checkAuth()) exit('Unauthorized');
-
-$db = NuDatabase::getInstance();
+$db    = NuDatabase::getInstance();
 $users = $db->fetchAll("SELECT * FROM nu_users ORDER BY usr_id DESC");
 $roles = $db->fetchAll("SELECT * FROM nu_roles");
 ?>
@@ -87,5 +83,3 @@ $roles = $db->fetchAll("SELECT * FROM nu_roles");
         </div>
     </div>
 </div>
-
-

@@ -1,12 +1,8 @@
 <?php
-require_once '../../config.php';
-require_once '../../core/Database.php';
-require_once '../../core/Auth.php';
+declare(strict_types=1);
+require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
-$auth = new NuAuth();
-if (!$auth->checkAuth()) exit('Unauthorized');
-
-$db = NuDatabase::getInstance();
+$db    = NuDatabase::getInstance();
 $menus = $db->fetchAll("SELECT * FROM nu_menus WHERE menu_active = 1 ORDER BY menu_parent_id, menu_order");
 ?>
 
@@ -52,32 +48,17 @@ $menus = $db->fetchAll("SELECT * FROM nu_menus WHERE menu_active = 1 ORDER BY me
             </button>
         </div>
         <div class="nu-modal-body">
-            <div class="nu-field">
-                <label>Label</label>
-                <input type="text" class="nu-input" id="menuLabel" placeholder="Dashboard">
-            </div>
-            <div class="nu-field">
-                <label>Type</label>
+            <div class="nu-field"><label>Label</label><input type="text" class="nu-input" id="menuLabel" placeholder="Dashboard"></div>
+            <div class="nu-field"><label>Type</label>
                 <select class="nu-input" id="menuType">
-                    <option value="form">Form</option>
-                    <option value="report">Report</option>
-                    <option value="query">Query</option>
-                    <option value="url">URL</option>
+                    <option value="form">Form</option><option value="report">Report</option>
+                    <option value="query">Query</option><option value="url">URL</option>
                     <option value="divider">Divider</option>
                 </select>
             </div>
-            <div class="nu-field">
-                <label>Target (form code, URL, etc)</label>
-                <input type="text" class="nu-input" id="menuTarget" placeholder="dashboard">
-            </div>
-            <div class="nu-field">
-                <label>Parent Menu ID (0 = top level)</label>
-                <input type="number" class="nu-input" id="menuParent" value="0">
-            </div>
-            <div class="nu-field">
-                <label>Order</label>
-                <input type="number" class="nu-input" id="menuOrder" value="0">
-            </div>
+            <div class="nu-field"><label>Target (form code, URL, etc)</label><input type="text" class="nu-input" id="menuTarget" placeholder="dashboard"></div>
+            <div class="nu-field"><label>Parent Menu ID (0 = top level)</label><input type="number" class="nu-input" id="menuParent" value="0"></div>
+            <div class="nu-field"><label>Order</label><input type="number" class="nu-input" id="menuOrder" value="0"></div>
         </div>
         <div class="nu-modal-footer">
             <button class="nu-btn nu-btn-ghost" onclick="closeMenuModal()">Cancel</button>
@@ -85,5 +66,3 @@ $menus = $db->fetchAll("SELECT * FROM nu_menus WHERE menu_active = 1 ORDER BY me
         </div>
     </div>
 </div>
-
-
