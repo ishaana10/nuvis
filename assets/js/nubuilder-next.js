@@ -1,5 +1,6 @@
 window.NuApp = {
   currentModule: 'dashboard',
+  _previewModalSize: 'standard', // compact | standard | full
 
   init() {
     this.bindEvents();
@@ -69,7 +70,6 @@ window.NuApp = {
   _execModuleScripts(container) {
     container.querySelectorAll('script').forEach(function (oldScript) {
       const s = document.createElement('script');
-      // Copy all attributes (type, src, etc.)
       Array.from(oldScript.attributes).forEach(function (attr) {
         s.setAttribute(attr.name, attr.value);
       });
@@ -102,7 +102,6 @@ window.NuApp = {
       container.style.display = 'block';
       container.style.visibility = 'visible';
       container.style.opacity = '1';
-      // CRITICAL: re-run scripts injected via innerHTML
       this._execModuleScripts(container);
       this.initModuleScripts(module);
     } catch (err) {
@@ -138,7 +137,40 @@ window.NuApp = {
     document.dispatchEvent(new CustomEvent('nu:form:opened', { detail: { scope: box } }));
   },
 
-  async previewForm(code) {
+  // ─── BREADCRUMB HELPER ───────────────────────────────────────────────────────
+  // crumbs: array of { label, action } — last item has no action (current page)
+  _renderBreadcrumb(crumbs) {
+    const nav = document.createElement('nav');
+    nav.setAttribute('aria-label', 'breadcrumb');
+    nav.style.cssText = 'margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:13px;';
+    crumbs.forEach((crumb, i) => {
+      if (i > 0) {
+        const sep = document.createElement('span');
+        sep.textContent = '/';
+        sep.style.cssText = 'color:var(--text-muted,#999);margin:0 2px;';
+        nav.appendChild(sep);
+      }
+      if (crumb.action && i < crumbs.length - 1) {
+        const a = document.createElement('a');
+        a.href = '#';
+        a.textContent = crumb.label;
+        a.style.cssText = 'color:var(--primary,#4f6bed);text-decoration:none;font-weight:500;';
+        a.addEventListener('mouseenter', () => a.style.textDecoration = 'underline');
+        a.addEventListener('mouseleave', () => a.style.textDecoration = 'none');
+        a.addEventListener('click', (e) => { e.preventDefault(); crumb.action(); });
+        nav.appendChild(a);
+      } else {
+        const span = document.createElement('span');
+        span.textContent = crumb.label;
+        span.style.cssText = 'color:var(--text-muted,#666);font-weight:400;';
+        nav.appendChild(span);
+      }
+    });
+    return nav;
+  },
+
+  // ─── PREVIEW FORM — resizable modal (compact / standard / full) ──────────────
+  async previewForm(code, formLabel) {
     try {
       const json = await this.apiJson(
         'api/form.php?action=render&code=' + encodeURIComponent(code),
@@ -146,20 +178,93 @@ window.NuApp = {
       );
       if (!json.success) { this.toast(json.error || 'Preview failed', 'error'); return; }
 
+      const label = formLabel || code;
+      const sizes = {
+        compact:  { maxWidth: '560px',  maxHeight: '80vh' },
+        standard: { maxWidth: '900px',  maxHeight: '90vh' },
+        full:     { maxWidth: '98vw',   maxHeight: '96vh' },
+      };
+      let currentSize = this._previewModalSize || 'standard';
+
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
       overlay.style.cssText =
         'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
       const box = document.createElement('div');
       box.style.cssText =
-        'background:#fff;border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
-      box.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-        '<h3 style="margin:0;">Preview</h3>' +
-        '<button type="button" onclick="this.closest(\'.nu-form-overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>' +
-        '</div>' + json.html;
+        'background:var(--card-bg,#fff);border-radius:12px;padding:24px;width:92%;overflow-y:auto;transition:max-width 0.2s,max-height 0.2s;' +
+        'max-width:' + sizes[currentSize].maxWidth + ';max-height:' + sizes[currentSize].maxHeight + ';';
+
+      const applySize = (s) => {
+        currentSize = s;
+        this._previewModalSize = s;
+        box.style.maxWidth  = sizes[s].maxWidth;
+        box.style.maxHeight = sizes[s].maxHeight;
+        box.querySelectorAll('.nu-size-btn').forEach(b => {
+          b.style.fontWeight = b.dataset.size === s ? '700' : '400';
+          b.style.background = b.dataset.size === s ? 'var(--primary,#4f6bed)' : 'transparent';
+          b.style.color      = b.dataset.size === s ? '#fff' : 'var(--text,#333)';
+        });
+      };
+
+      // Header
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;';
+
+      // Breadcrumb inside modal header area
+      const titleWrap = document.createElement('div');
+      titleWrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;min-width:0;';
+      const bc = this._renderBreadcrumb([
+        { label: 'Forms', action: () => { overlay.remove(); this.loadModule('forms'); } },
+        { label: label }
+      ]);
+      bc.style.marginBottom = '0';
+      titleWrap.appendChild(bc);
+      header.appendChild(titleWrap);
+
+      // Size controls + close
+      const controls = document.createElement('div');
+      controls.style.cssText = 'display:flex;align-items:center;gap:4px;flex-shrink:0;';
+
+      ['compact','standard','full'].forEach(s => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'nu-size-btn';
+        btn.dataset.size = s;
+        btn.textContent = s === 'compact' ? '▣ Sm' : s === 'standard' ? '▣ Md' : '⛶ Lg';
+        btn.title = s.charAt(0).toUpperCase() + s.slice(1);
+        btn.style.cssText =
+          'border:1px solid var(--border-color,#ddd);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;' +
+          'background:transparent;color:var(--text,#333);transition:all 0.15s;';
+        btn.addEventListener('click', () => applySize(s));
+        controls.appendChild(btn);
+      });
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.style.cssText =
+        'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);margin-left:4px;';
+      closeBtn.addEventListener('click', () => overlay.remove());
+      controls.appendChild(closeBtn);
+
+      header.appendChild(controls);
+      box.appendChild(header);
+
+      const formWrap = document.createElement('div');
+      formWrap.innerHTML = json.html;
+      box.appendChild(formWrap);
+
       overlay.appendChild(box);
       document.body.appendChild(overlay);
+
+      // Apply saved size highlight
+      applySize(currentSize);
+
+      // Close on overlay backdrop click
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
@@ -171,7 +276,8 @@ window.NuApp = {
     }
   },
 
-  async editRecord(code, id) {
+  // ─── EDIT RECORD — modal with breadcrumb ─────────────────────────────────────
+  async editRecord(code, id, fromBrowseLabel) {
     try {
       const json = await this.apiJson(
         'api/form.php?action=render&code=' + encodeURIComponent(code) + '&id=' + encodeURIComponent(id),
@@ -179,20 +285,45 @@ window.NuApp = {
       );
       if (!json.success) { this.toast(json.error || 'Failed', 'error'); return; }
 
+      const browseLabel = fromBrowseLabel || code;
+
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
       overlay.style.cssText =
         'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
       const box = document.createElement('div');
       box.style.cssText =
-        'background:#fff;border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
-      box.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-        '<h3 style="margin:0;">Edit Record</h3>' +
-        '<button type="button" onclick="this.closest(\'.nu-form-overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>' +
-        '</div>' + json.html;
+        'background:var(--card-bg,#fff);border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
+
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;';
+
+      const bc = this._renderBreadcrumb([
+        { label: 'Forms',  action: () => { overlay.remove(); this.loadModule('forms'); } },
+        { label: browseLabel, action: () => { overlay.remove(); this.browseForm(code, 1, ''); } },
+        { label: 'Edit #' + id }
+      ]);
+      bc.style.marginBottom = '0';
+      header.appendChild(bc);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);';
+      closeBtn.addEventListener('click', () => overlay.remove());
+      header.appendChild(closeBtn);
+
+      box.appendChild(header);
+      const formWrap = document.createElement('div');
+      formWrap.innerHTML = json.html;
+      box.appendChild(formWrap);
+
       overlay.appendChild(box);
       document.body.appendChild(overlay);
+
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
@@ -204,11 +335,12 @@ window.NuApp = {
     }
   },
 
-  addRecord(code) {
-    return this.previewForm(code);
+  addRecord(code, formLabel) {
+    return this.previewForm(code, formLabel);
   },
 
-  async browseForm(code, page, query) {
+  // ─── BROWSE FORM — inline in contentArea with breadcrumb ─────────────────────
+  async browseForm(code, page, query, formLabel) {
     try {
       page = page || 1;
       query = query || '';
@@ -226,29 +358,53 @@ window.NuApp = {
       const currentQuery = data.query || query;
       const searchEnabled = String(data.browsesearchenabled || 0) === '1';
       const searchPlaceholder = data.browsesearchplaceholder || 'Search...';
+      const label = formLabel || data.form_name || code;
 
       const container = document.getElementById('contentArea');
       if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
 
+      // ── Breadcrumb: Forms / {FormName} / Browse
+      const bc = this._renderBreadcrumb([
+        { label: 'Forms', action: () => this.loadModule('forms') },
+        { label: label,   action: () => this.browseForm(code, 1, '', label) },
+        { label: 'Browse' }
+      ]);
+      container.appendChild(bc);
+
+      // ── Header row
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
-      header.innerHTML = '<h3 style="margin:0;">Browse ' + code + '</h3>';
+      const h3 = document.createElement('h3');
+      h3.style.cssText = 'margin:0;font-size:18px;';
+      h3.textContent = label;
+      header.appendChild(h3);
+
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;';
+
       const addBtn = document.createElement('button');
       addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
-      addBtn.textContent = 'Add';
-      addBtn.onclick = () => this.addRecord(code);
+      addBtn.textContent = '+ Add Record';
+      addBtn.onclick = () => this.addRecord(code, label);
       btnGroup.appendChild(addBtn);
+
+      const previewBtn = document.createElement('button');
+      previewBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+      previewBtn.textContent = '⊞ Preview Form';
+      previewBtn.onclick = () => this.previewForm(code, label);
+      btnGroup.appendChild(previewBtn);
+
       const backBtn = document.createElement('button');
       backBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-      backBtn.textContent = 'Back';
+      backBtn.textContent = '← Forms';
       backBtn.onclick = () => this.loadModule('forms');
       btnGroup.appendChild(backBtn);
+
       header.appendChild(btnGroup);
       container.appendChild(header);
 
+      // ── Search bar
       if (searchEnabled) {
         const searchWrap = document.createElement('div');
         searchWrap.style.cssText = 'margin-bottom:16px;display:flex;gap:8px;';
@@ -261,13 +417,13 @@ window.NuApp = {
         const searchBtn = document.createElement('button');
         searchBtn.className = 'nu-btn nu-btn-primary';
         searchBtn.textContent = 'Search';
-        searchBtn.onclick = () => this.browseForm(code, 1, searchInput.value.trim());
+        searchBtn.onclick = () => this.browseForm(code, 1, searchInput.value.trim(), label);
         const clearBtn = document.createElement('button');
         clearBtn.className = 'nu-btn nu-btn-ghost';
         clearBtn.textContent = 'Clear';
-        clearBtn.onclick = () => this.browseForm(code, 1, '');
+        clearBtn.onclick = () => this.browseForm(code, 1, '', label);
         searchInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') this.browseForm(code, 1, searchInput.value.trim());
+          if (e.key === 'Enter') this.browseForm(code, 1, searchInput.value.trim(), label);
         });
         searchWrap.appendChild(searchInput);
         searchWrap.appendChild(searchBtn);
@@ -275,22 +431,23 @@ window.NuApp = {
         container.appendChild(searchWrap);
       }
 
+      // ── Table
       const tableWrap = document.createElement('div');
       tableWrap.style.cssText = 'overflow-x:auto;';
       const table = document.createElement('table');
       table.style.cssText = 'width:100%;border-collapse:collapse;';
       const thead = document.createElement('thead');
       const headRow = document.createElement('tr');
-      headRow.style.cssText = 'border-bottom:1px solid var(--border-color, #ddd);';
+      headRow.style.cssText = 'border-bottom:2px solid var(--border-color, #ddd);background:var(--table-head-bg,#f8f9fa);';
       layout.forEach((f) => {
         const th = document.createElement('th');
-        th.style.cssText = 'padding:12px;text-align:left;font-size:13px;';
+        th.style.cssText = 'padding:12px;text-align:left;font-size:13px;font-weight:600;';
         th.textContent = f.fieldlabel || f.label || f.fieldname || f.name || '';
         headRow.appendChild(th);
       });
       const actionTh = document.createElement('th');
       actionTh.textContent = 'Actions';
-      actionTh.style.cssText = 'padding:12px;text-align:left;font-size:13px;';
+      actionTh.style.cssText = 'padding:12px;text-align:left;font-size:13px;font-weight:600;';
       headRow.appendChild(actionTh);
       thead.appendChild(headRow);
       table.appendChild(thead);
@@ -301,13 +458,15 @@ window.NuApp = {
         const td = document.createElement('td');
         td.colSpan = layout.length + 1;
         td.style.cssText = 'padding:40px;text-align:center;color:#666;';
-        td.textContent = currentQuery ? 'No matching records' : 'No records';
+        td.textContent = currentQuery ? 'No matching records' : 'No records found';
         tr.appendChild(td);
         tbody.appendChild(tr);
       } else {
         records.forEach((row) => {
           const tr = document.createElement('tr');
-          tr.style.cssText = 'border-bottom:1px solid var(--border-color, #ddd);';
+          tr.style.cssText = 'border-bottom:1px solid var(--border-color, #ddd);transition:background 0.15s;';
+          tr.addEventListener('mouseenter', () => tr.style.background = 'var(--row-hover,#f5f7ff)');
+          tr.addEventListener('mouseleave', () => tr.style.background = '');
           layout.forEach((f) => {
             const td = document.createElement('td');
             td.style.cssText = 'padding:12px;';
@@ -327,7 +486,7 @@ window.NuApp = {
           const editBtn = document.createElement('button');
           editBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
           editBtn.textContent = 'Edit';
-          editBtn.onclick = () => this.editRecord(code, row.id);
+          editBtn.onclick = () => this.editRecord(code, row.id, label);
           actionTd.appendChild(editBtn);
           tr.appendChild(actionTd);
           tbody.appendChild(tr);
@@ -337,31 +496,32 @@ window.NuApp = {
       tableWrap.appendChild(table);
       container.appendChild(tableWrap);
 
+      // ── Pagination
       if ((data.pages || 1) > 1) {
         const pagination = document.createElement('div');
         pagination.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:16px;';
         const prevBtn = document.createElement('button');
         prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-        prevBtn.textContent = 'Prev';
+        prevBtn.textContent = '← Prev';
         prevBtn.disabled = (data.page || 1) <= 1;
-        prevBtn.onclick = () => this.browseForm(code, (data.page || 1) - 1, currentQuery);
+        prevBtn.onclick = () => this.browseForm(code, (data.page || 1) - 1, currentQuery, label);
         pagination.appendChild(prevBtn);
         for (let i = 1; i <= (data.pages || 1); i++) {
           const pageBtn = document.createElement('button');
           pageBtn.className = 'nu-btn ' + (i === (data.page || 1) ? 'nu-btn-primary' : 'nu-btn-ghost') + ' nu-btn-sm';
           pageBtn.textContent = i;
-          pageBtn.onclick = () => this.browseForm(code, i, currentQuery);
+          pageBtn.onclick = () => this.browseForm(code, i, currentQuery, label);
           pagination.appendChild(pageBtn);
         }
         const nextBtn = document.createElement('button');
         nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-        nextBtn.textContent = 'Next';
+        nextBtn.textContent = 'Next →';
         nextBtn.disabled = (data.page || 1) >= (data.pages || 1);
-        nextBtn.onclick = () => this.browseForm(code, (data.page || 1) + 1, currentQuery);
+        nextBtn.onclick = () => this.browseForm(code, (data.page || 1) + 1, currentQuery, label);
         pagination.appendChild(nextBtn);
         const meta = document.createElement('span');
         meta.style.cssText = 'margin-left:8px;color:#666;font-size:13px;';
-        meta.textContent = 'Total ' + (data.total || 0);
+        meta.textContent = 'Total: ' + (data.total || 0) + ' records';
         pagination.appendChild(meta);
         container.appendChild(pagination);
       }
@@ -945,13 +1105,13 @@ window.saveForm = async function () {
 };
 
 // Global window aliases
-window.openFormBuilder = function ()           { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
-window.previewForm     = function (code)       { return NuApp.previewForm(code); };
-window.editForm        = function (id)         { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
-window.addRecord       = function (code)       { return NuApp.addRecord(code); };
-window.editRecord      = function (code, id)   { return NuApp.editRecord(code, id); };
-window.browseForm      = function (code, page, query) { return NuApp.browseForm(code, page, query); };
-window.browseFormPage  = function (code, page, query) { return NuApp.browseForm(code, page, query); };
+window.openFormBuilder = function ()                    { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
+window.previewForm     = function (code, label)         { return NuApp.previewForm(code, label); };
+window.editForm        = function (id)                  { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
+window.addRecord       = function (code, label)         { return NuApp.addRecord(code, label); };
+window.editRecord      = function (code, id, label)     { return NuApp.editRecord(code, id, label); };
+window.browseForm      = function (code, page, query, label) { return NuApp.browseForm(code, page, query, label); };
+window.browseFormPage  = function (code, page, query, label) { return NuApp.browseForm(code, page, query, label); };
 window.deleteForm      = function (id, name)   {
   if (!confirm('Delete form ' + (name || '') + '?')) return;
   NuApp.apiJson('api/crud.php?table=nu_forms&id=' + encodeURIComponent(id), {
