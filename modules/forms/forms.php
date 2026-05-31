@@ -16,6 +16,14 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
     'nu_api_tokens','nu_api_usage','nu_audit_log','nu_files',
     'nu_forms','nu_reports','nu_queries','nu_menus'
 ], true)));
+
+// Group forms by type
+$formsByType = ['main' => [], 'subform' => [], 'popup' => [], 'report' => []];
+foreach ($forms as $f) {
+    $t = $f['form_type'] ?? 'main';
+    if (!isset($formsByType[$t])) $formsByType[$t] = [];
+    $formsByType[$t][] = $f;
+}
 ?>
 
 <style>
@@ -176,20 +184,67 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
 .nb-tmode-card input[type=radio] { display:none; }
 .nb-tmode-card-title { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:3px; }
 .nb-tmode-card-desc  { font-size:11px; color:var(--text-tertiary); line-height:1.4; }
+
+/* Form type selector */
+.nb-ftype-cards { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.nb-ftype-card {
+  flex:1; min-width:120px; border:2px solid var(--border-color); border-radius:10px;
+  padding:12px 10px; cursor:pointer; background:var(--bg-surface);
+  transition:all .15s; text-align:center;
+}
+.nb-ftype-card:hover { border-color:var(--color-primary); background:var(--bg-elevated); }
+.nb-ftype-card.selected {
+  border-color:var(--color-primary);
+  background:color-mix(in oklch,var(--color-primary) 8%,var(--bg-surface));
+}
+.nb-ftype-card input[type=radio] { display:none; }
+.nb-ftype-icon  { font-size:20px; margin-bottom:4px; }
+.nb-ftype-label { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:2px; }
+.nb-ftype-desc  { font-size:10px; color:var(--text-tertiary); line-height:1.3; }
+
+/* Form type badge in list */
+.nb-type-badge {
+  display:inline-block; font-size:10px; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; padding:2px 8px; border-radius:20px;
+  vertical-align:middle;
+}
+.nb-type-badge.main    { background:color-mix(in oklch,var(--color-primary) 12%,transparent); color:var(--color-primary); }
+.nb-type-badge.subform { background:color-mix(in oklch,#f59e0b 15%,transparent); color:#b45309; }
+.nb-type-badge.popup   { background:color-mix(in oklch,#8b5cf6 15%,transparent); color:#6d28d9; }
+.nb-type-badge.report  { background:color-mix(in oklch,#10b981 15%,transparent); color:#047857; }
+
+/* Forms list filter tabs */
+.nb-filter-tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+.nb-filter-tab {
+  padding:5px 14px; border-radius:20px; font-size:12px; font-weight:600;
+  border:1px solid var(--border-color); background:var(--bg-surface);
+  cursor:pointer; transition:all .15s; color:var(--text-secondary);
+}
+.nb-filter-tab:hover { border-color:var(--color-primary); color:var(--color-primary); }
+.nb-filter-tab.active { background:var(--color-primary); border-color:var(--color-primary); color:#fff; }
 </style>
 
 <div class="nu-forms">
 
   <!-- ── Forms list ────────────────────────────────────────────── -->
   <div id="formsListSection">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <h3 class="nu-card-title">Forms</h3>
       <?php if ($auth->hasPermission('forms','create')): ?>
       <button class="nu-btn nu-btn-primary" onclick="nbFormBuilder.open()">+ New Form</button>
       <?php endif; ?>
     </div>
 
-    <div class="nu-grid">
+    <!-- Filter tabs -->
+    <div class="nb-filter-tabs" id="nbFilterTabs">
+      <button class="nb-filter-tab active" data-filter="all"     onclick="nbFilterForms('all',this)">All (<?= count($forms) ?>)</button>
+      <button class="nb-filter-tab"        data-filter="main"    onclick="nbFilterForms('main',this)">⊞ Main (<?= count($formsByType['main']) ?>)</button>
+      <button class="nb-filter-tab"        data-filter="subform" onclick="nbFilterForms('subform',this)">⊟ Subforms (<?= count($formsByType['subform']) ?>)</button>
+      <button class="nb-filter-tab"        data-filter="popup"   onclick="nbFilterForms('popup',this)">▣ Popups (<?= count($formsByType['popup']) ?>)</button>
+      <button class="nb-filter-tab"        data-filter="report"  onclick="nbFilterForms('report',this)">📊 Reports (<?= count($formsByType['report']) ?>)</button>
+    </div>
+
+    <div class="nu-grid" id="formsGrid">
       <?php foreach ($forms as $f): ?>
       <?php
         $layout     = @json_decode($f['form_layout'] ?? '[]', true);
@@ -197,23 +252,35 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
         $formLabel  = htmlspecialchars($f['form_name'], ENT_QUOTES);
         $formCode   = htmlspecialchars($f['form_code'], ENT_QUOTES);
         $browseMode = $f['browse_display_mode'] ?? 'inline';
-        $pkType     = $f['form_pk_type']  ?? 'autoincrement';
+        $pkType     = $f['form_pk_type']   ?? 'autoincrement';
         $tMode      = $f['form_table_mode'] ?? 'new';
+        $fType      = $f['form_type']       ?? 'main';
+        $typeLabels = ['main'=>'Main','subform'=>'Subform','popup'=>'Popup','report'=>'Report'];
+        $typeLabel  = $typeLabels[$fType] ?? ucfirst($fType);
+        // Show Preview/Browse only for main/popup, not subforms/reports in browse
+        $isMain     = in_array($fType, ['main','popup']);
       ?>
-      <div class="nu-card">
-        <div class="nu-card-header">
-          <h4 class="nu-card-title"><?= htmlspecialchars($f['form_name']) ?></h4>
+      <div class="nu-card" data-form-type="<?= htmlspecialchars($fType, ENT_QUOTES) ?>">
+        <div class="nu-card-header" style="gap:8px;flex-wrap:wrap;">
+          <h4 class="nu-card-title" style="flex:1;"><?= htmlspecialchars($f['form_name']) ?></h4>
+          <span class="nb-type-badge <?= htmlspecialchars($fType) ?>"><?= $typeLabel ?></span>
           <span class="nu-badge"><?= htmlspecialchars($f['form_code']) ?></span>
         </div>
         <p class="nu-form-meta" style="margin-bottom:4px;">Table: <?= $f['form_table'] ? '<code>'.htmlspecialchars($f['form_table']).'</code>' : '<em>none</em>' ?></p>
         <p class="nu-form-meta" style="margin-bottom:4px;"><?= $fieldCount ?> field<?= $fieldCount !== 1 ? 's' : '' ?></p>
         <p class="nu-form-meta" style="margin-bottom:4px;">PK: <span style="font-weight:600;color:var(--color-primary);"><?= $pkType === 'uuid' ? 'NuBuilder UUID' : 'Auto-increment' ?></span></p>
+        <?php if ($isMain): ?>
         <p class="nu-form-meta" style="margin-bottom:12px;">Browse: <span style="font-weight:600;color:var(--color-primary);"><?= htmlspecialchars(ucfirst($browseMode)) ?></span></p>
+        <?php else: ?>
+        <p class="nu-form-meta" style="margin-bottom:12px;">Type: <span style="font-weight:600;color:var(--color-primary);"><?= $typeLabel ?></span></p>
+        <?php endif; ?>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="nu-btn nu-btn-primary nu-btn-sm"  onclick="previewForm('<?= $formCode ?>','<?= $formLabel ?>')">⊞ Preview</button>
-          <button class="nu-btn nu-btn-ghost nu-btn-sm"    onclick="nbFormBuilder.edit(<?= (int)$f['form_id'] ?>)">✎ Edit</button>
-          <button class="nu-btn nu-btn-ghost nu-btn-sm"    onclick="browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','<?= htmlspecialchars($browseMode,ENT_QUOTES) ?>')">⊟ Browse</button>
-          <button class="nu-btn nu-btn-danger nu-btn-sm"   onclick="deleteForm(<?= (int)$f['form_id'] ?>,'<?= $formLabel ?>')">Delete</button>
+          <?php if ($isMain): ?>
+          <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="previewForm('<?= $formCode ?>','<?= $formLabel ?>')">⊞ Preview</button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm"   onclick="browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','<?= htmlspecialchars($browseMode,ENT_QUOTES) ?>')">⊟ Browse</button>
+          <?php endif; ?>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm"   onclick="nbFormBuilder.edit(<?= (int)$f['form_id'] ?>)">✎ Edit</button>
+          <button class="nu-btn nu-btn-danger nu-btn-sm"  onclick="deleteForm(<?= (int)$f['form_id'] ?>,'<?= $formLabel ?>')">Delete</button>
         </div>
       </div>
       <?php endforeach; ?>
@@ -237,7 +304,38 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
       <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nbFormBuilder.close()">✕ Cancel</button>
     </div>
 
-    <!-- ── Top meta row: Name + Table mode ── -->
+    <!-- ── Form Type selector ── -->
+    <div style="margin-bottom:16px;">
+      <label class="nu-label" style="margin-bottom:10px;display:block;">Form Type</label>
+      <div class="nb-ftype-cards" id="nbFormTypeCards">
+        <label class="nb-ftype-card selected" onclick="nbFormBuilder.selectFormType('main',this)">
+          <input type="radio" name="formType" id="formTypeMain" value="main" checked>
+          <div class="nb-ftype-icon">⊞</div>
+          <div class="nb-ftype-label">Main Form</div>
+          <div class="nb-ftype-desc">Standalone — appears in menu &amp; navigation</div>
+        </label>
+        <label class="nb-ftype-card" onclick="nbFormBuilder.selectFormType('subform',this)">
+          <input type="radio" name="formType" id="formTypeSubform" value="subform">
+          <div class="nb-ftype-icon">⊟</div>
+          <div class="nb-ftype-label">Subform</div>
+          <div class="nb-ftype-desc">Embedded inside a main form, linked by FK</div>
+        </label>
+        <label class="nb-ftype-card" onclick="nbFormBuilder.selectFormType('popup',this)">
+          <input type="radio" name="formType" id="formTypePopup" value="popup">
+          <div class="nb-ftype-icon">▣</div>
+          <div class="nb-ftype-label">Popup</div>
+          <div class="nb-ftype-desc">Opens in a modal for lookup / record selection</div>
+        </label>
+        <label class="nb-ftype-card" onclick="nbFormBuilder.selectFormType('report',this)">
+          <input type="radio" name="formType" id="formTypeReport" value="report">
+          <div class="nb-ftype-icon">📊</div>
+          <div class="nb-ftype-label">Report</div>
+          <div class="nb-ftype-desc">Read-only display form, no save button</div>
+        </label>
+      </div>
+    </div>
+
+    <!-- ── Top meta row: Name + Code ── -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
       <div>
         <label class="nu-label">Form Name</label>
@@ -285,31 +383,28 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
     </div>
 
     <!-- ── Primary Key type selector ── -->
-    <div style="margin-bottom:20px;">
+    <div style="margin-bottom:20px;" id="pkTypeSection">
       <label class="nu-label" style="margin-bottom:10px;display:block;">Primary Key Type</label>
       <div class="nb-pk-cards" id="nbPkCards">
-
         <label class="nb-pk-card selected" onclick="nbFormBuilder.selectPkType('autoincrement',this)">
           <input type="radio" name="formPkType" id="formPkTypeAuto" value="autoincrement" checked>
           <div class="nb-pk-card-title">Auto-increment INT</div>
           <div class="nb-pk-card-code">id INT AUTO_INCREMENT</div>
           <div class="nb-pk-card-desc">Standard MySQL integer PK. Simple, fast, and compatible with everything.</div>
         </label>
-
         <label class="nb-pk-card" onclick="nbFormBuilder.selectPkType('uuid',this)">
           <input type="radio" name="formPkType" id="formPkTypeUuid" value="uuid">
           <div class="nb-pk-card-title">NuBuilder UUID</div>
           <div class="nb-pk-card-code">id VARCHAR(36) — nubuilder style</div>
           <div class="nb-pk-card-desc">Globally unique string ID. Best for migration, sync, and multi-system environments.</div>
         </label>
-
       </div>
     </div>
 
     <!-- Tabs -->
     <div class="nb-tabs" id="nbTabsRow">
       <button type="button" class="nb-tab active" data-panel="panelFields"  onclick="nbFormBuilder.switchTab(this)">Fields</button>
-      <button type="button" class="nb-tab"        data-panel="panelBrowse"  onclick="nbFormBuilder.switchTab(this)">Browse</button>
+      <button type="button" class="nb-tab"        data-panel="panelBrowse"  onclick="nbFormBuilder.switchTab(this)" id="browseTab">Browse</button>
       <button type="button" class="nb-tab"        data-panel="panelEvents"  onclick="nbFormBuilder.switchTab(this)">Events / JS</button>
       <button type="button" class="nb-tab"        data-panel="panelPhpCss"  onclick="nbFormBuilder.switchTab(this)">PHP / CSS</button>
     </div>
@@ -373,33 +468,32 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
 
     <!-- ── TAB: Browse ── -->
     <div class="nb-tab-panel" id="panelBrowse">
+      <div style="margin-bottom:12px;padding:10px 14px;background:color-mix(in oklch,#f59e0b 10%,var(--bg-surface));border:1px solid color-mix(in oklch,#f59e0b 30%,transparent);border-radius:8px;font-size:12px;color:#92400e;" id="browseNotApplicable" style="display:none;">
+        ℹ️ Browse settings only apply to <strong>Main</strong> and <strong>Popup</strong> form types.
+      </div>
 
       <!-- Browse Display Mode selector -->
       <div style="margin-bottom:20px;">
         <label class="nu-label" style="margin-bottom:10px;display:block;">Browse Display Mode</label>
         <div class="nb-display-modes" id="browseDisplayModes">
-
           <label class="nb-display-mode-card selected" onclick="nbFormBuilder.selectDisplayMode('inline',this)">
             <input type="radio" name="browseDisplayMode" id="browseDisplayModeInline" value="inline" checked>
             <div class="nb-display-mode-icon">▤</div>
             <div class="nb-display-mode-label">Inline</div>
             <div class="nb-display-mode-desc">Replaces content area with breadcrumb navigation</div>
           </label>
-
           <label class="nb-display-mode-card" onclick="nbFormBuilder.selectDisplayMode('modal',this)">
             <input type="radio" name="browseDisplayMode" id="browseDisplayModeModal" value="modal">
             <div class="nb-display-mode-icon">▣</div>
             <div class="nb-display-mode-label">Modal</div>
             <div class="nb-display-mode-desc">Opens browse in a resizable overlay modal</div>
           </label>
-
           <label class="nb-display-mode-card" onclick="nbFormBuilder.selectDisplayMode('fullpage',this)">
             <input type="radio" name="browseDisplayMode" id="browseDisplayModeFullpage" value="fullpage">
             <div class="nb-display-mode-icon">⛶</div>
             <div class="nb-display-mode-label">Full Page</div>
             <div class="nb-display-mode-desc">Hides sidebar, browse fills entire viewport</div>
           </label>
-
         </div>
       </div>
 
@@ -479,7 +573,34 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
 </div>
 
 <script>
-// Table mode toggle
+// ── Form type filter ─────────────────────────────────────────────
+function nbFilterForms(filter, btn) {
+  document.querySelectorAll('.nb-filter-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('#formsGrid .nu-card[data-form-type]').forEach(card => {
+    const show = filter === 'all' || card.dataset.formType === filter;
+    card.style.display = show ? '' : 'none';
+  });
+}
+
+// ── Form type selector ───────────────────────────────────────────
+nbFormBuilder.selectFormType = function(type, card) {
+  document.querySelectorAll('.nb-ftype-card').forEach(c => c.classList.remove('selected'));
+  if (card) card.classList.add('selected');
+  const radio = document.querySelector('input[name="formType"][value="'+type+'"]');
+  if (radio) radio.checked = true;
+
+  // Subform: hide Browse tab (not applicable), keep FK note visible
+  const browseTabEl = document.getElementById('browseTab');
+  const browseNotice = document.getElementById('browseNotApplicable');
+  const isBrowseable = type === 'main' || type === 'popup';
+  if (browseTabEl) browseTabEl.style.opacity = isBrowseable ? '1' : '0.4';
+  if (browseNotice) browseNotice.style.display = isBrowseable ? 'none' : 'block';
+
+  // Report: PK section less important but still valid — leave enabled
+};
+
+// ── Table mode toggle ────────────────────────────────────────────
 nbFormBuilder.selectTableMode = function(mode, card) {
   document.querySelectorAll('.nb-tmode-card').forEach(c => c.classList.remove('selected'));
   if (card) card.classList.add('selected');
@@ -487,49 +608,49 @@ nbFormBuilder.selectTableMode = function(mode, card) {
   const isNew = mode === 'new';
   document.getElementById('tableNewWrap').style.display      = isNew ? '' : 'none';
   document.getElementById('tableExistingWrap').style.display = isNew ? 'none' : '';
-  // PK type only makes sense for new tables
   document.getElementById('nbPkCards').style.opacity        = isNew ? '1' : '0.4';
   document.getElementById('nbPkCards').style.pointerEvents  = isNew ? '' : 'none';
   if (!isNew) {
-    // Sync hidden table input when switching back to existing
     const sel = document.getElementById('builderFormTableExisting');
     if (sel && sel.value) document.getElementById('builderFormTable').value = sel.value;
   }
 };
 
-// PK type toggle
+// ── PK type toggle ───────────────────────────────────────────────
 nbFormBuilder.selectPkType = function(type, card) {
   document.querySelectorAll('.nb-pk-card').forEach(c => c.classList.remove('selected'));
   if (card) card.classList.add('selected');
   document.querySelector('input[name="formPkType"][value="'+type+'"]').checked = true;
 };
 
-// Extend open() to reset new fields
+// ── Extend open() to reset all fields ───────────────────────────
 const _nbOpen = nbFormBuilder.open.bind(nbFormBuilder);
 nbFormBuilder.open = function() {
   _nbOpen();
-  // Reset table mode to "new"
+  nbFormBuilder.selectFormType('main', document.querySelector('.nb-ftype-card'));
   nbFormBuilder.selectTableMode('new', document.querySelector('.nb-tmode-card'));
-  // Reset PK type to auto-increment
   nbFormBuilder.selectPkType('autoincrement', document.querySelector('.nb-pk-card'));
   document.getElementById('builderFormCode').value = '';
 };
 
-// Extend edit() to restore pk type, table mode, and form code
-const _nbEdit = nbFormBuilder.edit.bind(nbFormBuilder);
-nbFormBuilder.edit = function(id) {
-  _nbEdit(id);
-  // edit() loads via AJAX — hook into the existing response handler
-  // by overriding _nbAfterLoad which is called after fetch returns
+// ── Restore form type on edit ────────────────────────────────────
+const _nbRestoreFormType = function(ftype) {
+  const val = ftype || 'main';
+  const radio = document.querySelector('input[name="formType"][value="'+val+'"]');
+  if (radio) {
+    const card = radio.closest('.nb-ftype-card');
+    nbFormBuilder.selectFormType(val, card);
+  }
 };
+window._nbRestoreFormType = _nbRestoreFormType;
 
-// Override saveForm to include new fields
+// ── Patch saveForm to include form_type ──────────────────────────
 const _origSaveForm = window.saveForm;
 window.saveForm = function() {
-  // Inject pk_type and table_mode into the payload via the global nbFormBuilder state
   nbFormBuilder._pkType    = document.querySelector('input[name="formPkType"]:checked')?.value    || 'autoincrement';
   nbFormBuilder._tableMode = document.querySelector('input[name="formTableMode"]:checked')?.value || 'new';
   nbFormBuilder._formCode  = document.getElementById('builderFormCode').value.trim();
+  nbFormBuilder._formType  = document.querySelector('input[name="formType"]:checked')?.value      || 'main';
   if (typeof _origSaveForm === 'function') _origSaveForm();
 };
 </script>
