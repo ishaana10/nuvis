@@ -115,6 +115,23 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
   padding-top:16px;
   border-top:1px solid var(--border-color);
 }
+
+/* Browse display mode cards */
+.nb-display-modes { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.nb-display-mode-card {
+  flex:1; min-width:140px; border:2px solid var(--border-color);
+  border-radius:10px; padding:14px 12px; cursor:pointer;
+  background:var(--bg-surface); transition:all .15s; text-align:center;
+}
+.nb-display-mode-card:hover { border-color:var(--color-primary); background:var(--bg-elevated); }
+.nb-display-mode-card.selected {
+  border-color:var(--color-primary);
+  background:color-mix(in oklch,var(--color-primary) 8%,var(--bg-surface));
+}
+.nb-display-mode-card input[type=radio] { display:none; }
+.nb-display-mode-icon { font-size:22px; margin-bottom:6px; }
+.nb-display-mode-label { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:3px; }
+.nb-display-mode-desc { font-size:11px; color:var(--text-tertiary); line-height:1.4; }
 </style>
 
 <div class="nu-forms">
@@ -130,22 +147,26 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
 
     <div class="nu-grid">
       <?php foreach ($forms as $f): ?>
+      <?php
+        $layout     = @json_decode($f['form_layout'] ?? '[]', true);
+        $fieldCount = is_array($layout) ? count($layout) : 0;
+        $formLabel  = htmlspecialchars($f['form_name'], ENT_QUOTES);
+        $formCode   = htmlspecialchars($f['form_code'], ENT_QUOTES);
+        $browseMode = $f['browse_display_mode'] ?? 'inline';
+      ?>
       <div class="nu-card">
         <div class="nu-card-header">
           <h4 class="nu-card-title"><?= htmlspecialchars($f['form_name']) ?></h4>
           <span class="nu-badge"><?= htmlspecialchars($f['form_code']) ?></span>
         </div>
         <p class="nu-form-meta" style="margin-bottom:4px;">Table: <?= $f['form_table'] ? '<code>'.htmlspecialchars($f['form_table']).'</code>' : '<em>none</em>' ?></p>
-        <?php
-          $layout     = @json_decode($f['form_layout'] ?? '[]', true);
-          $fieldCount = is_array($layout) ? count($layout) : 0;
-        ?>
-        <p class="nu-form-meta" style="margin-bottom:12px;"><?= $fieldCount ?> field<?= $fieldCount !== 1 ? 's' : '' ?></p>
+        <p class="nu-form-meta" style="margin-bottom:4px;"><?= $fieldCount ?> field<?= $fieldCount !== 1 ? 's' : '' ?></p>
+        <p class="nu-form-meta" style="margin-bottom:12px;">Browse: <span style="font-weight:600;color:var(--color-primary);"><?= htmlspecialchars(ucfirst($browseMode)) ?></span></p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="nu-btn nu-btn-primary nu-btn-sm"  onclick="previewForm('<?= htmlspecialchars($f['form_code']) ?>')">Preview</button>
-          <button class="nu-btn nu-btn-ghost nu-btn-sm"    onclick="nbFormBuilder.edit(<?= (int)$f['form_id'] ?>)">Edit</button>
-          <button class="nu-btn nu-btn-ghost nu-btn-sm"    onclick="browseForm('<?= htmlspecialchars($f['form_code']) ?>')">Browse</button>
-          <button class="nu-btn nu-btn-danger nu-btn-sm"   onclick="deleteForm(<?= (int)$f['form_id'] ?>,'<?= htmlspecialchars($f['form_name'],ENT_QUOTES) ?>')">Delete</button>
+          <button class="nu-btn nu-btn-primary nu-btn-sm"  onclick="previewForm('<?= $formCode ?>','<?= $formLabel ?>')">⊞ Preview</button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm"    onclick="nbFormBuilder.edit(<?= (int)$f['form_id'] ?>)">✎ Edit</button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm"    onclick="browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','<?= htmlspecialchars($browseMode,ENT_QUOTES) ?>')">⊟ Browse</button>
+          <button class="nu-btn nu-btn-danger nu-btn-sm"   onclick="deleteForm(<?= (int)$f['form_id'] ?>,'<?= $formLabel ?>')">Delete</button>
         </div>
       </div>
       <?php endforeach; ?>
@@ -248,6 +269,36 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
 
     <!-- ── TAB: Browse ── -->
     <div class="nb-tab-panel" id="panelBrowse">
+
+      <!-- Browse Display Mode selector -->
+      <div style="margin-bottom:20px;">
+        <label class="nu-label" style="margin-bottom:10px;display:block;">Browse Display Mode</label>
+        <div class="nb-display-modes" id="browseDisplayModes">
+
+          <label class="nb-display-mode-card selected" onclick="nbFormBuilder.selectDisplayMode('inline',this)">
+            <input type="radio" name="browseDisplayMode" id="browseDisplayModeInline" value="inline" checked>
+            <div class="nb-display-mode-icon">▤</div>
+            <div class="nb-display-mode-label">Inline</div>
+            <div class="nb-display-mode-desc">Replaces content area with breadcrumb navigation</div>
+          </label>
+
+          <label class="nb-display-mode-card" onclick="nbFormBuilder.selectDisplayMode('modal',this)">
+            <input type="radio" name="browseDisplayMode" id="browseDisplayModeModal" value="modal">
+            <div class="nb-display-mode-icon">▣</div>
+            <div class="nb-display-mode-label">Modal</div>
+            <div class="nb-display-mode-desc">Opens browse in a resizable overlay modal</div>
+          </label>
+
+          <label class="nb-display-mode-card" onclick="nbFormBuilder.selectDisplayMode('fullpage',this)">
+            <input type="radio" name="browseDisplayMode" id="browseDisplayModeFullpage" value="fullpage">
+            <div class="nb-display-mode-icon">⛶</div>
+            <div class="nb-display-mode-label">Full Page</div>
+            <div class="nb-display-mode-desc">Hides sidebar, browse fills entire viewport</div>
+          </label>
+
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="grid-column:1/-1;">
           <label class="nu-label">Browse SQL <span style="font-weight:400;color:var(--text-tertiary);">(leave empty for auto SELECT *)</span></label>
