@@ -65,6 +65,19 @@ window.NuApp = {
     }, 4000);
   },
 
+  // Re-execute <script> tags injected via innerHTML (browsers strip them)
+  _execModuleScripts(container) {
+    container.querySelectorAll('script').forEach(function (oldScript) {
+      const s = document.createElement('script');
+      // Copy all attributes (type, src, etc.)
+      Array.from(oldScript.attributes).forEach(function (attr) {
+        s.setAttribute(attr.name, attr.value);
+      });
+      s.textContent = oldScript.textContent;
+      oldScript.parentNode.replaceChild(s, oldScript);
+    });
+  },
+
   async loadModule(module) {
     this.currentModule = module;
     const container = document.getElementById('contentArea');
@@ -89,6 +102,8 @@ window.NuApp = {
       container.style.display = 'block';
       container.style.visibility = 'visible';
       container.style.opacity = '1';
+      // CRITICAL: re-run scripts injected via innerHTML
+      this._execModuleScripts(container);
       this.initModuleScripts(module);
     } catch (err) {
       console.error('loadModule error', err);
@@ -115,7 +130,7 @@ window.NuApp = {
     return json;
   },
 
-  // ── dispatch nu:form:opened so nuSubform.initAll bootstraps subforms ──
+  // dispatch nu:form:opened so nuSubform.initAll bootstraps subforms
   _dispatchFormOpened(box) {
     if (window.nuSubform && typeof window.nuSubform.initAll === 'function') {
       window.nuSubform.initAll(box);
@@ -408,7 +423,7 @@ window.submitNuForm = async function (formElement) {
   }
 };
 
-// ─── nbFormBuilder ──────────────────────────────────────────────────────────
+// nbFormBuilder
 window.nbFormBuilder = (function () {
 
   function _esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -760,7 +775,7 @@ window.nbFormBuilder = (function () {
 
 })();
 
-// ─── saveForm ───────────────────────────────────────────────────────────────
+// saveForm
 window.saveForm = async function () {
   function _elv(eid) { var e = document.getElementById(eid); return e ? e.value : ''; }
   function _elc(eid) { var e = document.getElementById(eid); return e ? e.checked : false; }
@@ -929,9 +944,7 @@ window.saveForm = async function () {
   }
 };
 
-// ─── Global window aliases ───────────────────────────────────────────────────
-// These are required because modules/forms/forms.php uses bare onclick="previewForm(...)"
-// and onclick="browseForm(...)" handlers which need global scope resolution.
+// Global window aliases
 window.openFormBuilder = function ()           { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
 window.previewForm     = function (code)       { return NuApp.previewForm(code); };
 window.editForm        = function (id)         { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
