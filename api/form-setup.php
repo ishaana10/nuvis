@@ -22,11 +22,12 @@ try {
         throw new Exception('Invalid JSON input');
     }
 
-    $formId    = $data['form_id']    ?? null;
-    $formTable = $data['form_table'] ?? '';
-    $fields    = $data['fields']     ?? [];
-    $pkType    = $data['pk_type']    ?? 'autoincrement'; // 'autoincrement' | 'uuid'
-    $tableMode = $data['table_mode'] ?? 'new';           // 'new' | 'existing'
+    $formId      = $data['form_id']      ?? null;
+    $formTable   = $data['form_table']   ?? '';
+    $fields      = $data['fields']       ?? [];
+    $pkType      = $data['pk_type']      ?? 'autoincrement'; // 'autoincrement' | 'uuid'
+    $tableMode   = $data['table_mode']   ?? 'new';           // 'new' | 'existing'
+    $dropEnabled = (bool)($data['drop_enabled'] ?? false);   // must be explicitly true to drop columns
 
     if (!$formTable || !is_array($fields)) {
         echo json_encode(['success' => false, 'error' => 'Table name and fields required']);
@@ -92,7 +93,7 @@ try {
     $existingColMeta = [];
     $stmt = $pdo->query("SHOW COLUMNS FROM `{$formTable}`");
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $existingCols[]              = $row['Field'];
+        $existingCols[]                 = $row['Field'];
         $existingColMeta[$row['Field']] = $row;
     }
 
@@ -141,15 +142,25 @@ try {
         $pdo->exec("ALTER TABLE `{$formTable}` ADD COLUMN `{$name}` {$type}");
     }
 
-    // Drop columns no longer in layout (never drop protected ones)
-    foreach ($existingCols as $colName) {
-        if (in_array($colName, $protected, true)) continue;
-        if (!in_array($colName, $desiredCols, true)) {
-            $pdo->exec("ALTER TABLE `{$formTable}` DROP COLUMN `{$colName}`");
+    // Drop columns no longer in layout — only when $dropEnabled is true
+    $dropped = [];
+    if ($dropEnabled) {
+        foreach ($existingCols as $colName) {
+            if (in_array($colName, $protected, true)) continue;
+            if (!in_array($colName, $desiredCols, true)) {
+                $pdo->exec("ALTER TABLE `{$formTable}` DROP COLUMN `{$colName}`");
+                $dropped[] = $colName;
+            }
         }
     }
 
-    echo json_encode(['success' => true, 'message' => 'Table synced', 'renamed' => $renameMap]);
+    echo json_encode([
+        'success' => true,
+        'message' => 'Table synced',
+        'renamed' => $renameMap,
+        'dropped' => $dropped,
+        'drop_enabled' => $dropEnabled
+    ]);
 
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
