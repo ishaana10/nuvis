@@ -78,7 +78,6 @@ window.NuApp = {
   },
 
   async loadModule(module) {
-    // If full-page mode is active, restore layout first
     this._exitFullPage();
     this.currentModule = module;
     const container = document.getElementById('contentArea');
@@ -170,13 +169,12 @@ window.NuApp = {
 
   // ─── FULL-PAGE MODE HELPERS ──────────────────────────────────────────────────
   _enterFullPage() {
-    // Hide sidebar + header, stretch content area
     const sidebar = document.querySelector('.nu-sidebar, #sidebar, [class*="sidebar"]');
     const header  = document.querySelector('.nu-header, #header, header');
     const main    = document.getElementById('contentArea');
     if (sidebar) { sidebar.dataset.nuFpHidden = sidebar.style.display; sidebar.style.display = 'none'; }
     if (header)  { header.dataset.nuFpHidden  = header.style.display;  header.style.display  = 'none'; }
-    if (main)    {
+    if (main) {
       main.dataset.nuFpStyle = main.getAttribute('style') || '';
       main.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9000;overflow-y:auto;padding:24px;background:var(--bg-page,#f5f6fa);';
     }
@@ -394,7 +392,6 @@ window.NuApp = {
 
     container.innerHTML = '';
 
-    // Search bar
     if (searchEnabled) {
       const searchWrap = document.createElement('div');
       searchWrap.style.cssText = 'margin-bottom:16px;display:flex;gap:8px;';
@@ -421,7 +418,6 @@ window.NuApp = {
       container.appendChild(searchWrap);
     }
 
-    // Table
     const tableWrap = document.createElement('div');
     tableWrap.style.cssText = 'overflow-x:auto;';
     const table = document.createElement('table');
@@ -486,7 +482,6 @@ window.NuApp = {
     tableWrap.appendChild(table);
     container.appendChild(tableWrap);
 
-    // Pagination
     if ((data.pages || 1) > 1) {
       const pagination = document.createElement('div');
       pagination.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:16px;';
@@ -517,7 +512,7 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 1: INLINE — renders inside contentArea with breadcrumb ─────────────
+  // ─── MODE 1: INLINE ──────────────────────────────────────────────────────────
   async _browseInline(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -528,7 +523,6 @@ window.NuApp = {
       if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
 
-      // Breadcrumb
       const bc = this._renderBreadcrumb([
         { label: 'Forms', action: () => this.loadModule('forms') },
         { label: label,   action: () => this._browseInline(code, 1, '', label) },
@@ -536,7 +530,6 @@ window.NuApp = {
       ]);
       container.appendChild(bc);
 
-      // Header
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
       const h3 = document.createElement('h3');
@@ -570,14 +563,13 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 2: MODAL — browse table inside a resizable overlay ─────────────────
+  // ─── MODE 2: MODAL ───────────────────────────────────────────────────────────
   async _browseModal(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
 
-      // Reuse existing browse modal if already open (pagination/search)
       let overlay = document.querySelector('.nu-browse-overlay');
       let isNew   = false;
       if (!overlay) {
@@ -592,7 +584,6 @@ window.NuApp = {
       box.style.cssText =
         'background:var(--card-bg,#fff);border-radius:12px;padding:24px;width:96%;max-width:1100px;max-height:92vh;overflow-y:auto;';
 
-      // Header
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;';
 
@@ -620,7 +611,6 @@ window.NuApp = {
       header.appendChild(rightBtns);
 
       box.appendChild(header);
-
       const tableContainer = document.createElement('div');
       this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer);
       box.appendChild(tableContainer);
@@ -638,7 +628,7 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 3: FULL PAGE — hides sidebar, fills viewport ───────────────────────
+  // ─── MODE 3: FULL PAGE ───────────────────────────────────────────────────────
   async _browseFullPage(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -651,7 +641,6 @@ window.NuApp = {
       if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
 
-      // Breadcrumb
       const bc = this._renderBreadcrumb([
         { label: 'Forms', action: () => { this._exitFullPage(); this.loadModule('forms'); } },
         { label: label,   action: () => this._browseFullPage(code, 1, '', label) },
@@ -659,7 +648,6 @@ window.NuApp = {
       ]);
       container.appendChild(bc);
 
-      // Header
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
       const h3 = document.createElement('h3');
@@ -983,7 +971,6 @@ window.nbFormBuilder = (function () {
       _initCanvasDrop();
     },
 
-    // Wire up the display mode card selector in the Browse tab
     selectDisplayMode: function (mode, clickedCard) {
       var radio = clickedCard ? clickedCard.querySelector('input[type=radio]') : document.getElementById('browseDisplayMode' + mode.charAt(0).toUpperCase() + mode.slice(1));
       if (radio) radio.checked = true;
@@ -1036,7 +1023,6 @@ window.nbFormBuilder = (function () {
       var chk = _el('formBrowseSearchEnabled'); if (chk) chk.checked = false;
       var ps  = _el('formBrowsePageSize');      if (ps)  ps.value   = '20';
 
-      // Reset display mode to inline
       nbFormBuilder.selectDisplayMode('inline');
 
       var firstTab = document.querySelector('#nbTabsRow .nb-tab');
@@ -1088,7 +1074,6 @@ window.nbFormBuilder = (function () {
         sv('formBrowseDefaultSort',       form.browse_default_sort);
         sc('formBrowseSearchEnabled',     form.browse_search_enabled);
 
-        // Load saved display mode
         nbFormBuilder.selectDisplayMode(form.browse_display_mode || 'inline');
 
         _el('formCanvas').innerHTML = '<div class="nb-canvas-empty" id="canvasEmpty" style="display:none;"></div>';
@@ -1208,4 +1193,98 @@ window.saveForm = async function () {
       const txt  = el.querySelector('.nu-subform-config');
       const view = el.querySelector('.nu-subform-view');
       if (txt && txt.value.indexOf('.') !== -1) {
-        const parts =
+        const parts = txt.value.split('.');
+        field.subform = {
+          form_code: parts[0],
+          fk_field:  parts[1],
+          view:      view ? view.value : 'grid'
+        };
+      }
+    }
+
+    if (type === 'calculated') {
+      const txt = el.querySelector('.nu-calc-expression');
+      if (txt) field.calculated = txt.value;
+    }
+
+    fields.push(field);
+  });
+
+  const payload = {
+    form_name:                 formName,
+    form_code:                 formCode,
+    form_table:                formTable,
+    form_layout:               JSON.stringify(fields),
+    form_active:               1,
+    form_custom_js:            _elv('formCustomJs'),
+    form_js_before_save:       _elv('formJsBeforeSave'),
+    form_js_after_save:        _elv('formJsAfterSave'),
+    form_custom_php:           _elv('formCustomPhp'),
+    form_custom_css:           _elv('formCustomCss'),
+    browse_sql:                _elv('formBrowseSql'),
+    browse_columns:            _elv('formBrowseColumns'),
+    browse_search_enabled:     _elc('formBrowseSearchEnabled') ? 1 : 0,
+    browse_search_placeholder: _elv('formBrowseSearchPlaceholder'),
+    browse_search_fields:      _elv('formBrowseSearchFields'),
+    browse_page_size:          _elv('formBrowsePageSize') || 20,
+    browse_default_sort:       _elv('formBrowseDefaultSort'),
+    browse_display_mode:       _radio('browseDisplayMode')
+  };
+
+  try {
+    const endpoint = id
+      ? 'api/crud.php?table=nu_forms&id=' + encodeURIComponent(id)
+      : 'api/crud.php?table=nu_forms';
+    const method = id ? 'PUT' : 'POST';
+    const json = await NuApp.apiJson(endpoint, {
+      method: method,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!json.success) { NuApp.toast(json.error || 'Save failed', 'error'); return; }
+
+    const formId = id || json.id;
+
+    if (formTable) {
+      try {
+        const setupRes = await fetch('api/form-setup.php', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ form_id: formId, form_code: formCode, form_table: formTable, fields: fields })
+        });
+        const setupJson = await setupRes.json();
+        if (!setupJson.success) NuApp.toast('Table setup: ' + setupJson.error, 'error');
+      } catch (setupErr) {
+        console.error('Table setup error', setupErr);
+      }
+    }
+
+    NuApp.toast('Form saved' + (formTable ? ' — table ' + formTable : ''));
+    const card = document.getElementById('formBuilderCard');
+    if (card) card.style.display = 'none';
+    NuApp.loadModule('forms');
+  } catch (err) {
+    NuApp.toast('Error: ' + err.message, 'error');
+  }
+};
+
+// Global window aliases
+window.openFormBuilder = function ()                         { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
+window.previewForm     = function (code, label)              { return NuApp.previewForm(code, label); };
+window.editForm        = function (id)                       { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
+window.addRecord       = function (code, label)              { return NuApp.addRecord(code, label); };
+window.editRecord      = function (code, id, label, mode)    { return NuApp.editRecord(code, id, label, mode); };
+window.browseForm      = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
+window.browseFormPage  = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
+window.deleteForm      = function (id, name) {
+  if (!confirm('Delete form ' + (name || '') + '?')) return;
+  NuApp.apiJson('api/crud.php?table=nu_forms&id=' + encodeURIComponent(id), {
+    method: 'DELETE', credentials: 'same-origin'
+  }).then(function (json) {
+    if (json.success) { NuApp.toast('Deleted'); NuApp.loadModule('forms'); }
+    else NuApp.toast(json.error || 'Failed', 'error');
+  }).catch(function (e) { NuApp.toast('Error: ' + e.message, 'error'); });
+};
