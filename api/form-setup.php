@@ -17,14 +17,16 @@ try {
     }
 
     $input = file_get_contents('php://input');
-    $data = json_decode($input, true);
+    $data  = json_decode($input, true);
     if (!$data) {
         throw new Exception('Invalid JSON input');
     }
 
-    $formId = $data['form_id'] ?? null;
+    $formId    = $data['form_id']    ?? null;
     $formTable = $data['form_table'] ?? '';
-    $fields = $data['fields'] ?? [];
+    $fields    = $data['fields']     ?? [];
+    $pkType    = $data['pk_type']    ?? 'autoincrement'; // 'autoincrement' | 'uuid'
+    $tableMode = $data['table_mode'] ?? 'new';           // 'new' | 'existing'
 
     if (!$formTable || !is_array($fields)) {
         echo json_encode(['success' => false, 'error' => 'Table name and fields required']);
@@ -33,9 +35,16 @@ try {
 
     $formTable = sanitizeIdentifier($formTable);
 
-    $db = NuDatabase::getInstance();
+    $db  = NuDatabase::getInstance();
     $pdo = $db->getPdo();
 
+    // ── If using an existing table, skip all DDL — just return success ──────
+    if ($tableMode === 'existing') {
+        echo json_encode(['success' => true, 'message' => 'Using existing table — no DDL changes made']);
+        exit;
+    }
+
+    // ── Build desired column list (excluding PK) ──────────────────────────
     $desiredCols = [];
     foreach ($fields as $f) {
         $name = sanitizeIdentifier($f['name'] ?? '');
@@ -45,18 +54,23 @@ try {
     }
 
     $existsStmt = $pdo->query("SHOW TABLES LIKE " . $pdo->quote($formTable));
-    $exists = $existsStmt && $existsStmt->rowCount() > 0;
+    $exists     = $existsStmt && $existsStmt->rowCount() > 0;
 
+    // ── CREATE TABLE ─────────────────────────────────────────────────────
     if (!$exists) {
-        $cols = ["`id` INT AUTO_INCREMENT PRIMARY KEY"];
+        // Choose PK column definition based on pk_type
+        if ($pkType === 'uuid') {
+            $pkCol = "`id` VARCHAR(36) NOT NULL DEFAULT '' PRIMARY KEY";
+        } else {
+            $pkCol = "`id` INT AUTO_INCREMENT PRIMARY KEY";
+        }
+
+        $cols = [$pkCol];
 
         foreach ($fields as $f) {
             $name = sanitizeIdentifier($f['name'] ?? '');
-            if (!$name || $name === 'id') {
-                continue;
-            }
-
-            $type = mapFieldType($f);
+            if (!$name || $name === 'id') continue;
+            $type   = mapFieldType($f);
             $cols[] = "`{$name}` {$type}";
         }
 
@@ -69,45 +83,39 @@ try {
         $sql = "CREATE TABLE `{$formTable}` (" . implode(', ', $cols) . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
         $pdo->exec($sql);
 
-        echo json_encode(['success' => true, 'message' => 'Table created']);
+        echo json_encode(['success' => true, 'message' => 'Table created', 'pk_type' => $pkType]);
         exit;
     }
 
-    $existingCols = [];
+    // ── SYNC existing table ───────────────────────────────────────────────
+    $existingCols    = [];
     $existingColMeta = [];
     $stmt = $pdo->query("SHOW COLUMNS FROM `{$formTable}`");
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $existingCols[] = $row['Field'];
+        $existingCols[]              = $row['Field'];
         $existingColMeta[$row['Field']] = $row;
     }
 
     $protected = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'deleted_at'];
 
+    // Build rename map from old layout
     $oldFields = [];
     if ($formId) {
         $stmt = $pdo->prepare("SELECT form_layout FROM nu_forms WHERE form_id = ?");
         $stmt->execute([$formId]);
         $oldLayoutJson = $stmt->fetchColumn();
-        $oldLayout = json_decode($oldLayoutJson ?: '[]', true);
-
-        if (is_array($oldLayout)) {
-            $oldFields = $oldLayout;
-        }
+        $oldLayout     = json_decode($oldLayoutJson ?: '[]', true);
+        if (is_array($oldLayout)) $oldFields = $oldLayout;
     }
 
     $renameMap = [];
-
     if (!empty($oldFields)) {
         $max = min(count($oldFields), count($fields));
-
         for ($i = 0; $i < $max; $i++) {
             $oldName = sanitizeIdentifier($oldFields[$i]['name'] ?? '');
-            $newName = sanitizeIdentifier($fields[$i]['name'] ?? '');
-
+            $newName = sanitizeIdentifier($fields[$i]['name']  ?? '');
             if (
-                $oldName &&
-                $newName &&
-                $oldName !== $newName &&
+                $oldName && $newName && $oldName !== $newName &&
                 !in_array($oldName, $protected, true) &&
                 !in_array($newName, $existingCols, true) &&
                 in_array($oldName, $existingCols, true)
@@ -122,36 +130,26 @@ try {
     }
 
     if (!empty($renameMap)) {
-        $existingCols = array_map(function ($col) use ($renameMap) {
-            return $renameMap[$col] ?? $col;
-        }, $existingCols);
+        $existingCols = array_map(fn($col) => $renameMap[$col] ?? $col, $existingCols);
     }
 
+    // Add missing columns
     foreach ($fields as $f) {
         $name = sanitizeIdentifier($f['name'] ?? '');
-        if (!$name || $name === 'id' || in_array($name, $existingCols, true)) {
-            continue;
-        }
-
+        if (!$name || $name === 'id' || in_array($name, $existingCols, true)) continue;
         $type = mapFieldType($f);
         $pdo->exec("ALTER TABLE `{$formTable}` ADD COLUMN `{$name}` {$type}");
     }
 
+    // Drop columns no longer in layout (never drop protected ones)
     foreach ($existingCols as $colName) {
-        if (in_array($colName, $protected, true)) {
-            continue;
-        }
-
+        if (in_array($colName, $protected, true)) continue;
         if (!in_array($colName, $desiredCols, true)) {
             $pdo->exec("ALTER TABLE `{$formTable}` DROP COLUMN `{$colName}`");
         }
     }
 
-    echo json_encode([
-        'success' => true,
-        'message' => 'Table synced',
-        'renamed' => $renameMap
-    ]);
+    echo json_encode(['success' => true, 'message' => 'Table synced', 'renamed' => $renameMap]);
 
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
@@ -161,40 +159,24 @@ try {
 
 function sanitizeIdentifier($name) {
     $name = trim((string)$name);
-    if ($name === '') {
-        return '';
-    }
-
+    if ($name === '') return '';
     return preg_replace('/[^a-zA-Z0-9_]/', '', $name);
 }
 
 function mapFieldType($field) {
     $type = $field['type'] ?? 'text';
-
     switch ($type) {
-        case 'number':
-            return 'DECIMAL(15,2)';
-        case 'date':
-            return 'DATE';
-        case 'datetime':
-            return 'DATETIME';
-        case 'textarea':
-        case 'html':
-        case 'subform':
-            return 'TEXT';
-        case 'checkbox':
-            return 'TINYINT(1) DEFAULT 0';
-        case 'file':
-        case 'image':
-            return 'VARCHAR(500)';
-        case 'lookup':
-            return 'INT';
-        case 'calculated':
-            return 'VARCHAR(255)';
-        case 'select':
-            return !empty($field['multiple']) ? 'TEXT' : 'VARCHAR(255)';
-        default:
-            return 'VARCHAR(255)';
+        case 'number':                          return 'DECIMAL(15,2)';
+        case 'date':                            return 'DATE';
+        case 'datetime':                        return 'DATETIME';
+        case 'textarea': case 'html':
+        case 'subform':                         return 'TEXT';
+        case 'checkbox':                        return 'TINYINT(1) DEFAULT 0';
+        case 'file': case 'image':              return 'VARCHAR(500)';
+        case 'lookup':                          return 'INT';
+        case 'calculated':                      return 'VARCHAR(255)';
+        case 'select': return !empty($field['multiple']) ? 'TEXT' : 'VARCHAR(255)';
+        default:                                return 'VARCHAR(255)';
     }
 }
 ?>

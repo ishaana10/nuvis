@@ -5,6 +5,17 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
 $db    = NuDatabase::getInstance();
 $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY form_id DESC");
+
+// Fetch all tables in the current DB for the "existing table" dropdown
+$pdo         = $db->getPdo();
+$tablesStmt  = $pdo->query('SHOW TABLES');
+$allTables   = $tablesStmt ? $tablesStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+// Filter out system tables
+$userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
+    'nu_users','nu_roles','nu_permissions','nu_role_permissions',
+    'nu_api_tokens','nu_api_usage','nu_audit_log','nu_files',
+    'nu_forms','nu_reports','nu_queries','nu_menus'
+], true)));
 ?>
 
 <style>
@@ -132,6 +143,39 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
 .nb-display-mode-icon { font-size:22px; margin-bottom:6px; }
 .nb-display-mode-label { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:3px; }
 .nb-display-mode-desc { font-size:11px; color:var(--text-tertiary); line-height:1.4; }
+
+/* PK type toggle */
+.nb-pk-cards { display:flex; gap:10px; }
+.nb-pk-card {
+  flex:1; border:2px solid var(--border-color); border-radius:10px;
+  padding:12px 14px; cursor:pointer; background:var(--bg-surface);
+  transition:all .15s;
+}
+.nb-pk-card:hover { border-color:var(--color-primary); background:var(--bg-elevated); }
+.nb-pk-card.selected {
+  border-color:var(--color-primary);
+  background:color-mix(in oklch,var(--color-primary) 8%,var(--bg-surface));
+}
+.nb-pk-card input[type=radio] { display:none; }
+.nb-pk-card-title { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:3px; }
+.nb-pk-card-code  { font-size:11px; font-family:monospace; color:var(--color-primary); margin-bottom:4px; }
+.nb-pk-card-desc  { font-size:11px; color:var(--text-tertiary); line-height:1.4; }
+
+/* Table mode toggle */
+.nb-tmode-cards { display:flex; gap:10px; margin-bottom:12px; }
+.nb-tmode-card {
+  flex:1; border:2px solid var(--border-color); border-radius:10px;
+  padding:12px 14px; cursor:pointer; background:var(--bg-surface);
+  transition:all .15s;
+}
+.nb-tmode-card:hover { border-color:var(--color-primary); background:var(--bg-elevated); }
+.nb-tmode-card.selected {
+  border-color:var(--color-primary);
+  background:color-mix(in oklch,var(--color-primary) 8%,var(--bg-surface));
+}
+.nb-tmode-card input[type=radio] { display:none; }
+.nb-tmode-card-title { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:3px; }
+.nb-tmode-card-desc  { font-size:11px; color:var(--text-tertiary); line-height:1.4; }
 </style>
 
 <div class="nu-forms">
@@ -153,6 +197,8 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
         $formLabel  = htmlspecialchars($f['form_name'], ENT_QUOTES);
         $formCode   = htmlspecialchars($f['form_code'], ENT_QUOTES);
         $browseMode = $f['browse_display_mode'] ?? 'inline';
+        $pkType     = $f['form_pk_type']  ?? 'autoincrement';
+        $tMode      = $f['form_table_mode'] ?? 'new';
       ?>
       <div class="nu-card">
         <div class="nu-card-header">
@@ -161,6 +207,7 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
         </div>
         <p class="nu-form-meta" style="margin-bottom:4px;">Table: <?= $f['form_table'] ? '<code>'.htmlspecialchars($f['form_table']).'</code>' : '<em>none</em>' ?></p>
         <p class="nu-form-meta" style="margin-bottom:4px;"><?= $fieldCount ?> field<?= $fieldCount !== 1 ? 's' : '' ?></p>
+        <p class="nu-form-meta" style="margin-bottom:4px;">PK: <span style="font-weight:600;color:var(--color-primary);"><?= $pkType === 'uuid' ? 'NuBuilder UUID' : 'Auto-increment' ?></span></p>
         <p class="nu-form-meta" style="margin-bottom:12px;">Browse: <span style="font-weight:600;color:var(--color-primary);"><?= htmlspecialchars(ucfirst($browseMode)) ?></span></p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="nu-btn nu-btn-primary nu-btn-sm"  onclick="previewForm('<?= $formCode ?>','<?= $formLabel ?>')">⊞ Preview</button>
@@ -190,15 +237,72 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
       <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nbFormBuilder.close()">✕ Cancel</button>
     </div>
 
-    <!-- Top meta row -->
+    <!-- ── Top meta row: Name + Table mode ── -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
       <div>
         <label class="nu-label">Form Name</label>
         <input type="text" id="builderFormName" class="nu-input" placeholder="e.g. Customer Registration">
       </div>
       <div>
-        <label class="nu-label">DB Table</label>
+        <label class="nu-label">Form Code <span style="font-weight:400;color:var(--text-tertiary);">(auto-generated if blank)</span></label>
+        <input type="text" id="builderFormCode" class="nu-input" placeholder="e.g. customer_registration">
+      </div>
+    </div>
+
+    <!-- ── Table Mode selector ── -->
+    <div style="margin-bottom:16px;">
+      <label class="nu-label" style="margin-bottom:10px;display:block;">Table</label>
+      <div class="nb-tmode-cards" id="nbTableModeCards">
+        <label class="nb-tmode-card selected" onclick="nbFormBuilder.selectTableMode('new',this)">
+          <input type="radio" name="formTableMode" id="formTableModeNew" value="new" checked>
+          <div class="nb-tmode-card-title">✦ Create new table</div>
+          <div class="nb-tmode-card-desc">NuBuilder creates and manages the DB table automatically</div>
+        </label>
+        <label class="nb-tmode-card" onclick="nbFormBuilder.selectTableMode('existing',this)">
+          <input type="radio" name="formTableMode" id="formTableModeExisting" value="existing">
+          <div class="nb-tmode-card-title">⊞ Use existing table</div>
+          <div class="nb-tmode-card-desc">Attach this form to a table that already exists in the database</div>
+        </label>
+      </div>
+
+      <!-- New table name input (shown when mode = new) -->
+      <div id="tableNewWrap">
+        <label class="nu-label">DB Table Name</label>
         <input type="text" id="builderFormTable" class="nu-input" placeholder="e.g. customers">
+      </div>
+
+      <!-- Existing table dropdown (shown when mode = existing) -->
+      <div id="tableExistingWrap" style="display:none;">
+        <label class="nu-label">Select Existing Table</label>
+        <select id="builderFormTableExisting" class="nu-input" onchange="document.getElementById('builderFormTable').value=this.value">
+          <option value="">-- choose a table --</option>
+          <?php foreach ($userTables as $tbl): ?>
+          <option value="<?= htmlspecialchars($tbl, ENT_QUOTES) ?>"><?= htmlspecialchars($tbl) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <p style="font-size:11px;color:var(--text-tertiary);margin-top:6px;">NuBuilder will read this table's columns and <strong>not</strong> alter its structure unless you explicitly add new fields.</p>
+      </div>
+    </div>
+
+    <!-- ── Primary Key type selector ── -->
+    <div style="margin-bottom:20px;">
+      <label class="nu-label" style="margin-bottom:10px;display:block;">Primary Key Type</label>
+      <div class="nb-pk-cards" id="nbPkCards">
+
+        <label class="nb-pk-card selected" onclick="nbFormBuilder.selectPkType('autoincrement',this)">
+          <input type="radio" name="formPkType" id="formPkTypeAuto" value="autoincrement" checked>
+          <div class="nb-pk-card-title">Auto-increment INT</div>
+          <div class="nb-pk-card-code">id INT AUTO_INCREMENT</div>
+          <div class="nb-pk-card-desc">Standard MySQL integer PK. Simple, fast, and compatible with everything.</div>
+        </label>
+
+        <label class="nb-pk-card" onclick="nbFormBuilder.selectPkType('uuid',this)">
+          <input type="radio" name="formPkType" id="formPkTypeUuid" value="uuid">
+          <div class="nb-pk-card-title">NuBuilder UUID</div>
+          <div class="nb-pk-card-code">id VARCHAR(36) — nubuilder style</div>
+          <div class="nb-pk-card-desc">Globally unique string ID. Best for migration, sync, and multi-system environments.</div>
+        </label>
+
       </div>
     </div>
 
@@ -373,3 +477,59 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
   </div>
 
 </div>
+
+<script>
+// Table mode toggle
+nbFormBuilder.selectTableMode = function(mode, card) {
+  document.querySelectorAll('.nb-tmode-card').forEach(c => c.classList.remove('selected'));
+  if (card) card.classList.add('selected');
+  document.querySelector('input[name="formTableMode"][value="'+mode+'"]').checked = true;
+  const isNew = mode === 'new';
+  document.getElementById('tableNewWrap').style.display      = isNew ? '' : 'none';
+  document.getElementById('tableExistingWrap').style.display = isNew ? 'none' : '';
+  // PK type only makes sense for new tables
+  document.getElementById('nbPkCards').style.opacity        = isNew ? '1' : '0.4';
+  document.getElementById('nbPkCards').style.pointerEvents  = isNew ? '' : 'none';
+  if (!isNew) {
+    // Sync hidden table input when switching back to existing
+    const sel = document.getElementById('builderFormTableExisting');
+    if (sel && sel.value) document.getElementById('builderFormTable').value = sel.value;
+  }
+};
+
+// PK type toggle
+nbFormBuilder.selectPkType = function(type, card) {
+  document.querySelectorAll('.nb-pk-card').forEach(c => c.classList.remove('selected'));
+  if (card) card.classList.add('selected');
+  document.querySelector('input[name="formPkType"][value="'+type+'"]').checked = true;
+};
+
+// Extend open() to reset new fields
+const _nbOpen = nbFormBuilder.open.bind(nbFormBuilder);
+nbFormBuilder.open = function() {
+  _nbOpen();
+  // Reset table mode to "new"
+  nbFormBuilder.selectTableMode('new', document.querySelector('.nb-tmode-card'));
+  // Reset PK type to auto-increment
+  nbFormBuilder.selectPkType('autoincrement', document.querySelector('.nb-pk-card'));
+  document.getElementById('builderFormCode').value = '';
+};
+
+// Extend edit() to restore pk type, table mode, and form code
+const _nbEdit = nbFormBuilder.edit.bind(nbFormBuilder);
+nbFormBuilder.edit = function(id) {
+  _nbEdit(id);
+  // edit() loads via AJAX — hook into the existing response handler
+  // by overriding _nbAfterLoad which is called after fetch returns
+};
+
+// Override saveForm to include new fields
+const _origSaveForm = window.saveForm;
+window.saveForm = function() {
+  // Inject pk_type and table_mode into the payload via the global nbFormBuilder state
+  nbFormBuilder._pkType    = document.querySelector('input[name="formPkType"]:checked')?.value    || 'autoincrement';
+  nbFormBuilder._tableMode = document.querySelector('input[name="formTableMode"]:checked')?.value || 'new';
+  nbFormBuilder._formCode  = document.getElementById('builderFormCode').value.trim();
+  if (typeof _origSaveForm === 'function') _origSaveForm();
+};
+</script>

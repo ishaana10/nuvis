@@ -1,8 +1,8 @@
 -- nuBuilder Next - Database Schema Installer
 -- Compatible with MySQL 5.7+ / MariaDB 10.3+
--- Last updated: 2026-06-01 — includes all browse, builder, and display-mode columns
+-- Last updated: 2026-06-01 — includes all browse, builder, pk_type, table_mode columns
 
--- ─── USERS ───────────────────────────────────────────────────────────────────
+-- ─── USERS ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_users (
     usr_id INT AUTO_INCREMENT PRIMARY KEY,
     usr_username VARCHAR(50) NOT NULL UNIQUE,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS nu_users (
     usr_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ─── ROLES ───────────────────────────────────────────────────────────────────
+-- ─── ROLES ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_roles (
     role_id INT AUTO_INCREMENT PRIMARY KEY,
     role_code VARCHAR(30) NOT NULL UNIQUE,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS nu_roles (
     role_created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ─── PERMISSIONS ─────────────────────────────────────────────────────────────
+-- ─── PERMISSIONS ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_permissions (
     perm_id INT AUTO_INCREMENT PRIMARY KEY,
     perm_code VARCHAR(50) NOT NULL UNIQUE,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS nu_permissions (
     perm_description TEXT
 ) ENGINE=InnoDB;
 
--- ─── ROLE-PERMISSION MAPPING ──────────────────────────────────────────────────
+-- ─── ROLE-PERMISSION MAPPING ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_role_permissions (
     rp_id INT AUTO_INCREMENT PRIMARY KEY,
     rp_role_id INT NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS nu_role_permissions (
     FOREIGN KEY (rp_perm_id) REFERENCES nu_permissions(perm_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- ─── API TOKENS ───────────────────────────────────────────────────────────────
+-- ─── API TOKENS ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_api_tokens (
     token_id INT AUTO_INCREMENT PRIMARY KEY,
     token_key VARCHAR(64) NOT NULL UNIQUE,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS nu_api_tokens (
     FOREIGN KEY (token_user_id) REFERENCES nu_users(usr_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- ─── API USAGE (rate limiting) ────────────────────────────────────────────────
+-- ─── API USAGE (rate limiting) ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_api_usage (
     usage_id INT AUTO_INCREMENT PRIMARY KEY,
     usage_user_id INT NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS nu_api_usage (
     UNIQUE KEY unique_user_hour (usage_user_id, usage_hour)
 ) ENGINE=InnoDB;
 
--- ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+-- ─── AUDIT LOG ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_audit_log (
     audit_id INT AUTO_INCREMENT PRIMARY KEY,
     audit_action VARCHAR(30) NOT NULL,
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS nu_audit_log (
     INDEX idx_timestamp (audit_timestamp)
 ) ENGINE=InnoDB;
 
--- ─── FILE UPLOADS ─────────────────────────────────────────────────────────────
+-- ─── FILE UPLOADS ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_files (
     file_id INT AUTO_INCREMENT PRIMARY KEY,
     file_name VARCHAR(255) NOT NULL,
@@ -103,8 +103,8 @@ CREATE TABLE IF NOT EXISTS nu_files (
     INDEX idx_table_record (file_table, file_record_id)
 ) ENGINE=InnoDB;
 
--- ─── FORMS (metadata-driven builder) ─────────────────────────────────────────
--- Includes all browse, builder, JS/PHP hooks, and display-mode columns
+-- ─── FORMS (metadata-driven builder) ────────────────────────────────────────
+-- Includes all browse, builder, JS/PHP hooks, PK type, and table mode columns
 CREATE TABLE IF NOT EXISTS nu_forms (
     form_id          INT AUTO_INCREMENT PRIMARY KEY,
     form_code        VARCHAR(50)  NOT NULL UNIQUE,
@@ -114,6 +114,10 @@ CREATE TABLE IF NOT EXISTS nu_forms (
     form_layout      JSON,
     form_settings    JSON,
     form_active      TINYINT(1)   DEFAULT 1,
+
+    -- Table creation options
+    form_pk_type     VARCHAR(20)  DEFAULT 'autoincrement', -- 'autoincrement' | 'uuid'
+    form_table_mode  VARCHAR(20)  DEFAULT 'new',           -- 'new' | 'existing'
 
     -- JS / PHP hooks
     form_custom_js      TEXT,
@@ -137,7 +141,7 @@ CREATE TABLE IF NOT EXISTS nu_forms (
     form_updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ─── REPORTS ──────────────────────────────────────────────────────────────────
+-- ─── REPORTS ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_reports (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
     report_code VARCHAR(50) NOT NULL UNIQUE,
@@ -153,7 +157,7 @@ CREATE TABLE IF NOT EXISTS nu_reports (
     report_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ─── QUERIES ──────────────────────────────────────────────────────────────────
+-- ─── QUERIES ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_queries (
     query_id INT AUTO_INCREMENT PRIMARY KEY,
     query_code VARCHAR(50) NOT NULL UNIQUE,
@@ -167,7 +171,7 @@ CREATE TABLE IF NOT EXISTS nu_queries (
     query_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ─── MENU BUILDER ─────────────────────────────────────────────────────────────
+-- ─── MENU BUILDER ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_menus (
     menu_id INT AUTO_INCREMENT PRIMARY KEY,
     menu_parent_id INT DEFAULT 0,
@@ -182,7 +186,7 @@ CREATE TABLE IF NOT EXISTS nu_menus (
     menu_created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ─── SEED DATA ────────────────────────────────────────────────────────────────
+-- ─── SEED DATA ───────────────────────────────────────────────────────────────
 INSERT INTO nu_roles (role_code, role_name, role_description) VALUES
 ('globeadmin', 'Global Admin', 'Full system access'),
 ('admin', 'Admin', 'Administrative access'),
@@ -231,11 +235,10 @@ INSERT INTO nu_menus (menu_parent_id, menu_code, menu_label, menu_type, menu_tar
 (0, 'audit',     'Audit Trail','form', 'audit',     'clipboard', 12),
 (0, 'files',     'Files',      'form', 'files',     'paperclip', 13);
 
--- ─── MIGRATION: run this block on EXISTING installs to add missing columns ────
--- Safe to run even if columns already exist (uses IF NOT EXISTS style via PROCEDURE)
--- Or just run the ALTER TABLE statements below manually in phpMyAdmin.
---
--- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS form_custom_js      TEXT          AFTER form_active;
+-- ─── MIGRATION: run on EXISTING installs ─────────────────────────────────────
+-- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS form_pk_type     VARCHAR(20) DEFAULT 'autoincrement' AFTER form_active;
+-- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS form_table_mode  VARCHAR(20) DEFAULT 'new'           AFTER form_pk_type;
+-- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS form_custom_js      TEXT          AFTER form_table_mode;
 -- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS form_js_before_save TEXT          AFTER form_custom_js;
 -- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS form_js_after_save  TEXT          AFTER form_js_before_save;
 -- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS form_custom_php     TEXT          AFTER form_js_after_save;
