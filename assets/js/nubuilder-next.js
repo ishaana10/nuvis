@@ -914,7 +914,7 @@ window.saveForm = async function () {
 window.nbFormBuilder = (function () {
 
   function _esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
-  function _val(obj, k, def) { return (obj && obj[k] !== undefined) ? obj[k] : (def || ''); }
+  function _val(obj, k, def) { return (obj && obj[k] !== undefined && obj[k] !== null) ? obj[k] : (def !== undefined ? def : ''); }
   function _chk(obj, k) { return (obj && obj[k]) ? 'checked' : ''; }
   function _el(id) { return document.getElementById(id); }
 
@@ -943,8 +943,8 @@ window.nbFormBuilder = (function () {
       }).join('') + '</select>';
 
     var html = '<div class="nb-fp-grid">' +
-      _row('Label', '<input type="text" class="nu-input nu-builder-label" value="' + _esc(_val(extra, 'label')) + '" placeholder="Field label">') +
-      _row('Field Name (DB column)', '<input type="text" class="nu-input nu-builder-name" value="' + _esc(_val(extra, 'name')) + '" placeholder="field_name">') +
+      _row('Label', '<input type="text" class="nu-input nu-builder-label" value="' + _esc(_val(extra, 'label', _val(extra, 'fieldlabel', ''))) + '" placeholder="Field label">') +
+      _row('Field Name (DB column)', '<input type="text" class="nu-input nu-builder-name" value="' + _esc(_val(extra, 'name', _val(extra, 'fieldname', ''))) + '" placeholder="field_name">') +
       _row('Width', widthSel) +
       _row('Default Value',   _inp('nu-field-default',     extra, 'default_value',  'default value')) +
       _row('Placeholder',     _inp('nu-field-placeholder', extra, 'placeholder',    'hint text')) +
@@ -1037,6 +1037,8 @@ window.nbFormBuilder = (function () {
   // ─── FIELD CARD HTML ──────────────────────────────────────────────────────
   function _fieldCard(type, extra) {
     extra = extra || {};
+    // Ensure type is always a plain string, never an object
+    type = String(type || 'text');
     var icons = {
       text:'T', textarea:'¶', number:'#', email:'@', phone:'☏', date:'📅',
       select:'▾', radio:'◉', checkbox:'☑', checkbox_group:'☑☑',
@@ -1044,8 +1046,9 @@ window.nbFormBuilder = (function () {
       fieldset:'▭', html:'<>', button:'⬛', range:'⇔', hidden:'👁', password:'🔒',
     };
     var icon  = icons[type] || 'F';
-    var label = _val(extra, 'label', type.charAt(0).toUpperCase() + type.slice(1));
-    var name  = _val(extra, 'name',  '');
+    // Prefer label/fieldlabel from extra, fall back to capitalised type
+    var label = _val(extra, 'label', _val(extra, 'fieldlabel', type.charAt(0).toUpperCase() + type.slice(1)));
+    var name  = _val(extra, 'name',  _val(extra, 'fieldname', ''));
     return '<div class="nb-cfield" data-type="' + _esc(type) + '" draggable="true">' +
       '<div class="nb-cf-header">' +
         '<span class="nb-cf-icon">' + icon + '</span>' +
@@ -1109,10 +1112,13 @@ window.nbFormBuilder = (function () {
       }
     },
 
-    addField: function (type) {
+    // FIX: accept optional extra data so canvas rebuild restores saved field values
+    addField: function (type, extra) {
       var canvas = _el('formCanvas');
       if (!canvas) return;
-      canvas.insertAdjacentHTML('beforeend', _fieldCard(type, {}));
+      // Always coerce type to a plain string to prevent [object Object] rendering
+      var safeType = String(type || 'text');
+      canvas.insertAdjacentHTML('beforeend', _fieldCard(safeType, extra || {}));
       _canvasEmpty();
       var cards = canvas.querySelectorAll('.nb-cfield');
       var last  = cards[cards.length - 1];
@@ -1160,106 +1166,4 @@ window.nbFormBuilder = (function () {
       if (card) card.classList.add('selected');
     },
 
-    // ─── EDIT existing form — populate builder UI ────────────────────────────
-    edit: function (form) {
-      // basic fields
-      if (_el('editFormId'))       _el('editFormId').value       = form.form_id   || '';
-      if (_el('builderFormName'))  _el('builderFormName').value  = form.form_name || '';
-      if (_el('builderFormCode'))  _el('builderFormCode').value  = form.form_code || '';
-
-      // restore form_type radio
-      var formType = form.form_type || 'main';
-      var ftRadio  = document.querySelector('input[name="formType"][value="' + formType + '"]');
-      if (ftRadio) ftRadio.checked = true;
-
-      // restore table mode
-      var tableMode  = form.form_table_mode || 'new';
-      var tmRadio    = document.querySelector('input[name="formTableMode"][value="' + tableMode + '"]');
-      var tmCard     = tmRadio ? tmRadio.closest('.nb-tmode-card') : null;
-      if (tmRadio) tmRadio.checked = true;
-      this.selectTableMode(tableMode, tmCard);
-
-      if (tableMode === 'existing') {
-        var existSel = _el('builderFormTableExisting');
-        if (existSel) existSel.value = form.form_table || '';
-      } else {
-        if (_el('builderFormTable')) _el('builderFormTable').value = form.form_table || '';
-      }
-
-      // restore pk_type
-      var pkType  = form.form_pk_type || 'autoincrement';
-      var pkRadio = document.querySelector('input[name="formPkType"][value="' + pkType + '"]');
-      var pkCard  = pkRadio ? pkRadio.closest('.nb-pk-card') : null;
-      if (pkRadio) pkRadio.checked = true;
-      this.selectPkType(pkType, pkCard);
-
-      // browse settings
-      if (_el('formBrowseSql'))               _el('formBrowseSql').value               = form.browse_sql                || '';
-      if (_el('formBrowseColumns'))           _el('formBrowseColumns').value           = form.browse_columns            || '';
-      if (_el('formBrowseSearchEnabled'))     _el('formBrowseSearchEnabled').checked   = String(form.browse_search_enabled) === '1';
-      if (_el('formBrowseSearchPlaceholder')) _el('formBrowseSearchPlaceholder').value = form.browse_search_placeholder || '';
-      if (_el('formBrowseSearchFields'))      _el('formBrowseSearchFields').value      = form.browse_search_fields      || '';
-      if (_el('formBrowsePageSize'))          _el('formBrowsePageSize').value          = form.browse_page_size          || 20;
-      if (_el('formBrowseDefaultSort'))       _el('formBrowseDefaultSort').value       = form.browse_default_sort       || '';
-
-      // restore browse display mode radio
-      var bdm      = form.browse_display_mode || 'inline';
-      var bdmRadio = document.querySelector('input[name="browseDisplayMode"][value="' + bdm + '"]');
-      if (bdmRadio) bdmRadio.checked = true;
-
-      // advanced
-      if (_el('formCustomJs'))      _el('formCustomJs').value      = form.form_custom_js      || '';
-      if (_el('formJsBeforeSave'))  _el('formJsBeforeSave').value  = form.form_js_before_save || '';
-      if (_el('formJsAfterSave'))   _el('formJsAfterSave').value   = form.form_js_after_save  || '';
-      if (_el('formCustomPhp'))     _el('formCustomPhp').value     = form.form_custom_php     || '';
-      if (_el('formCustomCss'))     _el('formCustomCss').value     = form.form_custom_css     || '';
-
-      // rebuild canvas fields
-      var canvas = _el('formCanvas');
-      if (!canvas) return;
-      canvas.innerHTML = '';
-      var layout = [];
-      try { layout = JSON.parse(form.form_layout || '[]'); } catch (e) { layout = []; }
-      layout.forEach(function (f) {
-        var type  = f.fieldtype || f.type || 'text';
-        var extra = {
-          label:           f.fieldlabel       || f.label           || '',
-          name:            f.fieldname        || f.name            || '',
-          width:           f.width                                 || '100%',
-          required:        !!f.required,
-          default_value:   f.default_value                         || '',
-          placeholder:     f.placeholder                           || '',
-          help_text:       f.help_text                             || '',
-          css_class:       f.css_class                             || '',
-          tab:             f.tab                                   || '',
-          section:         f.section                               || '',
-          visibility_rule: f.visibility_rule                       || '',
-          readonly_rule:   f.readonly_rule                         || '',
-          js_onchange:     f.js_onchange                           || '',
-          rows:            f.rows                                  || 3,
-          min:             f.min                                   || '',
-          max:             f.max                                   || '',
-          step:            f.step                                  || '',
-          accept:          f.accept                                || '',
-          multiple_upload: !!f.multiple_upload,
-          legend:          f.legend                                || '',
-          select2:         !!f.select2,
-          multiple:        !!f.multiple,
-          html_content:    f.html_content                          || '',
-          button_action:   f.button_action                         || '',
-          calculated:      f.calculated                            || '',
-          source_type:     f.source_type      || f.sourcetype      || 'static',
-          sourcetype:      f.source_type      || f.sourcetype      || 'static',
-          options:         f.options                               || [],
-          sql_source:      f.sql_source       || f.sqlsource       || '',
-          sqlsource:       f.sql_source       || f.sqlsource       || '',
-          lookup:          f.lookup                                || null,
-          subform:         f.subform                               || null,
-        };
-        canvas.insertAdjacentHTML('beforeend', _fieldCard(type, extra));
-      });
-      _canvasEmpty();
-    },
-  };
-
-})();
+    // ─── EDIT existing form — populate builder UI ─────
