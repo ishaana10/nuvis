@@ -729,7 +729,7 @@ window.submitNuForm = async function (formElement) {
   }
 };
 
-// nbFormBuilder
+// ─── nbFormBuilder ────────────────────────────────────────────────────────────
 window.nbFormBuilder = (function () {
 
   function _esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -737,11 +737,13 @@ window.nbFormBuilder = (function () {
   function _chk(obj, k) { return (obj && obj[k]) ? 'checked' : ''; }
   function _el(id) { return document.getElementById(id); }
 
+  // ── canvas-empty indicator ──────────────────────────────────────────────────
   function _canvasEmpty() {
     var canvas = _el('formCanvas');
     var empty  = _el('canvasEmpty');
     if (!canvas || !empty) return;
-    empty.style.display = canvas.querySelectorAll('.nb-cfield').length ? 'none' : 'block';
+    var hasItems = canvas.querySelectorAll('.nb-cfield, .nb-section, .nb-group').length > 0;
+    empty.style.display = hasItems ? 'none' : 'block';
   }
 
   function _inp(cls, obj, k, ph, def) {
@@ -754,23 +756,37 @@ window.nbFormBuilder = (function () {
     return '<label class="nb-fp-check"><input type="checkbox" class="' + cls + '" ' + _chk(obj, k) + '> ' + lbl + '</label>';
   }
 
+  // ── col-span selector (12-col grid) ────────────────────────────────────────
+  function _colSelect(currentCol) {
+    var cols = [
+      { v: 3,  l: '3/12 — Quarter' },
+      { v: 4,  l: '4/12 — Third' },
+      { v: 6,  l: '6/12 — Half' },
+      { v: 8,  l: '8/12 — Two-thirds' },
+      { v: 9,  l: '9/12 — Three-quarters' },
+      { v: 12, l: '12/12 — Full width' }
+    ];
+    var cur = parseInt(currentCol, 10) || 12;
+    return '<select class="nu-input nu-field-col">' +
+      cols.map(function (c) {
+        return '<option value="' + c.v + '"' + (c.v === cur ? ' selected' : '') + '>' + c.l + '</option>';
+      }).join('') +
+      '</select>';
+  }
+
+  // ── field panel ─────────────────────────────────────────────────────────────
   function _fieldPanel(type, extra) {
     extra = extra || {};
-    var widthSel = '<select class="nu-input nu-field-width">' +
-      ['25%', '33%', '50%', '66%', '75%', '100%'].map(function (w) {
-        return '<option' + (_val(extra, 'width', '100%') === w ? ' selected' : '') + '>' + w + '</option>';
-      }).join('') + '</select>';
 
     var html = '<div class="nb-fp-grid">' +
       _row('Label', '<input type="text" class="nu-input nu-builder-label" value="' + _esc(_val(extra, 'label')) + '" placeholder="Field label">') +
       _row('Field Name (DB column)', '<input type="text" class="nu-input nu-builder-name" value="' + _esc(_val(extra, 'name')) + '" placeholder="field_name">') +
-      _row('Width', widthSel) +
+      _row('Column Width', _colSelect(_val(extra, 'col', 12))) +
       _row('Default Value',   _inp('nu-field-default',     extra, 'default_value',  'default value')) +
       _row('Placeholder',     _inp('nu-field-placeholder', extra, 'placeholder',    'hint text')) +
       _row('Help Text',       _inp('nu-field-help',        extra, 'help_text',      'shown under field')) +
       _row('CSS Class',       _inp('nu-field-cssclass',    extra, 'css_class',      'my-custom-class')) +
       _row('Tab',             _inp('nu-field-tab',         extra, 'tab',            'tab name')) +
-      _row('Section',         _inp('nu-field-section',     extra, 'section',        'section heading')) +
       _row('Visibility Rule', _inp('nu-field-vis',         extra, 'visibility_rule','JS expression')) +
       _row('Readonly Rule',   _inp('nu-field-readonly',    extra, 'readonly_rule',  'JS expression')) +
       _row('JS On Change',    _inp('nu-field-onchange',    extra, 'js_onchange',    'JS code snippet')) +
@@ -850,8 +866,9 @@ window.nbFormBuilder = (function () {
     return html;
   }
 
-  var _dragTool  = null;
-  var _dragField = null;
+  var _dragTool      = null;
+  var _dragField     = null;
+  var _dragContainer = null;
 
   function _initToolbox() {
     document.querySelectorAll('#panelFields .nb-tool').forEach(function (tool) {
@@ -867,53 +884,110 @@ window.nbFormBuilder = (function () {
     });
   }
 
-  function _initCanvasDrop() {
-    var canvas = _el('formCanvas');
-    if (!canvas) return;
-    canvas.addEventListener('dragover', function (e) { e.preventDefault(); canvas.classList.add('drag-over'); });
-    canvas.addEventListener('dragleave', function () { canvas.classList.remove('drag-over'); });
-    canvas.addEventListener('drop', function (e) {
-      e.preventDefault();
-      canvas.classList.remove('drag-over');
-      if (_dragTool) { _addField(_dragTool); _dragTool = null; }
+  // ── make a drop-zone accept fields from toolbox ─────────────────────────────
+  function _bindDropZone(zone) {
+    zone.addEventListener('dragover', function (e) { e.preventDefault(); e.stopPropagation(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function (e) { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      zone.classList.remove('drag-over');
+      if (_dragTool) { _addFieldTo(zone, _dragTool); _dragTool = null; }
+      else if (_dragField && !zone.contains(_dragField)) { zone.appendChild(_dragField); _dragField = null; }
+      _canvasEmpty();
     });
   }
 
+  function _initCanvasDrop() {
+    var canvas = _el('formCanvas');
+    if (!canvas) return;
+    _bindDropZone(canvas);
+    _injectCanvasToolbar(canvas);
+  }
+
+  // ── canvas toolbar: + Row | + Section | + Group ─────────────────────────────
+  function _injectCanvasToolbar(canvas) {
+    var existing = canvas.parentNode.querySelector('.nb-canvas-toolbar');
+    if (existing) existing.remove();
+    var bar = document.createElement('div');
+    bar.className = 'nb-canvas-toolbar';
+    bar.style.cssText =
+      'display:flex;gap:8px;padding:8px 0 4px;margin-bottom:6px;border-bottom:1px dashed var(--border-color,#ddd);';
+    var btns = [
+      { label: '⊞ + Row',     fn: function () { _addRow(canvas); } },
+      { label: '▦ + Section', fn: function () { _addSection(canvas); } },
+      { label: '⊟ + Group',   fn: function () { _addGroup(canvas); } }
+    ];
+    btns.forEach(function (b) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = b.label;
+      btn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+      btn.addEventListener('click', b.fn);
+      bar.appendChild(btn);
+    });
+    canvas.parentNode.insertBefore(bar, canvas);
+  }
+
+  // ── make a field card draggable within its parent container ─────────────────
   function _makeDraggable(el) {
     el.setAttribute('draggable', 'true');
     el.addEventListener('dragstart', function (e) {
       _dragField = el; el.classList.add('drag-source'); e.dataTransfer.effectAllowed = 'move';
+      e.stopPropagation();
     });
     el.addEventListener('dragend', function () {
       el.classList.remove('drag-source');
-      document.querySelectorAll('.nb-cfield').forEach(function (f) { f.style.outline = ''; });
       _dragField = null;
     });
     el.addEventListener('dragover', function (e) {
       if (!_dragField || _dragField === el) return;
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       var r = el.getBoundingClientRect();
-      var canvas = _el('formCanvas');
-      if (e.clientY > r.top + r.height / 2) canvas.insertBefore(_dragField, el.nextSibling);
-      else canvas.insertBefore(_dragField, el);
+      var parent = el.parentNode;
+      if (e.clientY > r.top + r.height / 2) parent.insertBefore(_dragField, el.nextSibling);
+      else parent.insertBefore(_dragField, el);
     });
   }
 
-  function _addField(type, label, name, required, extraData) {
+  // ── make a container (row/section/group) card draggable ─────────────────────
+  function _makeContainerDraggable(el) {
+    var handle = el.querySelector('.nb-container-drag');
+    if (!handle) return;
+    el.setAttribute('draggable', 'true');
+    handle.addEventListener('mousedown', function () { el.setAttribute('draggable', 'true'); });
+    el.addEventListener('dragstart', function (e) {
+      _dragContainer = el; el.classList.add('drag-source'); e.dataTransfer.effectAllowed = 'move';
+    });
+    el.addEventListener('dragend', function () {
+      el.classList.remove('drag-source');
+      _dragContainer = null;
+    });
+    el.addEventListener('dragover', function (e) {
+      if (!_dragContainer || _dragContainer === el) return;
+      e.preventDefault(); e.stopPropagation();
+      var r = el.getBoundingClientRect();
+      var parent = el.parentNode;
+      if (e.clientY > r.top + r.height / 2) parent.insertBefore(_dragContainer, el.nextSibling);
+      else parent.insertBefore(_dragContainer, el);
+    });
+  }
+
+  // ── add a field directly into a specific drop zone ─────────────────────────
+  function _addFieldTo(zone, type, extra) {
     var canvas = _el('formCanvas');
-    if (!canvas) return;
-    var extra = extraData || {};
-    // if label is not a string (e.g. old bug passing full object), discard it
-    if (typeof label !== 'string') label = '';
-    if (!label) label = type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ') + ' Field';
-    if (!name)  name  = type + '_' + Date.now();
+    extra = extra || {};
+    var label = (typeof extra.label === 'string' && extra.label) ||
+      (type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ') + ' Field');
+    var name = extra.name || (type + '_' + Date.now());
     extra.label    = extra.label    !== undefined ? extra.label    : label;
     extra.name     = extra.name     !== undefined ? extra.name     : name;
-    extra.required = extra.required !== undefined ? extra.required : (required || false);
+    extra.required = extra.required !== undefined ? extra.required : false;
 
+    var col = parseInt(extra.col, 10) || 12;
     var card = document.createElement('div');
     card.className    = 'nb-cfield nu-builder-field';
     card.dataset.type = type;
+    card.dataset.col  = col;
 
     var typeLabel = type.replace(/_/g, ' ');
     card.innerHTML =
@@ -921,6 +995,7 @@ window.nbFormBuilder = (function () {
         '<span class="nb-cfield-drag" title="Drag to reorder" onclick="event.stopPropagation()">&#x2807;</span>' +
         '<span class="nb-cfield-type-badge">' + typeLabel + '</span>' +
         '<span class="nb-cfield-label">' + _esc(extra.label) + '</span>' +
+        '<span class="nb-col-badge" title="Column span">col-' + col + '</span>' +
         '<div class="nb-cfield-actions">' +
           '<button type="button" class="nb-cfield-btn" onclick="event.stopPropagation();nbFormBuilder.toggleField(this.closest(\'.nb-cfield\').querySelector(\'.nb-cfield-header\'))">&#x2699;</button>' +
           '<button type="button" class="nb-cfield-btn del" onclick="event.stopPropagation();this.closest(\'.nb-cfield\').remove();nbFormBuilder._canvasEmpty();">&#x2715;</button>' +
@@ -928,22 +1003,303 @@ window.nbFormBuilder = (function () {
       '</div>' +
       '<div class="nb-cfield-body">' + _fieldPanel(type, extra) + '</div>';
 
-    canvas.appendChild(card);
+    zone.appendChild(card);
     _canvasEmpty();
     _makeDraggable(card);
 
+    // live-update label and col badge
     var lInput = card.querySelector('.nu-builder-label');
     if (lInput) {
       lInput.addEventListener('input', function () {
         card.querySelector('.nb-cfield-label').textContent = lInput.value || '(no label)';
       });
     }
-    if (canvas.querySelectorAll('.nb-cfield').length === 1) {
+    var colSel = card.querySelector('.nu-field-col');
+    if (colSel) {
+      colSel.addEventListener('change', function () {
+        card.dataset.col = colSel.value;
+        card.querySelector('.nb-col-badge').textContent = 'col-' + colSel.value;
+      });
+    }
+
+    // auto-open first field
+    if (canvas && canvas.querySelectorAll('.nb-cfield').length === 1) {
       card.querySelector('.nb-cfield-body').classList.add('open');
     }
   }
 
-  // ─── helpers to restore pk/table-mode UI state ───────────────────────────────
+  // ── default _addField drops into canvas root (backward compat) ──────────────
+  function _addField(type, label, name, required, extraData) {
+    var canvas = _el('formCanvas');
+    if (!canvas) return;
+    var extra = extraData || {};
+    if (typeof label !== 'string') label = '';
+    if (label) extra.label = label;
+    if (name)  extra.name  = name;
+    if (required !== undefined) extra.required = required;
+    _addFieldTo(canvas, type, extra);
+  }
+
+  // ── Row container ────────────────────────────────────────────────────────────
+  function _addRow(parent, opts) {
+    opts = opts || {};
+    var row = document.createElement('div');
+    row.className = 'nb-row';
+    row.dataset.nuType = 'row';
+    row.style.cssText =
+      'border:1px dashed var(--border-color,#bbb);border-radius:6px;padding:10px;margin-bottom:10px;background:var(--bg-page,#f9f9f9);';
+
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:var(--text-muted,#888);';
+    hdr.innerHTML =
+      '<span class="nb-container-drag" style="cursor:grab;font-size:16px;line-height:1;">&#x2807;</span>' +
+      '<span style="font-weight:600;letter-spacing:.04em;">ROW</span>' +
+      '<span style="flex:1;font-size:11px;opacity:.7;">(drag fields here)</span>' +
+      '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" ' +
+        'onclick="this.closest(\'.nb-row\').remove();nbFormBuilder._canvasEmpty();" ' +
+        'style="padding:1px 6px;font-size:11px;">✕ Remove Row</button>';
+    row.appendChild(hdr);
+
+    var dropZone = document.createElement('div');
+    dropZone.className = 'nb-row-drop';
+    dropZone.style.cssText =
+      'display:grid;grid-template-columns:repeat(12,1fr);gap:8px;min-height:52px;';
+    row.appendChild(dropZone);
+    _bindDropZone(dropZone);
+
+    parent.appendChild(row);
+    _makeContainerDraggable(row);
+    _canvasEmpty();
+
+    // restore children
+    if (opts.children && Array.isArray(opts.children)) {
+      opts.children.forEach(function (f) {
+        _addFieldTo(dropZone, f.type || 'text', f);
+      });
+    }
+    return dropZone;
+  }
+
+  // ── Section container ────────────────────────────────────────────────────────
+  function _addSection(parent, opts) {
+    opts = opts || {};
+    var sectionId = 'ns_' + Date.now();
+    var collapsed = opts.collapsed || false;
+
+    var section = document.createElement('div');
+    section.className = 'nb-section';
+    section.dataset.nuType = 'section';
+    if (opts.id) section.dataset.sectionId = opts.id;
+    section.style.cssText =
+      'border:2px solid var(--primary,#4f6bed);border-radius:8px;padding:0;margin-bottom:14px;background:var(--card-bg,#fff);';
+
+    var sHdr = document.createElement('div');
+    sHdr.style.cssText =
+      'display:flex;align-items:center;gap:8px;padding:8px 12px;' +
+      'background:color-mix(in srgb,var(--primary,#4f6bed) 8%,transparent);' +
+      'border-radius:6px 6px 0 0;cursor:pointer;user-select:none;';
+
+    var labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.className = 'nu-input nb-section-label';
+    labelInput.value = opts.label || '';
+    labelInput.placeholder = 'Section title…';
+    labelInput.style.cssText =
+      'flex:1;font-weight:600;font-size:13px;border:none;background:transparent;' +
+      'color:var(--primary,#4f6bed);padding:0;box-shadow:none;';
+    labelInput.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    var toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'nb-section-toggle nu-btn nu-btn-ghost nu-btn-sm';
+    toggleBtn.textContent = collapsed ? '▶ Expand' : '▼ Collapse';
+    toggleBtn.style.cssText = 'font-size:11px;padding:2px 7px;';
+
+    var addRowBtn = document.createElement('button');
+    addRowBtn.type = 'button';
+    addRowBtn.textContent = '⊞ + Row';
+    addRowBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    addRowBtn.style.cssText = 'font-size:11px;padding:2px 7px;';
+
+    var addGroupBtn = document.createElement('button');
+    addGroupBtn.type = 'button';
+    addGroupBtn.textContent = '⊟ + Group';
+    addGroupBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    addGroupBtn.style.cssText = 'font-size:11px;padding:2px 7px;';
+
+    var delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.textContent = '✕';
+    delBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    delBtn.style.cssText = 'font-size:12px;padding:2px 6px;color:var(--error,#c0392b);';
+    delBtn.title = 'Delete section';
+    delBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (confirm('Delete this section and all its contents?')) { section.remove(); _canvasEmpty(); }
+    });
+
+    var dragHandle = document.createElement('span');
+    dragHandle.className = 'nb-container-drag';
+    dragHandle.innerHTML = '&#x2807;';
+    dragHandle.style.cssText = 'cursor:grab;font-size:18px;line-height:1;color:var(--primary,#4f6bed);';
+
+    sHdr.appendChild(dragHandle);
+    sHdr.appendChild(labelInput);
+    sHdr.appendChild(toggleBtn);
+    sHdr.appendChild(addRowBtn);
+    sHdr.appendChild(addGroupBtn);
+    sHdr.appendChild(delBtn);
+
+    var body = document.createElement('div');
+    body.className = 'nb-section-body';
+    body.style.cssText = 'padding:10px 12px;' + (collapsed ? 'display:none;' : '');
+
+    toggleBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var isHidden = body.style.display === 'none';
+      body.style.display = isHidden ? '' : 'none';
+      toggleBtn.textContent = isHidden ? '▼ Collapse' : '▶ Expand';
+    });
+
+    addRowBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      body.style.display = '';
+      toggleBtn.textContent = '▼ Collapse';
+      _addRow(body);
+    });
+
+    addGroupBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      body.style.display = '';
+      toggleBtn.textContent = '▼ Collapse';
+      _addGroup(body);
+    });
+
+    section.appendChild(sHdr);
+    section.appendChild(body);
+    _bindDropZone(body);
+
+    parent.appendChild(section);
+    _makeContainerDraggable(section);
+    _canvasEmpty();
+
+    // restore children
+    if (opts.children && Array.isArray(opts.children)) {
+      opts.children.forEach(function (child) {
+        if (child.type === 'row') {
+          _addRow(body, child);
+        } else if (child.type === 'group') {
+          _addGroup(body, child);
+        } else {
+          _addFieldTo(body, child.type || 'text', child);
+        }
+      });
+    }
+    return body;
+  }
+
+  // ── Group container ──────────────────────────────────────────────────────────
+  function _addGroup(parent, opts) {
+    opts = opts || {};
+    var collapsed = opts.collapsed || false;
+
+    var group = document.createElement('div');
+    group.className = 'nb-group';
+    group.dataset.nuType = 'group';
+    if (opts.id) group.dataset.groupId = opts.id;
+    group.style.cssText =
+      'border:2px solid var(--warning,#e67e22);border-radius:8px;padding:0;margin-bottom:10px;background:var(--card-bg,#fff);';
+
+    var gHdr = document.createElement('div');
+    gHdr.style.cssText =
+      'display:flex;align-items:center;gap:8px;padding:7px 10px;' +
+      'background:color-mix(in srgb,var(--warning,#e67e22) 8%,transparent);' +
+      'border-radius:6px 6px 0 0;cursor:pointer;user-select:none;';
+
+    var gLabelInput = document.createElement('input');
+    gLabelInput.type = 'text';
+    gLabelInput.className = 'nu-input nb-group-label';
+    gLabelInput.value = opts.label || '';
+    gLabelInput.placeholder = 'Group title…';
+    gLabelInput.style.cssText =
+      'flex:1;font-weight:600;font-size:13px;border:none;background:transparent;' +
+      'color:var(--warning,#e67e22);padding:0;box-shadow:none;';
+    gLabelInput.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    var gToggleBtn = document.createElement('button');
+    gToggleBtn.type = 'button';
+    gToggleBtn.className = 'nb-group-toggle nu-btn nu-btn-ghost nu-btn-sm';
+    gToggleBtn.textContent = collapsed ? '▶ Expand' : '▼ Collapse';
+    gToggleBtn.style.cssText = 'font-size:11px;padding:2px 7px;';
+
+    var gAddRowBtn = document.createElement('button');
+    gAddRowBtn.type = 'button';
+    gAddRowBtn.textContent = '⊞ + Row';
+    gAddRowBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    gAddRowBtn.style.cssText = 'font-size:11px;padding:2px 7px;';
+
+    var gDelBtn = document.createElement('button');
+    gDelBtn.type = 'button';
+    gDelBtn.textContent = '✕';
+    gDelBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    gDelBtn.style.cssText = 'font-size:12px;padding:2px 6px;color:var(--error,#c0392b);';
+    gDelBtn.title = 'Delete group';
+    gDelBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (confirm('Delete this group and all its contents?')) { group.remove(); _canvasEmpty(); }
+    });
+
+    var gDragHandle = document.createElement('span');
+    gDragHandle.className = 'nb-container-drag';
+    gDragHandle.innerHTML = '&#x2807;';
+    gDragHandle.style.cssText = 'cursor:grab;font-size:18px;line-height:1;color:var(--warning,#e67e22);';
+
+    gHdr.appendChild(gDragHandle);
+    gHdr.appendChild(gLabelInput);
+    gHdr.appendChild(gToggleBtn);
+    gHdr.appendChild(gAddRowBtn);
+    gHdr.appendChild(gDelBtn);
+
+    var gBody = document.createElement('div');
+    gBody.className = 'nb-group-body';
+    gBody.style.cssText = 'padding:10px 12px;' + (collapsed ? 'display:none;' : '');
+
+    gToggleBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var isHidden = gBody.style.display === 'none';
+      gBody.style.display = isHidden ? '' : 'none';
+      gToggleBtn.textContent = isHidden ? '▼ Collapse' : '▶ Expand';
+    });
+
+    gAddRowBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      gBody.style.display = '';
+      gToggleBtn.textContent = '▼ Collapse';
+      _addRow(gBody);
+    });
+
+    group.appendChild(gHdr);
+    group.appendChild(gBody);
+    _bindDropZone(gBody);
+
+    parent.appendChild(group);
+    _makeContainerDraggable(group);
+    _canvasEmpty();
+
+    // restore children
+    if (opts.children && Array.isArray(opts.children)) {
+      opts.children.forEach(function (child) {
+        if (child.type === 'row') {
+          _addRow(gBody, child);
+        } else {
+          _addFieldTo(gBody, child.type || 'text', child);
+        }
+      });
+    }
+    return gBody;
+  }
+
+  // ─── pk/table-mode restore helpers ──────────────────────────────────────────
   function _restorePkType(pkType) {
     var radio = document.querySelector('input[name="formPkType"][value="' + pkType + '"]');
     if (!radio) return;
@@ -978,25 +1334,11 @@ window.nbFormBuilder = (function () {
     }
   }
 
-  // ─── helper: read a value from a live input inside a field card ───────────────
-  function _iv(card, cls) {
-    var el = card.querySelector(cls);
-    return el ? el.value : '';
-  }
-  function _ib(card, cls) {
-    var el = card.querySelector(cls);
-    return el ? el.checked : false;
-  }
+  function _iv(card, cls) { var el = card.querySelector(cls); return el ? el.value : ''; }
+  function _ib(card, cls) { var el = card.querySelector(cls); return el ? el.checked : false; }
 
-  // ─── hide / show forms list when builder opens / closes ──────────────────────
-  function _hideFormsList() {
-    var list = document.getElementById('formsListSection');
-    if (list) list.style.display = 'none';
-  }
-  function _showFormsList() {
-    var list = document.getElementById('formsListSection');
-    if (list) list.style.display = '';
-  }
+  function _hideFormsList() { var list = document.getElementById('formsListSection'); if (list) list.style.display = 'none'; }
+  function _showFormsList() { var list = document.getElementById('formsListSection'); if (list) list.style.display = ''; }
 
   return {
     _canvasEmpty: _canvasEmpty,
@@ -1099,12 +1441,10 @@ window.nbFormBuilder = (function () {
       var firstTab = document.querySelector('#nbTabsRow .nb-tab');
       if (firstTab) this.switchTab(firstTab);
 
-      // Hide forms list and enter full-page mode so the builder has the entire viewport
       _hideFormsList();
       NuApp._enterFullPage();
 
       card.style.display = 'block';
-      // Scroll to top so the builder header is immediately visible
       var contentArea = document.getElementById('contentArea');
       if (contentArea) contentArea.scrollTop = 0;
 
@@ -1115,7 +1455,6 @@ window.nbFormBuilder = (function () {
     close: function () {
       var card = _el('formBuilderCard');
       if (card) card.style.display = 'none';
-      // Exit full-page mode and restore the forms list
       NuApp._exitFullPage();
       _showFormsList();
     },
@@ -1162,11 +1501,22 @@ window.nbFormBuilder = (function () {
         _restoreTableMode(form.form_table_mode || 'new', form.form_table || '');
 
         _el('formCanvas').innerHTML = '<div class="nb-canvas-empty" id="canvasEmpty" style="display:none;"></div>';
+
         try {
           var layout = JSON.parse(form.form_layout || '[]');
           if (Array.isArray(layout) && layout.length) {
-            layout.forEach(function (f) {
-              _addField(f.type || 'text', f.label || '', f.name || '', !!f.required, f);
+            var canvas = _el('formCanvas');
+            layout.forEach(function (node) {
+              if (node.type === 'section') {
+                _addSection(canvas, node);
+              } else if (node.type === 'group') {
+                _addGroup(canvas, node);
+              } else if (node.type === 'row') {
+                _addRow(canvas, node);
+              } else {
+                // legacy flat field — drop straight onto canvas
+                _addFieldTo(canvas, node.type || 'text', node);
+              }
             });
           } else {
             _el('formCanvas').innerHTML = '<div class="nb-canvas-empty" id="canvasEmpty">&#x2B06; Drag or click a field type to add it here</div>';
@@ -1183,8 +1533,10 @@ window.nbFormBuilder = (function () {
 
 })();
 
-// saveForm — reads live input values from each field card and POSTs to api/forms.php?action=save.
-// The API distinguishes insert vs update by the presence of form_id in the JSON body.
+// ─── saveForm ─────────────────────────────────────────────────────────────────
+// Serialises the canvas into a nested section→row→field JSON array and POSTs
+// to api/forms.php?action=save.  Legacy flat fields (dropped directly on the
+// canvas root) are still serialised correctly as plain field objects.
 window.saveForm = async function () {
   function _elv(eid) { var e = document.getElementById(eid); return e ? e.value : ''; }
   function _elc(eid) { var e = document.getElementById(eid); return e ? e.checked : false; }
@@ -1195,40 +1547,23 @@ window.saveForm = async function () {
   function _iv(card, cls) { var e = card.querySelector(cls); return e ? e.value : ''; }
   function _ib(card, cls) { var e = card.querySelector(cls); return e ? e.checked : false; }
 
-  const id        = _elv('editFormId');
-  const formName  = (_elv('builderFormName') || '').trim();
+  // ── serialise a single field card into a plain object ──────────────────────
+  function _serialiseField(el, index) {
+    var type = el.dataset.type || 'text';
+    var col  = parseInt(el.dataset.col || _iv(el, '.nu-field-col') || '12', 10);
 
-  const formCodeRaw = (_elv('builderFormCode') || '').trim();
-  const formCode    = formCodeRaw
-    ? formCodeRaw.toLowerCase().replace(/[^a-z0-9]+/g, '_')
-    : formName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-
-  const tableMode = _radio('formTableMode') || 'new';
-  const pkType    = _radio('formPkType')    || 'autoincrement';
-
-  const formTable = tableMode === 'existing'
-    ? (_elv('builderFormTableExisting') || '').trim()
-    : (_elv('builderFormTable') || '').trim();
-
-  if (!formName) { NuApp.toast('Form name required', 'error'); return; }
-
-  const fields = [];
-  document.querySelectorAll('.nu-builder-field').forEach(function (el, index) {
-    const type = el.dataset.type || 'text';
-
-    const field = {
+    var field = {
       type:            type,
       label:           _iv(el, '.nu-builder-label'),
       name:            _iv(el, '.nu-builder-name'),
       required:        _ib(el, '.nu-field-required'),
-      width:           _iv(el, '.nu-field-width')       || '100%',
+      col:             col,
       default_value:   _iv(el, '.nu-field-default'),
       placeholder:     _iv(el, '.nu-field-placeholder'),
       help_text:       _iv(el, '.nu-field-help'),
       css_class:       _iv(el, '.nu-field-cssclass'),
       sort_order:      index + 1,
       tab:             _iv(el, '.nu-field-tab'),
-      section:         _iv(el, '.nu-field-section'),
       visibility_rule: _iv(el, '.nu-field-vis'),
       readonly_rule:   _iv(el, '.nu-field-readonly'),
       js_onchange:     _iv(el, '.nu-field-onchange'),
@@ -1245,11 +1580,11 @@ window.saveForm = async function () {
     };
 
     if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
-      const sourceType = el.querySelector('.nu-select-source-type');
-      const sqlInput   = el.querySelector('.nu-select-sql');
-      const multiBox   = el.querySelector('.nu-field-multiple');
-      const select2Box = el.querySelector('.nu-field-select2');
-      const txt        = el.querySelector('.nu-select-static');
+      var sourceType = el.querySelector('.nu-select-source-type');
+      var sqlInput   = el.querySelector('.nu-select-sql');
+      var multiBox   = el.querySelector('.nu-field-multiple');
+      var select2Box = el.querySelector('.nu-field-select2');
+      var txt        = el.querySelector('.nu-select-static');
       if (multiBox)   field.multiple = multiBox.checked;
       if (select2Box) field.select2  = select2Box.checked ? 1 : 0;
       if (sourceType && sourceType.value === 'sql') {
@@ -1259,7 +1594,7 @@ window.saveForm = async function () {
         field.sourcetype = 'static';
         if (txt) {
           field.options = txt.value.split('\n').filter(Boolean).map(function (v) {
-            const parts = v.split('|');
+            var parts = v.split('|');
             return { value: parts[0].trim(), label: parts[1] ? parts[1].trim() : parts[0].trim() };
           });
         }
@@ -1267,53 +1602,158 @@ window.saveForm = async function () {
     }
 
     if (type === 'lookup') {
-      const txt         = el.querySelector('.nu-lookup-source');
-      const idCol       = el.querySelector('.nu-lookup-id');
-      const filterInput = el.querySelector('.nu-lookup-filter');
-      const extraInput  = el.querySelector('.nu-lookup-extra');
-      if (txt && txt.value.indexOf('.') !== -1) {
-        const parts = txt.value.split('.');
+      var lookupTxt    = el.querySelector('.nu-lookup-source');
+      var idCol        = el.querySelector('.nu-lookup-id');
+      var filterInput  = el.querySelector('.nu-lookup-filter');
+      var extraInput   = el.querySelector('.nu-lookup-extra');
+      if (lookupTxt && lookupTxt.value.indexOf('.') !== -1) {
+        var parts = lookupTxt.value.split('.');
         field.lookup = {
           table:          parts[0],
-          id_column:      idCol        ? idCol.value        : 'id',
-          display_column: parts[1]     || 'name',
-          filter:         filterInput  ? filterInput.value  : '',
-          extra:          extraInput   ? extraInput.value   : ''
+          id_column:      idCol       ? idCol.value       : 'id',
+          display_column: parts[1]    || 'name',
+          filter:         filterInput ? filterInput.value : '',
+          extra:          extraInput  ? extraInput.value  : ''
         };
       }
     }
 
     if (type === 'subform') {
-      const txt  = el.querySelector('.nu-subform-config');
-      const view = el.querySelector('.nu-subform-view');
-      if (txt && txt.value.indexOf('.') !== -1) {
-        const parts = txt.value.split('.');
+      var sfTxt  = el.querySelector('.nu-subform-config');
+      var sfView = el.querySelector('.nu-subform-view');
+      if (sfTxt && sfTxt.value.indexOf('.') !== -1) {
+        var sfParts = sfTxt.value.split('.');
         field.subform = {
-          form_code: parts[0],
-          fk_field:  parts[1],
-          view:      view ? view.value : 'grid'
+          form_code: sfParts[0],
+          fk_field:  sfParts[1],
+          view:      sfView ? sfView.value : 'grid'
         };
       }
     }
 
     if (type === 'calculated') {
-      const txt = el.querySelector('.nu-calc-expression');
-      if (txt) field.calculated = txt.value;
+      var calcTxt = el.querySelector('.nu-calc-expression');
+      if (calcTxt) field.calculated = calcTxt.value;
     }
 
-    fields.push(field);
-  });
+    return field;
+  }
 
-  // Always POST to action=save. Insert vs update is determined by form_id in the body:
-  //   form_id present  → PHP runs UPDATE
-  //   form_id absent   → PHP runs INSERT
+  // ── serialise a row drop-zone into a row node ───────────────────────────────
+  function _serialiseRow(rowEl) {
+    var dropZone = rowEl.querySelector('.nb-row-drop') || rowEl;
+    var children = [];
+    var idx = 0;
+    Array.from(dropZone.children).forEach(function (child) {
+      if (child.classList.contains('nb-cfield')) {
+        children.push(_serialiseField(child, idx++));
+      }
+    });
+    return { type: 'row', children: children };
+  }
+
+  // ── serialise a group into a group node ─────────────────────────────────────
+  function _serialiseGroup(groupEl) {
+    var body = groupEl.querySelector('.nb-group-body') || groupEl;
+    var labelEl = groupEl.querySelector('.nb-group-label');
+    var collapsed = body.style.display === 'none';
+    var children = [];
+    var idx = 0;
+    Array.from(body.children).forEach(function (child) {
+      if (child.classList.contains('nb-row')) {
+        children.push(_serialiseRow(child));
+      } else if (child.classList.contains('nb-cfield')) {
+        children.push(_serialiseField(child, idx++));
+      }
+    });
+    return {
+      type:      'group',
+      id:        groupEl.dataset.groupId || ('g_' + Date.now()),
+      label:     labelEl ? labelEl.value : '',
+      collapsed: collapsed,
+      children:  children
+    };
+  }
+
+  // ── serialise a section into a section node ─────────────────────────────────
+  function _serialiseSection(sectionEl) {
+    var body = sectionEl.querySelector('.nb-section-body') || sectionEl;
+    var labelEl = sectionEl.querySelector('.nb-section-label');
+    var collapsed = body.style.display === 'none';
+    var children = [];
+    var idx = 0;
+    Array.from(body.children).forEach(function (child) {
+      if (child.classList.contains('nb-row')) {
+        children.push(_serialiseRow(child));
+      } else if (child.classList.contains('nb-group')) {
+        children.push(_serialiseGroup(child));
+      } else if (child.classList.contains('nb-cfield')) {
+        children.push(_serialiseField(child, idx++));
+      }
+    });
+    return {
+      type:      'section',
+      id:        sectionEl.dataset.sectionId || ('s_' + Date.now()),
+      label:     labelEl ? labelEl.value : '',
+      collapsed: collapsed,
+      children:  children
+    };
+  }
+
+  // ── walk canvas root ────────────────────────────────────────────────────────
+  var layout = [];
+  var globalIdx = 0;
+  var canvas = document.getElementById('formCanvas');
+  if (canvas) {
+    Array.from(canvas.children).forEach(function (child) {
+      if (child.id === 'canvasEmpty') return;
+      if (child.classList.contains('nb-section')) {
+        layout.push(_serialiseSection(child));
+      } else if (child.classList.contains('nb-group')) {
+        layout.push(_serialiseGroup(child));
+      } else if (child.classList.contains('nb-row')) {
+        layout.push(_serialiseRow(child));
+      } else if (child.classList.contains('nb-cfield')) {
+        layout.push(_serialiseField(child, globalIdx++));
+      }
+    });
+  }
+
+  const id        = _elv('editFormId');
+  const formName  = (_elv('builderFormName') || '').trim();
+  const formCodeRaw = (_elv('builderFormCode') || '').trim();
+  const formCode    = formCodeRaw
+    ? formCodeRaw.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    : formName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+
+  const tableMode = _radio('formTableMode') || 'new';
+  const pkType    = _radio('formPkType')    || 'autoincrement';
+  const formTable = tableMode === 'existing'
+    ? (_elv('builderFormTableExisting') || '').trim()
+    : (_elv('builderFormTable') || '').trim();
+
+  if (!formName) { NuApp.toast('Form name required', 'error'); return; }
+
+  // flat list of field objects for form-setup DDL sync
+  function _flatFields(nodes) {
+    var out = [];
+    nodes.forEach(function (n) {
+      if (n.type === 'section' || n.type === 'group' || n.type === 'row') {
+        out = out.concat(_flatFields(n.children || []));
+      } else {
+        out.push(n);
+      }
+    });
+    return out;
+  }
+
   const payload = {
     form_name:                 formName,
     form_code:                 formCode,
     form_table:                formTable,
     form_table_mode:           tableMode,
     form_pk_type:              pkType,
-    form_layout:               JSON.stringify(fields),
+    form_layout:               JSON.stringify(layout),
     form_active:               1,
     form_custom_js:            _elv('formCustomJs'),
     form_js_before_save:       _elv('formJsBeforeSave'),
@@ -1333,13 +1773,9 @@ window.saveForm = async function () {
     })()
   };
 
-  // Include form_id in body only when editing an existing form
-  if (id) {
-    payload.form_id = id;
-  }
+  if (id) payload.form_id = id;
 
   try {
-    // Single endpoint for both insert and update
     const json = await NuApp.apiJson('api/forms.php?action=save', {
       method: 'POST',
       credentials: 'same-origin',
@@ -1349,10 +1785,8 @@ window.saveForm = async function () {
 
     if (!json.success) { NuApp.toast(json.error || 'Save failed', 'error'); return; }
 
-    // PHP returns form_id (not id) for both insert and update
     const savedId = json.form_id || id;
 
-    // Call form-setup.php for DDL sync — non-fatal if it fails
     if (formTable) {
       try {
         await NuApp.apiJson('api/form-setup.php', {
@@ -1364,7 +1798,7 @@ window.saveForm = async function () {
             form_table: formTable,
             table_mode: tableMode,
             pk_type:    pkType,
-            fields:     fields
+            fields:     _flatFields(layout)
           })
         });
       } catch (setupErr) {
@@ -1383,14 +1817,13 @@ window.saveForm = async function () {
 };
 
 // ─── Global window aliases ────────────────────────────────────────────────────
-// These must stay at the bottom of this file and must never be removed.
-window.openFormBuilder = function ()                              { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
-window.previewForm     = function (code, label)                   { return NuApp.previewForm(code, label); };
-window.editForm        = function (id)                            { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
-window.addRecord       = function (code, label)                   { return NuApp.addRecord(code, label); };
-window.editRecord      = function (code, id, label, mode)         { return NuApp.editRecord(code, id, label, mode); };
-window.browseForm      = function (code, page, query, label, mode){ return NuApp.browseForm(code, page, query, label, mode); };
-window.browseFormPage  = function (code, page, query, label, mode){ return NuApp.browseForm(code, page, query, label, mode); };
+window.openFormBuilder = function ()                               { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
+window.previewForm     = function (code, label)                    { return NuApp.previewForm(code, label); };
+window.editForm        = function (id)                             { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
+window.addRecord       = function (code, label)                    { return NuApp.addRecord(code, label); };
+window.editRecord      = function (code, id, label, mode)          { return NuApp.editRecord(code, id, label, mode); };
+window.browseForm      = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
+window.browseFormPage  = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
 window.deleteForm      = function (id, name) {
   if (!confirm('Delete form ' + (name || '') + '?')) return;
   NuApp.apiJson('api/crud.php?table=nu_forms&id=' + encodeURIComponent(id), {
