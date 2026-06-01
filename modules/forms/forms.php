@@ -769,32 +769,6 @@ if (!window._nbFormsModuleInit) {
     if (browseNotice) browseNotice.style.display = isBrowseable ? 'none' : 'block';
   };
 
-  // ── Extend open() to reset all fields ───────────────────────────
-  const _nbOpen = nbFormBuilder.open.bind(nbFormBuilder);
-  nbFormBuilder.open = function() {
-    _nbOpen();
-    nbFormBuilder.selectFormType('main', document.querySelector('.nb-ftype-card'));
-  };
-
-  // ── Restore form type on edit ────────────────────────────────────
-  window._nbRestoreFormType = function(ftype) {
-    const val = ftype || 'main';
-    const radio = document.querySelector('input[name="formType"][value="'+val+'"]');
-    if (radio) {
-      const card = radio.closest('.nb-ftype-card');
-      nbFormBuilder.selectFormType(val, card);
-    }
-  };
-
-  // Restore form type after edit() loads form data
-  const _nbEdit = nbFormBuilder.edit.bind(nbFormBuilder);
-  nbFormBuilder.edit = async function(id) {
-    await _nbEdit(id);
-    // After edit() resolves, restore the form type radio card UI
-    const ftype = document.querySelector('input[name="formType"]:checked')?.value || 'main';
-    window._nbRestoreFormType(ftype);
-  };
-
   // ── Patch saveForm to include form_type ──────────────────────────
   const _origSaveForm = window.saveForm;
   window.saveForm = function() {
