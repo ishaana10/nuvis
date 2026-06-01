@@ -736,7 +736,6 @@ window.saveForm = async function () {
   const formCode  = ((document.getElementById('builderFormCode')  || {}).value || '').trim();
   const tableMode = (document.querySelector('input[name="formTableMode"]:checked') || {}).value || 'new';
   const pkType    = (document.querySelector('input[name="formPkType"]:checked')    || {}).value || 'autoincrement';
-  // ← FIX: read form_type from the radio cards
   const formType  = (document.querySelector('input[name="formType"]:checked')      || {}).value || 'main';
 
   // resolve table name: existing-table select or new-table text input
@@ -843,13 +842,13 @@ window.saveForm = async function () {
     fields.push(field);
   });
 
-  // build main payload — form_type is now included
+  // build main payload
   const payload = {
     form_id:                   formId   || null,
     form_name:                 formName,
     form_code:                 formCode || formName.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
     form_table:                formTable,
-    form_type:                 formType,          // ← FIX: was missing
+    form_type:                 formType,
     form_table_mode:           tableMode,
     form_pk_type:              pkType,
     form_layout:               JSON.stringify(fields),
@@ -969,4 +968,298 @@ window.nbFormBuilder = (function () {
       html += _row('Step', _inp('nu-field-step', extra, 'step', ''));
     }
     if (type === 'file') {
-      html += _row('Accept', _inp('nu-field-accept
+      html += _row('Accept', _inp('nu-field-accept', extra, 'accept', '.pdf,.jpg,.png'));
+      html += '<div class="nb-fp">' + _chkLbl('nu-field-multiple-upload', extra, 'multiple_upload', 'Allow multiple files') + '</div>';
+    }
+    if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
+      var srcType = _val(extra, 'source_type', _val(extra, 'sourcetype', 'static'));
+      var opts    = (extra.options || []).map(function (o) { return (o.value || '') + '|' + (o.label || o.value || ''); }).join('\n');
+      var sqlVal  = _val(extra, 'sql_source', _val(extra, 'sqlsource', ''));
+      html += '<div class="nb-fp nb-fp-full"><label>Option Source</label>' +
+        '<select class="nu-input nu-select-source-type" onchange="nbFormBuilder.toggleSelectSource(this)">' +
+          '<option value="static"' + (srcType === 'static' ? ' selected' : '') + '>Static Options</option>' +
+          '<option value="sql"'    + (srcType === 'sql'    ? ' selected' : '') + '>SQL Query</option>' +
+        '</select></div>' +
+        '<div class="nb-fp nb-fp-full nu-static-block"' + (srcType !== 'static' ? ' style="display:none"' : '') + '>' +
+          '<label>Options <span style="font-weight:400;">(value|label per line)</span></label>' +
+          '<textarea class="nu-input nu-select-static" rows="4" placeholder="active|Active\npending|Pending">' + _esc(opts) + '</textarea>' +
+        '</div>' +
+        '<div class="nb-fp nb-fp-full nu-sql-block"' + (srcType !== 'sql' ? ' style="display:none"' : '') + '>' +
+          '<label>SQL Query</label>' +
+          '<textarea class="nu-input nu-select-sql" rows="3" placeholder="SELECT id, name FROM customers">' + _esc(sqlVal) + '</textarea>' +
+        '</div>';
+      if (type === 'select') {
+        html += '<div class="nb-fp">' + _chkLbl('nu-field-multiple', extra, 'multiple', 'Multi-select') + '</div>';
+        html += '<div class="nb-fp">' + _chkLbl('nu-field-select2',  extra, 'select2',  'Use Select2')  + '</div>';
+      }
+    }
+    if (type === 'lookup') {
+      var lk    = extra.lookup || {};
+      var lkSrc = lk.table ? lk.table + '.' + (lk.display_column || lk.displaycolumn || 'name') : '';
+      html += '<div class="nb-fp nb-fp-full"><label>Source (table.column)</label>' +
+        '<input type="text" class="nu-input nu-lookup-source" value="' + _esc(lkSrc) + '" placeholder="customers.name"></div>' +
+        _row('ID Column',    '<input type="text" class="nu-input nu-lookup-id"     value="' + _esc(lk.id_column || lk.idcolumn || 'id') + '" placeholder="id">') +
+        _row('Filter SQL',   '<input type="text" class="nu-input nu-lookup-filter" value="' + _esc(lk.filter || '')                    + '" placeholder="active=1">') +
+        '<div class="nb-fp nb-fp-full"><label>Extra Mapping (src:field, comma-sep)</label>' +
+        '<input type="text" class="nu-input nu-lookup-extra" value="' + _esc(lk.extra || '') + '" placeholder="dept_id:department"></div>';
+    }
+    if (type === 'subform') {
+      var sf  = extra.subform || {};
+      var sfv = sf.form_code ? sf.form_code + '.' + (sf.fk_field || '') : '';
+      html += '<div class="nb-fp nb-fp-full"><label>Config (form_code.fk_field)</label>' +
+        '<input type="text" class="nu-input nu-subform-config" value="' + _esc(sfv) + '" placeholder="order_items.order_id"></div>' +
+        '<div class="nb-fp"><label>View</label>' +
+        '<select class="nu-input nu-subform-view">' +
+          '<option value="grid"'   + ((sf.view || 'grid') === 'grid'   ? ' selected' : '') + '>Grid (table)</option>' +
+          '<option value="form"'   + (sf.view === 'form'               ? ' selected' : '') + '>Form (cards)</option>' +
+          '<option value="inline"' + (sf.view === 'inline'             ? ' selected' : '') + '>Inline (editable rows)</option>' +
+        '</select></div>';
+    }
+    if (type === 'calculated') {
+      html += '<div class="nb-fp nb-fp-full"><label>Expression</label>' +
+        '<input type="text" class="nu-input nu-calc-expression" value="' + _esc(_val(extra, 'calculated')) + '" placeholder="getValue(\'qty\') * getValue(\'price\')"></div>';
+    }
+    if (type === 'fieldset') {
+      html += _row('Legend', _inp('nu-field-legend', extra, 'legend', 'Group title'));
+    }
+    if (type === 'html') {
+      html += '<div class="nb-fp nb-fp-full"><label>HTML Content</label>' +
+        '<textarea class="nu-input nu-html-content" rows="4" placeholder="<p>Static HTML here</p>">' + _esc(_val(extra, 'html_content')) + '</textarea></div>';
+    }
+    if (type === 'button') {
+      html += _row('Button Action (JS)', _inp('nu-field-button-action', extra, 'button_action', 'submitForm()'));
+    }
+
+    html += '</div>'; // close nb-fp-grid
+    return html;
+  }
+
+  // ─── FIELD CARD HTML ──────────────────────────────────────────────────────
+  function _fieldCard(type, extra) {
+    extra = extra || {};
+    var icons = {
+      text:'T', textarea:'¶', number:'#', email:'@', phone:'☏', date:'📅',
+      select:'▾', radio:'◉', checkbox:'☑', checkbox_group:'☑☑',
+      lookup:'🔍', file:'📎', image:'🖼', subform:'⊞', calculated:'∑',
+      fieldset:'▭', html:'<>', button:'⬛', range:'⇔', hidden:'👁', password:'🔒',
+    };
+    var icon  = icons[type] || 'F';
+    var label = _val(extra, 'label', type.charAt(0).toUpperCase() + type.slice(1));
+    var name  = _val(extra, 'name',  '');
+    return '<div class="nb-cfield" data-type="' + _esc(type) + '" draggable="true">' +
+      '<div class="nb-cf-header">' +
+        '<span class="nb-cf-icon">' + icon + '</span>' +
+        '<span class="nb-cf-type">' + _esc(type) + '</span>' +
+        '<div class="nb-cf-actions">' +
+          '<button type="button" class="nb-cf-btn nb-cf-toggle" onclick="nbFormBuilder.togglePanel(this)" title="Settings">⚙</button>' +
+          '<button type="button" class="nb-cf-btn nb-cf-del"    onclick="nbFormBuilder.removeField(this)"  title="Remove">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="nb-cf-summary"><span class="nb-cf-label-text">' + _esc(label) + '</span>' + (name ? ' <code>' + _esc(name) + '</code>' : '') + '</div>' +
+      '<div class="nb-cf-panel" style="display:none;">' + _fieldPanel(type, extra) + '</div>' +
+    '</div>';
+  }
+
+  // ─── DRAG & DROP ─────────────────────────────────────────────────────────
+  var _dragSrc = null;
+
+  function _initDrag(canvas) {
+    canvas.addEventListener('dragstart', function (e) {
+      var card = e.target.closest('.nb-cfield');
+      if (!card) return;
+      _dragSrc = card;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(function () { if (_dragSrc) _dragSrc.style.opacity = '0.4'; }, 0);
+    });
+    canvas.addEventListener('dragend', function () {
+      canvas.querySelectorAll('.nb-cfield').forEach(function (c) { c.style.opacity = ''; c.classList.remove('nb-drag-over'); });
+      _dragSrc = null;
+    });
+    canvas.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      var card = e.target.closest('.nb-cfield');
+      if (card && card !== _dragSrc) {
+        canvas.querySelectorAll('.nb-cfield').forEach(function (c) { c.classList.remove('nb-drag-over'); });
+        card.classList.add('nb-drag-over');
+      }
+    });
+    canvas.addEventListener('drop', function (e) {
+      e.preventDefault();
+      var target = e.target.closest('.nb-cfield');
+      if (!target || !_dragSrc || target === _dragSrc) return;
+      var rect = target.getBoundingClientRect();
+      if (e.clientY < rect.top + rect.height / 2) {
+        canvas.insertBefore(_dragSrc, target);
+      } else {
+        canvas.insertBefore(_dragSrc, target.nextSibling);
+      }
+      target.classList.remove('nb-drag-over');
+      _canvasEmpty();
+    });
+  }
+
+  // ─── PUBLIC API ───────────────────────────────────────────────────────────
+  return {
+
+    _initAfterLoad: function () {
+      var canvas = _el('formCanvas');
+      if (canvas && !canvas.dataset.nbInit) {
+        canvas.dataset.nbInit = '1';
+        _initDrag(canvas);
+      }
+    },
+
+    addField: function (type) {
+      var canvas = _el('formCanvas');
+      if (!canvas) return;
+      canvas.insertAdjacentHTML('beforeend', _fieldCard(type, {}));
+      _canvasEmpty();
+      var cards = canvas.querySelectorAll('.nb-cfield');
+      var last  = cards[cards.length - 1];
+      if (last) {
+        var panel = last.querySelector('.nb-cf-panel');
+        if (panel) panel.style.display = 'block';
+        last.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    },
+
+    togglePanel: function (btn) {
+      var card  = btn.closest('.nb-cfield');
+      var panel = card ? card.querySelector('.nb-cf-panel') : null;
+      if (!panel) return;
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    },
+
+    removeField: function (btn) {
+      var card = btn.closest('.nb-cfield');
+      if (card) { card.remove(); _canvasEmpty(); }
+    },
+
+    toggleSelectSource: function (sel) {
+      var card = sel.closest('.nb-cfield');
+      if (!card) return;
+      var staticBlock = card.querySelector('.nu-static-block');
+      var sqlBlock    = card.querySelector('.nu-sql-block');
+      if (staticBlock) staticBlock.style.display = sel.value === 'static' ? '' : 'none';
+      if (sqlBlock)    sqlBlock.style.display    = sel.value === 'sql'    ? '' : 'none';
+    },
+
+    // ─── SELECT TABLE MODE (new / existing) ─────────────────────────────────
+    selectTableMode: function (mode, card) {
+      document.querySelectorAll('.nb-tmode-card').forEach(function (c) { c.classList.remove('selected'); });
+      if (card) card.classList.add('selected');
+      var newBlock      = _el('tableNewBlock');
+      var existingBlock = _el('tableExistingBlock');
+      if (newBlock)      newBlock.style.display      = mode === 'new'      ? '' : 'none';
+      if (existingBlock) existingBlock.style.display = mode === 'existing' ? '' : 'none';
+    },
+
+    // ─── SELECT PK TYPE ─────────────────────────────────────────────────────
+    selectPkType: function (type, card) {
+      document.querySelectorAll('.nb-pk-card').forEach(function (c) { c.classList.remove('selected'); });
+      if (card) card.classList.add('selected');
+    },
+
+    // ─── EDIT existing form — populate builder UI ────────────────────────────
+    edit: function (form) {
+      // basic fields
+      if (_el('editFormId'))       _el('editFormId').value       = form.form_id   || '';
+      if (_el('builderFormName'))  _el('builderFormName').value  = form.form_name || '';
+      if (_el('builderFormCode'))  _el('builderFormCode').value  = form.form_code || '';
+
+      // restore form_type radio
+      var formType = form.form_type || 'main';
+      var ftRadio  = document.querySelector('input[name="formType"][value="' + formType + '"]');
+      if (ftRadio) ftRadio.checked = true;
+
+      // restore table mode
+      var tableMode  = form.form_table_mode || 'new';
+      var tmRadio    = document.querySelector('input[name="formTableMode"][value="' + tableMode + '"]');
+      var tmCard     = tmRadio ? tmRadio.closest('.nb-tmode-card') : null;
+      if (tmRadio) tmRadio.checked = true;
+      this.selectTableMode(tableMode, tmCard);
+
+      if (tableMode === 'existing') {
+        var existSel = _el('builderFormTableExisting');
+        if (existSel) existSel.value = form.form_table || '';
+      } else {
+        if (_el('builderFormTable')) _el('builderFormTable').value = form.form_table || '';
+      }
+
+      // restore pk_type
+      var pkType  = form.form_pk_type || 'autoincrement';
+      var pkRadio = document.querySelector('input[name="formPkType"][value="' + pkType + '"]');
+      var pkCard  = pkRadio ? pkRadio.closest('.nb-pk-card') : null;
+      if (pkRadio) pkRadio.checked = true;
+      this.selectPkType(pkType, pkCard);
+
+      // browse settings
+      if (_el('formBrowseSql'))               _el('formBrowseSql').value               = form.browse_sql                || '';
+      if (_el('formBrowseColumns'))           _el('formBrowseColumns').value           = form.browse_columns            || '';
+      if (_el('formBrowseSearchEnabled'))     _el('formBrowseSearchEnabled').checked   = String(form.browse_search_enabled) === '1';
+      if (_el('formBrowseSearchPlaceholder')) _el('formBrowseSearchPlaceholder').value = form.browse_search_placeholder || '';
+      if (_el('formBrowseSearchFields'))      _el('formBrowseSearchFields').value      = form.browse_search_fields      || '';
+      if (_el('formBrowsePageSize'))          _el('formBrowsePageSize').value          = form.browse_page_size          || 20;
+      if (_el('formBrowseDefaultSort'))       _el('formBrowseDefaultSort').value       = form.browse_default_sort       || '';
+
+      // restore browse display mode radio
+      var bdm      = form.browse_display_mode || 'inline';
+      var bdmRadio = document.querySelector('input[name="browseDisplayMode"][value="' + bdm + '"]');
+      if (bdmRadio) bdmRadio.checked = true;
+
+      // advanced
+      if (_el('formCustomJs'))      _el('formCustomJs').value      = form.form_custom_js      || '';
+      if (_el('formJsBeforeSave'))  _el('formJsBeforeSave').value  = form.form_js_before_save || '';
+      if (_el('formJsAfterSave'))   _el('formJsAfterSave').value   = form.form_js_after_save  || '';
+      if (_el('formCustomPhp'))     _el('formCustomPhp').value     = form.form_custom_php     || '';
+      if (_el('formCustomCss'))     _el('formCustomCss').value     = form.form_custom_css     || '';
+
+      // rebuild canvas fields
+      var canvas = _el('formCanvas');
+      if (!canvas) return;
+      canvas.innerHTML = '';
+      var layout = [];
+      try { layout = JSON.parse(form.form_layout || '[]'); } catch (e) { layout = []; }
+      layout.forEach(function (f) {
+        var type  = f.fieldtype || f.type || 'text';
+        var extra = {
+          label:           f.fieldlabel       || f.label           || '',
+          name:            f.fieldname        || f.name            || '',
+          width:           f.width                                 || '100%',
+          required:        !!f.required,
+          default_value:   f.default_value                         || '',
+          placeholder:     f.placeholder                           || '',
+          help_text:       f.help_text                             || '',
+          css_class:       f.css_class                             || '',
+          tab:             f.tab                                   || '',
+          section:         f.section                               || '',
+          visibility_rule: f.visibility_rule                       || '',
+          readonly_rule:   f.readonly_rule                         || '',
+          js_onchange:     f.js_onchange                           || '',
+          rows:            f.rows                                  || 3,
+          min:             f.min                                   || '',
+          max:             f.max                                   || '',
+          step:            f.step                                  || '',
+          accept:          f.accept                                || '',
+          multiple_upload: !!f.multiple_upload,
+          legend:          f.legend                                || '',
+          select2:         !!f.select2,
+          multiple:        !!f.multiple,
+          html_content:    f.html_content                          || '',
+          button_action:   f.button_action                         || '',
+          calculated:      f.calculated                            || '',
+          source_type:     f.source_type      || f.sourcetype      || 'static',
+          sourcetype:      f.source_type      || f.sourcetype      || 'static',
+          options:         f.options                               || [],
+          sql_source:      f.sql_source       || f.sqlsource       || '',
+          sqlsource:       f.sql_source       || f.sqlsource       || '',
+          lookup:          f.lookup                                || null,
+          subform:         f.subform                               || null,
+        };
+        canvas.insertAdjacentHTML('beforeend', _fieldCard(type, extra));
+      });
+      _canvasEmpty();
+    },
+  };
+
+})();
