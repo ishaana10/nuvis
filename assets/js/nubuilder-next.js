@@ -1081,6 +1081,7 @@ window.nbFormBuilder = (function () {
       _el('editFormId').value         = '';
       _el('builderTitle').textContent = 'New Form';
       _el('builderFormName').value    = '';
+      _el('builderFormCode').value    = '';
       _el('builderFormTable').value   = '';
       _el('formCanvas').innerHTML     = '<div class="nb-canvas-empty" id="canvasEmpty">&#x2B06; Drag or click a field type to add it here</div>';
 
@@ -1128,6 +1129,7 @@ window.nbFormBuilder = (function () {
         _el('editFormId').value         = id;
         _el('builderTitle').textContent = 'Edit Form';
         _el('builderFormName').value    = form.form_name  || '';
+        _el('builderFormCode').value    = form.form_code  || '';
         _el('builderFormTable').value   = form.form_table || '';
 
         function sv(eid, v) { var e = _el(eid); if (e) e.value = v || ''; }
@@ -1184,7 +1186,12 @@ window.saveForm = async function () {
 
   const id        = _elv('editFormId');
   const formName  = (_elv('builderFormName') || '').trim();
-  const formCode  = formName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+
+  // Read form code from the dedicated input; fall back to auto-deriving from formName
+  const formCodeRaw = (_elv('builderFormCode') || '').trim();
+  const formCode    = formCodeRaw
+    ? formCodeRaw.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    : formName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
 
   // resolve table name: existing-table dropdown or free-text input
   const tableMode = _radio('formTableMode') || 'new';
@@ -1363,19 +1370,4 @@ window.saveForm = async function () {
 };
 
 // Global window aliases
-window.openFormBuilder = function ()                         { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
-window.previewForm     = function (code, label)              { return NuApp.previewForm(code, label); };
-window.editForm        = function (id)                       { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
-window.addRecord       = function (code, label)              { return NuApp.addRecord(code, label); };
-window.editRecord      = function (code, id, label, mode)    { return NuApp.editRecord(code, id, label, mode); };
-window.browseForm      = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
-window.browseFormPage  = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
-window.deleteForm      = function (id, name) {
-  if (!confirm('Delete form ' + (name || '') + '?')) return;
-  NuApp.apiJson('api/crud.php?table=nu_forms&id=' + encodeURIComponent(id), {
-    method: 'DELETE', credentials: 'same-origin'
-  }).then(function (json) {
-    if (json.success) { NuApp.toast('Deleted'); NuApp.loadModule('forms'); }
-    else NuApp.toast(json.error || 'Failed', 'error');
-  }).catch(function (e) { NuApp.toast('Error: ' + e.message, 'error'); });
-};
+window.openFormBuilder = function ()                         { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (wi
