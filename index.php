@@ -235,9 +235,10 @@ function nu_asset(string $path): string {
                 <span>Integrations</span>
             </a>
 
-            <?php if ($isAdmin): ?>
-            <!-- ── Admin-only section ── -->
+            <!-- ── Admin Tools section (admin + all users for password) ── -->
             <div style="margin:12px 8px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted,#888);padding:0 4px;">Admin Tools</div>
+
+            <?php if ($isAdmin): ?>
             <a href="#inspector" class="nu-nav-item" data-module="inspector"
                onclick="NuApp.loadModule('inspector'); return false;"
                style="color:var(--warning,#f59e0b);">
@@ -251,6 +252,32 @@ function nu_asset(string $path): string {
                 <span>DB &amp; Server Inspector</span>
             </a>
             <?php endif; ?>
+
+            <!-- Change Password — visible to every logged-in user -->
+            <a href="#password" class="nu-nav-item" data-module="password"
+               onclick="NuApp.loadModule('password'); return false;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    <line x1="12" y1="16" x2="12" y2="16"/>
+                    <circle cx="12" cy="16" r="1" fill="currentColor"/>
+                </svg>
+                <span>Change Password</span>
+            </a>
+
+            <?php if ($isAdmin): ?>
+            <!-- Password Policy — admin only -->
+            <a href="#password_policy" class="nu-nav-item" data-module="password_policy"
+               onclick="NuApp.loadModule('password_policy'); return false;"
+               style="color:var(--warning,#f59e0b);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <polyline points="9 12 11 14 15 10"/>
+                </svg>
+                <span>Password Policy</span>
+            </a>
+            <?php endif; ?>
+
         </nav>
 
         <div class="nu-sidebar-footer">
