@@ -347,6 +347,7 @@ function nu_render_field($field, $value = '', $record = []) {
             $sfCode   = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? ($name)));
             $sfFk     = nu_safe_ident($sf['fk_field']  ?? ($sf['fkfield']  ?? ''));
             $sfView   = in_array($sf['view'] ?? 'grid', ['grid','form','inline'], true) ? ($sf['view'] ?? 'grid') : 'grid';
+            // data-parent-id is empty on new records; nuSubform.js re-reads it at save time
             $sfParent = nu_attr($record['id'] ?? '');
             $control  = '<div class="nu-subform-container"'
                       . ' data-subform-code="'   . nu_attr($sfCode)   . '"'
@@ -581,6 +582,26 @@ function nu_flatten_layout($layout) {
 
 /* ── Subform helpers ─────────────────────────────────────── */
 
+/**
+ * subform_fields — returns layout + pk for a child form.
+ * Does NOT require parent_id. Used by nuSubform.addRow() so the modal
+ * can open even when the parent record has not yet been saved.
+ */
+function nu_handle_subform_fields() {
+    $code = $_GET['code'] ?? '';
+    if ($code === '') nu_json(['success' => false, 'error' => 'Missing code'], 400);
+
+    $form = nu_get_form($code);
+    if (!$form) nu_json(['success' => false, 'error' => 'Child form not found'], 404);
+
+    $c      = nu_form_columns();
+    $table  = nu_safe_ident($form[$c['table']] ?? '');
+    $fields = nu_flatten_layout(nu_decode_layout($form));
+    $pk     = $table !== '' ? nu_get_pk($table) : 'id';
+
+    nu_json(['success' => true, 'data' => ['layout' => $fields, 'pk' => $pk]]);
+}
+
 function nu_handle_subform_list() {
     $code     = $_GET['code']      ?? '';
     $fk       = nu_safe_ident($_GET['fk']  ?? '');
@@ -803,7 +824,6 @@ function nu_handle_save() {
     $save = [];
 
     // ── FIX Bug 1: inject UUID into the actual PK column on INSERT ────────────
-    // This runs regardless of whether a uuid-type field exists in the layout.
     if (!$id && $pkType === 'uuid') {
         $save[$pk] = nu_generate_uuid();
     }
@@ -815,8 +835,6 @@ function nu_handle_save() {
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
 
         if ($type === 'uuid') {
-            // Layout uuid-type field — on INSERT the PK is already injected above;
-            // skip to avoid double-write. On UPDATE preserve submitted value.
             if (!$id) continue;
             if (!empty($data[$name])) $save[$name] = $data[$name];
             continue;
@@ -826,7 +844,6 @@ function nu_handle_save() {
     }
 
     // ── FIX Bug 2: guard moved to AFTER uuid PK injection ─────────────────────
-    // Only block if there are truly zero saveable columns (not counting the PK itself).
     $saveWithoutPk = array_filter($save, fn($k) => $k !== $pk, ARRAY_FILTER_USE_KEY);
     if (!$id && empty($saveWithoutPk) && $pkType !== 'uuid') {
         nu_json(['success' => false, 'error' => 'No fields to save'], 400);
@@ -835,7 +852,6 @@ function nu_handle_save() {
     if ($id) {
         $sets = []; $params = [];
         foreach ($save as $col => $val) {
-            // ── FIX Bug 3: never UPDATE the PK column itself ──────────────────
             if ($col === $pk) continue;
             $sets[] = "`{$col}` = ?"; $params[] = $val;
         }
@@ -847,7 +863,6 @@ function nu_handle_save() {
         $cols = array_keys($save);
         $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
-        // For uuid-pk tables, lastInsertId() returns 0 — return the generated UUID instead
         $newId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
         nu_json(['success' => true, 'id' => $newId]);
     }
@@ -857,14 +872,15 @@ function nu_handle_save() {
 try {
     $action = $_GET['action'] ?? '';
     switch ($action) {
-        case 'render':          nu_handle_render();         break;
-        case 'fields':          nu_handle_fields();         break;
-        case 'events':          nu_handle_events();         break;
-        case 'list':            nu_handle_list();           break;
-        case 'save':            nu_handle_save();           break;
-        case 'subform_list':    nu_handle_subform_list();   break;
-        case 'subform_save':    nu_handle_subform_save();   break;
-        case 'subform_delete':  nu_handle_subform_delete(); break;
+        case 'render':           nu_handle_render();          break;
+        case 'fields':           nu_handle_fields();          break;
+        case 'events':           nu_handle_events();          break;
+        case 'list':             nu_handle_list();            break;
+        case 'save':             nu_handle_save();            break;
+        case 'subform_fields':   nu_handle_subform_fields();  break;
+        case 'subform_list':     nu_handle_subform_list();    break;
+        case 'subform_save':     nu_handle_subform_save();    break;
+        case 'subform_delete':   nu_handle_subform_delete();  break;
         default: nu_json(['success' => false, 'error' => 'Invalid action'], 400);
     }
 } catch (Throwable $e) {
