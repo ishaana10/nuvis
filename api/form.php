@@ -203,7 +203,6 @@ function nu_render_field($field, $value = '', $record = []) {
     $helpText    = $field['help_text'] ?? ($field['helptext'] ?? '');
     $cssClass    = trim('nu-input ' . ($field['css_class'] ?? ($field['cssclass'] ?? '')));
 
-    // col span via 12-col grid — set on wrapper
     $col = (int)($field['col'] ?? 12);
     if ($col < 1 || $col > 12) $col = 12;
 
@@ -370,7 +369,7 @@ function nu_render_field($field, $value = '', $record = []) {
     return $wrapStart . $labelHtml . $control . $helpHtml . '</div>';
 }
 
-// ── Section colour palette (cycles if more than 5 sections) ─────────────────
+// ── Section colour palette ───────────────────────────────────────────────────
 function nu_section_color($index) {
     $palette = [
         ['border'=>'#01696f','bg'=>'rgba(1,105,111,0.04)','head'=>'rgba(1,105,111,0.08)','text'=>'#01696f'],
@@ -382,44 +381,65 @@ function nu_section_color($index) {
     return $palette[$index % count($palette)];
 }
 
+// ── nuToggleContainer — emitted once per page as a data-uri attribute
+//    (avoids the innerHTML-script-blocking problem)
+function nu_toggle_script() {
+    return '<script id="nuToggleInit">'
+         . 'if(!window.nuToggleContainer){'
+         . 'window.nuToggleContainer=function(btn){'
+         . 'if(!btn)return;'
+         . 'var tid=btn.getAttribute("data-target");'
+         . 'if(!tid)return;'
+         . 'var body=document.getElementById(tid);'
+         . 'if(!body)return;'
+         . 'var hidden=body.style.display==="none"||body.style.display==="";'
+         . 'body.style.display=hidden?"block":"none";'
+         . 'btn.innerHTML=hidden?"&#9660;":"&#9654;";'
+         . '}}'
+         . '</s' . 'cript>';
+}
+
 // ── Recursive layout renderer ────────────────────────────────────────────────
 function nu_render_layout_node($node, $record, $sectionIndex = 0) {
     $type = $node['type'] ?? 'field';
 
     // ── SECTION ──────────────────────────────────────────────────────────────
     if ($type === 'section') {
-        $id         = nu_attr($node['id'] ?? ('sec_' . $sectionIndex));
+        $id         = 'sec_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $node['id'] ?? ('s' . $sectionIndex));
         $label      = nu_html($node['label'] ?? 'Section');
         $collapsible= !empty($node['collapsible']);
         $collapsed  = !empty($node['collapsed']);
         $col        = nu_section_color($sectionIndex);
-        $bodyStyle  = $collapsed ? 'display:none;' : '';
+        $bodyStyle  = $collapsed ? 'display:none;' : 'display:block;';
+        $icon       = $collapsed ? '&#9654;' : '&#9660;';
 
-        $toggleBtn = '';
-        if ($collapsible) {
-            $icon = $collapsed ? '&#9654;' : '&#9660;';
-            $toggleBtn = '<button type="button" class="nu-section-toggle" data-target="' . $id . '-body" '
-                       . 'style="background:none;border:none;cursor:pointer;font-size:14px;color:' . $col['text'] . ';padding:0 6px 0 0;line-height:1;" '
-                       . 'onclick="nuToggleContainer(this)">' . $icon . '</button>';
-        }
-
-        $html  = '<div class="nu-section" id="' . $id . '" style="'
+        $html  = '<div class="nu-section" id="' . nu_attr($id) . '" style="'
                . 'border:1.5px solid ' . $col['border'] . ';'
-               . 'border-radius:10px;'
-               . 'margin-bottom:20px;'
-               . 'background:' . $col['bg'] . ';'
-               . 'overflow:hidden;">';
+               . 'border-radius:10px;margin-bottom:20px;'
+               . 'background:' . $col['bg'] . ';overflow:hidden;">';
+
+        // Header — clicking the header calls nuToggleContainer on the button
         $html .= '<div class="nu-section-header" style="'
                . 'display:flex;align-items:center;gap:6px;'
                . 'padding:10px 16px;'
                . 'background:' . $col['head'] . ';'
                . 'border-bottom:1px solid ' . $col['border'] . ';'
-               . 'cursor:' . ($collapsible ? 'pointer' : 'default') . ';"'
-               . ($collapsible ? ' onclick="nuToggleContainer(this.querySelector(\'[data-target]\'))"' : '') . '>';
-        $html .= $toggleBtn;
+               . 'user-select:none;'
+               . ($collapsible ? 'cursor:pointer;' : '') . '"'
+               . ($collapsible ? ' onclick="nuToggleContainer(this.querySelector(\'.nu-section-toggle\'))"' : '') . '>';
+
+        if ($collapsible) {
+            $html .= '<button type="button" class="nu-section-toggle"'
+                   . ' data-target="' . nu_attr($id) . '-body"'
+                   . ' onclick="event.stopPropagation();nuToggleContainer(this)"'
+                   . ' style="background:none;border:none;cursor:pointer;font-size:14px;'
+                   . 'color:' . $col['text'] . ';padding:0 6px 0 0;line-height:1;flex-shrink:0;">'
+                   . $icon . '</button>';
+        }
+
         $html .= '<span style="font-weight:700;font-size:14px;color:' . $col['text'] . ';">' . $label . '</span>';
         $html .= '</div>';
-        $html .= '<div id="' . $id . '-body" class="nu-section-body" style="padding:16px;' . $bodyStyle . '">';
+        $html .= '<div id="' . nu_attr($id) . '-body" class="nu-section-body" style="padding:16px;' . $bodyStyle . '">';
 
         $si = 0;
         foreach (($node['children'] ?? []) as $child) {
@@ -432,32 +452,35 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
 
     // ── GROUP ────────────────────────────────────────────────────────────────
     if ($type === 'group') {
-        $id         = nu_attr($node['id'] ?? ('grp_' . $sectionIndex));
+        $id         = 'grp_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $node['id'] ?? ('g' . $sectionIndex));
         $label      = nu_html($node['label'] ?? 'Group');
         $collapsible= !empty($node['collapsible']);
         $collapsed  = !empty($node['collapsed']);
-        $bodyStyle  = $collapsed ? 'display:none;' : '';
+        $bodyStyle  = $collapsed ? 'display:none;' : 'display:block;';
+        $icon       = $collapsed ? '&#9654;' : '&#9660;';
 
-        $toggleBtn = '';
-        if ($collapsible) {
-            $icon = $collapsed ? '&#9654;' : '&#9660;';
-            $toggleBtn = '<button type="button" class="nu-group-toggle" data-target="' . $id . '-body" '
-                       . 'style="background:none;border:none;cursor:pointer;font-size:13px;color:#666;padding:0 6px 0 0;line-height:1;" '
-                       . 'onclick="nuToggleContainer(this)">' . $icon . '</button>';
-        }
-
-        $html  = '<div class="nu-group" id="' . $id . '" style="border:1px solid #ddd;border-radius:8px;margin-bottom:16px;overflow:hidden;">';
+        $html  = '<div class="nu-group" id="' . nu_attr($id) . '" style="border:1px solid #ddd;border-radius:8px;margin-bottom:16px;overflow:hidden;">';
         $html .= '<div class="nu-group-header" style="'
                . 'display:flex;align-items:center;gap:6px;'
                . 'padding:8px 14px;'
                . 'background:var(--bg-elevated,#f8f9fa);'
                . 'border-bottom:1px solid #ddd;'
-               . 'cursor:' . ($collapsible ? 'pointer' : 'default') . ';"'
-               . ($collapsible ? ' onclick="nuToggleContainer(this.querySelector(\'[data-target]\'))"' : '') . '>';
-        $html .= $toggleBtn;
+               . 'user-select:none;'
+               . ($collapsible ? 'cursor:pointer;' : '') . '"'
+               . ($collapsible ? ' onclick="nuToggleContainer(this.querySelector(\'.nu-group-toggle\'))"' : '') . '>';
+
+        if ($collapsible) {
+            $html .= '<button type="button" class="nu-group-toggle"'
+                   . ' data-target="' . nu_attr($id) . '-body"'
+                   . ' onclick="event.stopPropagation();nuToggleContainer(this)"'
+                   . ' style="background:none;border:none;cursor:pointer;font-size:13px;'
+                   . 'color:#666;padding:0 6px 0 0;line-height:1;flex-shrink:0;">'
+                   . $icon . '</button>';
+        }
+
         $html .= '<span style="font-weight:600;font-size:13px;color:var(--text,#333);">' . $label . '</span>';
         $html .= '</div>';
-        $html .= '<div id="' . $id . '-body" class="nu-group-body" style="padding:14px;' . $bodyStyle . '">';
+        $html .= '<div id="' . nu_attr($id) . '-body" class="nu-group-body" style="padding:14px;' . $bodyStyle . '">';
 
         $gi = 0;
         foreach (($node['children'] ?? []) as $child) {
@@ -470,7 +493,7 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
 
     // ── ROW (12-col CSS grid) ────────────────────────────────────────────────
     if ($type === 'row') {
-        $html = '<div class="nu-form-row" style="display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px;">';
+        $html = '<div class="nu-form-row" style="display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px;align-items:start;">';
         foreach (($node['children'] ?? []) as $field) {
             $html .= nu_render_field($field, nu_field_value($record, $field), $record);
         }
@@ -479,10 +502,9 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
     }
 
     // ── PLAIN FIELD (backward-compat: flat layout) ───────────────────────────
-    // Wrap solo field in a full-width single-col row
     $col = (int)($node['col'] ?? 12);
     $node['col'] = $col;
-    return '<div class="nu-form-row" style="display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px;">'
+    return '<div class="nu-form-row" style="display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px;align-items:start;">'
          . nu_render_field($node, nu_field_value($record, $node), $record)
          . '</div>';
 }
@@ -501,19 +523,6 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
            . ' data-is-new="'     . ($recordId ? '0' : '1') . '"'
            . ' onsubmit="event.preventDefault(); submitNuForm(this);">';
     $html .= '<h3 style="margin-top:0;margin-bottom:20px;">' . nu_html($formName) . '</h3>';
-
-    // Toggle helper — inline once per form
-    $html .= '<script>'
-           . 'if(!window.nuToggleContainer){'
-           . 'window.nuToggleContainer=function(btn){'
-           . 'var tid=btn.dataset.target;'
-           . 'var body=document.getElementById(tid);'
-           . 'if(!body)return;'
-           . 'var hidden=body.style.display==="none";'
-           . 'body.style.display=hidden?"":"none";'
-           . 'btn.innerHTML=hidden?"&#9660;":"&#9654;";'
-           . '}}'
-           . '</script>';
 
     $si = 0;
     foreach ($layout as $node) {
@@ -544,7 +553,7 @@ function nu_flatten_layout($layout) {
     return $fields;
 }
 
-/* ── Subform helpers ─────────────────────────────────────────────────── */
+/* ── Subform helpers ─────────────────────────────────────── */
 
 function nu_handle_subform_list() {
     $code     = $_GET['code']      ?? '';
@@ -650,7 +659,7 @@ function nu_handle_subform_delete() {
     nu_json(['success' => true]);
 }
 
-/* ── Standard handlers ───────────────────────────────────────────────── */
+/* ── Standard handlers ───────────────────────────────────── */
 
 function nu_handle_render() {
     $code = $_GET['code'] ?? '';
@@ -756,7 +765,7 @@ function nu_handle_save() {
     }
 }
 
-/* ── Router ──────────────────────────────────────────────────────────── */
+/* ── Router ──────────────────────────────────────────────── */
 try {
     $action = $_GET['action'] ?? '';
     switch ($action) {
