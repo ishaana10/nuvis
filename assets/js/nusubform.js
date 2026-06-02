@@ -37,6 +37,19 @@
     var m    = meta(container);
     var body = container.querySelector('.nu-subform-body');
     if (!body) return;
+
+    // If no parent_id yet (new unsaved parent), just show empty grid shell
+    if (!m.parentId) {
+      // Still need layout to render the empty grid header — fetch via subform_fields
+      apiJson('api/form.php?action=subform_fields&code=' + encodeURIComponent(m.code))
+        .then(function (json) {
+          if (!json.success) { body.innerHTML = '<div style="padding:12px;color:red;">' + esc(json.error) + '</div>'; return; }
+          render(container, json.data.layout, [], json.data.pk || 'id');
+        })
+        .catch(function (e) { body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>'; });
+      return;
+    }
+
     body.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:13px;">Loading...</div>';
 
     apiJson('api/form.php?action=subform_list&code=' + encodeURIComponent(m.code)
@@ -270,9 +283,12 @@
         else data[fname] = el.value;
       });
 
+      // Re-read parentId at save time — it may have been set after the modal opened
+      var currentParentId = container.dataset.parentId || '';
+
       var url = 'api/form.php?action=subform_save&code=' + encodeURIComponent(m.code)
               + '&fk=' + encodeURIComponent(m.fk)
-              + '&parent_id=' + encodeURIComponent(m.parentId)
+              + '&parent_id=' + encodeURIComponent(currentParentId)
               + (rowId ? '&id=' + encodeURIComponent(rowId) : '');
 
       saveBtn.disabled = true;
@@ -321,9 +337,11 @@
       });
     }
     btn.disabled = true;
+    // Re-read parentId at save time
+    var currentParentId = container.dataset.parentId || '';
     apiJson('api/form.php?action=subform_save&code=' + encodeURIComponent(m.code)
       + '&fk=' + encodeURIComponent(m.fk)
-      + '&parent_id=' + encodeURIComponent(m.parentId)
+      + '&parent_id=' + encodeURIComponent(currentParentId)
       + (rowId ? '&id=' + encodeURIComponent(rowId) : ''),
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
     .then(function (json) {
@@ -346,7 +364,7 @@
       scope.querySelectorAll('.nu-subform-container').forEach(function (el) {
         if (!el.dataset.sfInit) {
           el.dataset.sfInit = '1';
-          if (el.dataset.parentId) nuSubform.load(el);
+          nuSubform.load(el);
         }
       });
     },
@@ -354,21 +372,22 @@
     load: load,
 
     /**
-     * Triggered by the "+ Add Row" toolbar button.
+     * Triggered by the "+" Add Row" toolbar button.
+     * Uses subform_fields (layout-only) so it works even when parent_id is empty
+     * (i.e. the parent record has not been saved yet / preview mode).
      */
     addRow: function (btn) {
       var container = btn.closest('.nu-subform-container');
       if (!container) return;
-      // Fetch layout then open modal
       var m = meta(container);
-      apiJson('api/form.php?action=subform_list&code=' + encodeURIComponent(m.code)
-        + '&fk=' + encodeURIComponent(m.fk)
-        + '&parent_id=' + encodeURIComponent(m.parentId))
-      .then(function (json) {
-        if (!json.success) { toast(json.error || 'Failed to load', 'error'); return; }
-        openModal(container, json.data.layout, json.data.pk || 'id', null, json.data.records || []);
-      })
-      .catch(function (e) { toast('Error: ' + e.message, 'error'); });
+      if (!m.code) { toast('Subform not configured (missing form code)', 'error'); return; }
+
+      apiJson('api/form.php?action=subform_fields&code=' + encodeURIComponent(m.code))
+        .then(function (json) {
+          if (!json.success) { toast(json.error || 'Failed to load subform', 'error'); return; }
+          openModal(container, json.data.layout, json.data.pk || 'id', null, []);
+        })
+        .catch(function (e) { toast('Error: ' + e.message, 'error'); });
     },
 
     /**
