@@ -151,6 +151,14 @@ function nu_field_value($record, $field) {
 function nu_attr($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 function nu_html($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 
+// ── Generate a v4 UUID (no external dependencies) ────────────────────────────
+function nu_generate_uuid() {
+    $data = random_bytes(16);
+    $data[6] = chr((ord($data[6]) & 0x0f) | 0x40); // version 4
+    $data[8] = chr((ord($data[8]) & 0x3f) | 0x80); // variant RFC 4122
+    return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+}
+
 function nu_render_options($field, $selectedValue = null) {
     $options = [];
     $sourceType = $field['source_type'] ?? ($field['sourcetype'] ?? 'static');
@@ -211,6 +219,24 @@ function nu_render_field($field, $value = '', $record = []) {
     $helpHtml  = $helpText !== '' ? '<div style="font-size:12px;color:#888;margin-top:4px;">' . nu_html($helpText) . '</div>' : '';
 
     switch ($type) {
+
+        // ── FIX: uuid fields render as hidden on new records (value generated
+        //    server-side at save time) and read-only text on existing records.
+        case 'uuid':
+            if ($value !== '' && $value !== null) {
+                // Editing an existing record — show value read-only so user can see it
+                $control = '<input type="text" class="' . nu_attr($cssClass) . '" value="' . nu_attr($value) . '" readonly style="background:var(--bg-offset,#f5f5f5);color:#888;cursor:default;">'
+                         . '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '">';
+            } else {
+                // New record — emit empty hidden input; server generates UUID at INSERT
+                $control = '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="">';
+                $labelHtml = ''; // no label needed for invisible field
+                $helpHtml  = '';
+                // Return early — no wrapper div needed for a pure hidden field
+                return $control;
+            }
+            break;
+
         case 'textarea':
             $rows    = (int)($field['rows'] ?? 4);
             $control = '<textarea class="' . nu_attr($cssClass) . '" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '"' . $placeholder . $required . ' rows="' . $rows . '">'
@@ -418,7 +444,6 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
                . 'border-radius:10px;margin-bottom:20px;'
                . 'background:' . $col['bg'] . ';overflow:hidden;">';
 
-        // Header — clicking the header calls nuToggleContainer on the button
         $html .= '<div class="nu-section-header" style="'
                . 'display:flex;align-items:center;gap:6px;'
                . 'padding:10px 16px;'
@@ -505,7 +530,7 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
     $col = (int)($node['col'] ?? 12);
     $node['col'] = $col;
     return '<div class="nu-form-row" style="display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px;align-items:start;">'
-         . nu_render_field($node, nu_field_value($record, $node), $record)
+         . nu_render_field($node, nu_field_value($record, $node), $node)
          . '</div>';
 }
 
@@ -615,6 +640,16 @@ function nu_handle_subform_save() {
         if ($name === '') continue;
         $type = nu_field_type($field);
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
+        if ($type === 'uuid') {
+            // On INSERT generate a new UUID; on UPDATE keep existing value from $data
+            if (!$id) {
+                $save[$name] = nu_generate_uuid();
+            } elseif (!empty($data[$name])) {
+                $save[$name] = $data[$name];
+            }
+            // If editing and no value submitted, skip — don't overwrite existing UUID
+            continue;
+        }
         if ($type === 'checkbox') {
             $save[$name] = !empty($data[$name]) ? 1 : 0;
         } else {
@@ -749,6 +784,19 @@ function nu_handle_save() {
         if ($name === '') continue;
         $type = nu_field_type($field);
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
+        // ── FIX: uuid fields are generated server-side on INSERT; preserved on UPDATE
+        if ($type === 'uuid') {
+            if (!$id) {
+                // New record — always generate a fresh UUID regardless of what the client sent
+                $save[$name] = nu_generate_uuid();
+            } elseif (!empty($data[$name])) {
+                // Existing record — keep whatever UUID is already stored
+                $save[$name] = $data[$name];
+            }
+            // If editing and $data[$name] is empty (hidden field stripped), skip entirely
+            // so the UPDATE does not overwrite the existing UUID with null
+            continue;
+        }
         $save[$name] = ($type === 'checkbox') ? (!empty($data[$name]) ? 1 : 0) : ($data[$name] ?? null);
     }
     if (!$save) nu_json(['success' => false, 'error' => 'No fields to save'], 400);
