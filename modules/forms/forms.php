@@ -770,10 +770,10 @@ if (!window._nbFormsModuleInit) {
   };
 
   // ── Patch saveForm to include form_type ──────────────────────────
-  const _origSaveForm = window.saveForm;
+/*  const _origSaveForm = window.saveForm;
   window.saveForm = function() {
     nbFormBuilder._formType = document.querySelector('input[name="formType"]:checked')?.value || 'main';
     if (typeof _origSaveForm === 'function') _origSaveForm();
-  };
+  };*/
 }
 </script>
