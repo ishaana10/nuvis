@@ -84,14 +84,16 @@ function nu_form_columns() {
             'custom_php'=>'formcustomphp','custom_css'=>'formcustomcss','browse_sql'=>'browsesql',
             'browse_columns'=>'browsecolumns','browse_search_enabled'=>'browsesearchenabled',
             'browse_search_placeholder'=>'browsesearchplaceholder','browse_search_fields'=>'browsesearchfields',
-            'browse_page_size'=>'browsepagesize','browse_default_sort'=>'browsedefaultsort'];
+            'browse_page_size'=>'browsepagesize','browse_default_sort'=>'browsedefaultsort',
+            'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode'];
     }
     return ['id'=>'id','name'=>'form_name','code'=>'form_code','table'=>'form_table',
         'layout'=>'form_layout','active'=>'form_active','custom_js'=>'form_custom_js',
         'custom_php'=>'form_custom_php','custom_css'=>'form_custom_css','browse_sql'=>'browse_sql',
         'browse_columns'=>'browse_columns','browse_search_enabled'=>'browse_search_enabled',
         'browse_search_placeholder'=>'browse_search_placeholder','browse_search_fields'=>'browse_search_fields',
-        'browse_page_size'=>'browse_page_size','browse_default_sort'=>'browse_default_sort'];
+        'browse_page_size'=>'browse_page_size','browse_default_sort'=>'browse_default_sort',
+        'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode'];
 }
 
 function nu_get_form($code) {
@@ -159,6 +161,12 @@ function nu_generate_uuid() {
     return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 }
 
+// ── Read form_pk_type from the form record ────────────────────────────────────
+function nu_form_pk_type($form) {
+    $c = nu_form_columns();
+    return strtolower(trim((string)($form[$c['pk_type']] ?? 'auto')));
+}
+
 function nu_render_options($field, $selectedValue = null) {
     $options = [];
     $sourceType = $field['source_type'] ?? ($field['sourcetype'] ?? 'static');
@@ -220,19 +228,14 @@ function nu_render_field($field, $value = '', $record = []) {
 
     switch ($type) {
 
-        // ── FIX: uuid fields render as hidden on new records (value generated
-        //    server-side at save time) and read-only text on existing records.
         case 'uuid':
             if ($value !== '' && $value !== null) {
-                // Editing an existing record — show value read-only so user can see it
                 $control = '<input type="text" class="' . nu_attr($cssClass) . '" value="' . nu_attr($value) . '" readonly style="background:var(--bg-offset,#f5f5f5);color:#888;cursor:default;">'
                          . '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '">';
             } else {
-                // New record — emit empty hidden input; server generates UUID at INSERT
                 $control = '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="">';
-                $labelHtml = ''; // no label needed for invisible field
+                $labelHtml = '';
                 $helpHtml  = '';
-                // Return early — no wrapper div needed for a pure hidden field
                 return $control;
             }
             break;
@@ -407,8 +410,6 @@ function nu_section_color($index) {
     return $palette[$index % count($palette)];
 }
 
-// ── nuToggleContainer — emitted once per page as a data-uri attribute
-//    (avoids the innerHTML-script-blocking problem)
 function nu_toggle_script() {
     return '<script id="nuToggleInit">'
          . 'if(!window.nuToggleContainer){'
@@ -634,20 +635,25 @@ function nu_handle_subform_save() {
 
     if ($table === '') nu_json(['success' => false, 'error' => 'No table'], 400);
 
+    $pk     = nu_get_pk($table);
+    $pkType = nu_form_pk_type($form);
+
     $save = [];
+
+    // ── FIX: inject UUID into PK column for uuid-pk subforms on INSERT ────────
+    if (!$id && $pkType === 'uuid') {
+        $save[$pk] = nu_generate_uuid();
+    }
+
     foreach ($fields as $field) {
         $name = nu_safe_ident(nu_field_name($field));
         if ($name === '') continue;
         $type = nu_field_type($field);
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
         if ($type === 'uuid') {
-            // On INSERT generate a new UUID; on UPDATE keep existing value from $data
-            if (!$id) {
-                $save[$name] = nu_generate_uuid();
-            } elseif (!empty($data[$name])) {
-                $save[$name] = $data[$name];
-            }
-            // If editing and no value submitted, skip — don't overwrite existing UUID
+            // Layout uuid field — skip on INSERT (PK already set above); preserve on UPDATE
+            if (!$id) continue;
+            if (!empty($data[$name])) $save[$name] = $data[$name];
             continue;
         }
         if ($type === 'checkbox') {
@@ -661,11 +667,20 @@ function nu_handle_subform_save() {
         $save[$fk] = $parentId;
     }
 
-    $pk = nu_get_pk($table);
+    // Guard: must have at least one column beyond the PK itself
+    $saveWithoutPk = array_filter($save, fn($k) => $k !== $pk, ARRAY_FILTER_USE_KEY);
+    if (!$id && !$saveWithoutPk && !($pkType === 'uuid')) {
+        nu_json(['success' => false, 'error' => 'No fields to save'], 400);
+    }
 
     if ($id) {
         $sets = []; $params = [];
-        foreach ($save as $col => $val) { $sets[] = "`{$col}` = ?"; $params[] = $val; }
+        foreach ($save as $col => $val) {
+            // Never update the PK column itself
+            if ($col === $pk) continue;
+            $sets[] = "`{$col}` = ?"; $params[] = $val;
+        }
+        if (!$sets) nu_json(['success' => false, 'error' => 'No fields to update'], 400);
         $params[] = $id;
         nu_q("UPDATE `{$table}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
         nu_json(['success' => true, 'id' => $id]);
@@ -673,7 +688,8 @@ function nu_handle_subform_save() {
         $cols = array_keys($save);
         $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
-        nu_json(['success' => true, 'id' => nu_db()->lastInsertId()]);
+        $newId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
+        nu_json(['success' => true, 'id' => $newId]);
     }
 }
 
@@ -772,44 +788,68 @@ function nu_handle_save() {
     $id   = $_GET['id']   ?? '';
     $data = nu_request_json();
     if ($code === '') nu_json(['success' => false, 'error' => 'Missing code'], 400);
+
     $form   = nu_get_form($code);
     if (!$form) nu_json(['success' => false, 'error' => 'Form not found'], 404);
+
     $c      = nu_form_columns();
     $table  = nu_safe_ident($form[$c['table']] ?? '');
     if ($table === '') nu_json(['success' => false, 'error' => 'No table configured'], 400);
+
+    $pk     = nu_get_pk($table);
+    $pkType = nu_form_pk_type($form);
     $fields = nu_flatten_layout(nu_decode_layout($form));
-    $save   = [];
+
+    $save = [];
+
+    // ── FIX Bug 1: inject UUID into the actual PK column on INSERT ────────────
+    // This runs regardless of whether a uuid-type field exists in the layout.
+    if (!$id && $pkType === 'uuid') {
+        $save[$pk] = nu_generate_uuid();
+    }
+
     foreach ($fields as $field) {
         $name = nu_safe_ident(nu_field_name($field));
         if ($name === '') continue;
         $type = nu_field_type($field);
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
-        // ── FIX: uuid fields are generated server-side on INSERT; preserved on UPDATE
+
         if ($type === 'uuid') {
-            if (!$id) {
-                // New record — always generate a fresh UUID regardless of what the client sent
-                $save[$name] = nu_generate_uuid();
-            } elseif (!empty($data[$name])) {
-                // Existing record — keep whatever UUID is already stored
-                $save[$name] = $data[$name];
-            }
-            // If editing and $data[$name] is empty (hidden field stripped), skip entirely
-            // so the UPDATE does not overwrite the existing UUID with null
+            // Layout uuid-type field — on INSERT the PK is already injected above;
+            // skip to avoid double-write. On UPDATE preserve submitted value.
+            if (!$id) continue;
+            if (!empty($data[$name])) $save[$name] = $data[$name];
             continue;
         }
+
         $save[$name] = ($type === 'checkbox') ? (!empty($data[$name]) ? 1 : 0) : ($data[$name] ?? null);
     }
-    if (!$save) nu_json(['success' => false, 'error' => 'No fields to save'], 400);
+
+    // ── FIX Bug 2: guard moved to AFTER uuid PK injection ─────────────────────
+    // Only block if there are truly zero saveable columns (not counting the PK itself).
+    $saveWithoutPk = array_filter($save, fn($k) => $k !== $pk, ARRAY_FILTER_USE_KEY);
+    if (!$id && empty($saveWithoutPk) && $pkType !== 'uuid') {
+        nu_json(['success' => false, 'error' => 'No fields to save'], 400);
+    }
+
     if ($id) {
         $sets = []; $params = [];
-        foreach ($save as $col => $val) { $sets[] = "`{$col}` = ?"; $params[] = $val; }
-        $pk = nu_get_pk($table); $params[] = $id;
+        foreach ($save as $col => $val) {
+            // ── FIX Bug 3: never UPDATE the PK column itself ──────────────────
+            if ($col === $pk) continue;
+            $sets[] = "`{$col}` = ?"; $params[] = $val;
+        }
+        if (!$sets) nu_json(['success' => false, 'error' => 'No fields to update'], 400);
+        $params[] = $id;
         nu_q("UPDATE `{$table}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
         nu_json(['success' => true, 'id' => $id]);
     } else {
-        $cols = array_keys($save); $placeholders = array_fill(0, count($cols), '?');
+        $cols = array_keys($save);
+        $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
-        nu_json(['success' => true, 'id' => nu_db()->lastInsertId()]);
+        // For uuid-pk tables, lastInsertId() returns 0 — return the generated UUID instead
+        $newId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
+        nu_json(['success' => true, 'id' => $newId]);
     }
 }
 
