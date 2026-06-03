@@ -2,7 +2,7 @@
 /**
  * api/forms.php
  * CRUD for nu_forms builder records.
- * Actions: get, save, list, delete
+ * Actions: get, save, list, delete, get_by_code, patch_layout
  */
 header('Content-Type: application/json');
 require_once '../config.php';
@@ -20,10 +20,12 @@ $db     = NuDatabase::getInstance();
 $action = $_GET['action'] ?? '';
 
 switch ($action) {
-    case 'get':    actionGet($db);    break;
-    case 'save':   actionSave($db);   break;
-    case 'list':   actionList($db);   break;
-    case 'delete': actionDelete($db); break;
+    case 'get':          actionGet($db);         break;
+    case 'save':         actionSave($db);         break;
+    case 'list':         actionList($db);         break;
+    case 'delete':       actionDelete($db);       break;
+    case 'get_by_code':  actionGetByCode($db);    break;
+    case 'patch_layout': actionPatchLayout($db);  break;
     default:
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
 }
@@ -45,6 +47,62 @@ function actionGet($db) {
             return;
         }
         echo json_encode(['success' => true, 'form' => $form]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+// ── GET a single form by form_code ────────────────────────────────────────
+// Used by the FK-builder panel to fetch child form layout for createFkField()
+function actionGetByCode($db) {
+    $code = $_GET['code'] ?? '';
+    if (!$code) {
+        echo json_encode(['success' => false, 'error' => 'Missing code']);
+        return;
+    }
+    try {
+        $form = $db->fetchOne(
+            'SELECT * FROM nu_forms WHERE form_code = ? LIMIT 1',
+            [$code]
+        );
+        if (!$form) {
+            echo json_encode(['success' => false, 'error' => 'Form not found']);
+            return;
+        }
+        echo json_encode(['success' => true, 'form' => $form]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+// ── PATCH only the form_layout column of a form ───────────────────────────
+// Used by createFkField() to inject a hidden FK field into the child layout
+// without touching any other form settings.
+function actionPatchLayout($db) {
+    $id = $_GET['id'] ?? '';
+    if (!$id) {
+        echo json_encode(['success' => false, 'error' => 'Missing id']);
+        return;
+    }
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true);
+    if (!is_array($data) || !isset($data['form_layout'])) {
+        echo json_encode(['success' => false, 'error' => 'Missing form_layout in payload']);
+        return;
+    }
+    $layout = $data['form_layout'];
+    // Accept either a JSON string or a raw array
+    if (is_array($layout)) {
+        $layout = json_encode($layout);
+    }
+    try {
+        $db->update(
+            'nu_forms',
+            ['form_layout' => $layout, 'updated_at' => date('Y-m-d H:i:s')],
+            'form_id = ?',
+            [$id]
+        );
+        echo json_encode(['success' => true]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
