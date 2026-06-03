@@ -2,19 +2,24 @@
  * nuSubform — runtime subform engine
  * Supports three views: grid | form | inline
  * Each view has: Add Row button, Edit (modal), Delete row
- * All field types rendered via the same nu_render_field pipeline (PHP)
- * or via nuSubform._buildFieldHtml (JS fallback for inline)
  *
- * Bug fixes (2026-06-03):
- *  1. onParentSaved(newId) — called by nubuilder-next.js after the parent
- *     record saves. Writes newId into every .nu-subform-container[data-parent-id]
- *     on the page and reloads them via subform_list so saved rows appear.
- *  2. load() modal-save callback now always re-reads dataset.parentId AFTER
- *     onParentSaved has had a chance to run.
- *  3. nu:parent:saved DOM event also triggers onParentSaved for loose integrations.
+ * New (2026-06-03):
+ *  - Pending-row queue: when parent_id is empty (new unsaved parent), rows
+ *    are held in memory and the grid shows them immediately as "pending".
+ *    onParentSaved() flushes the queue to the DB in order, then reloads.
+ *  - "Stay open" behaviour removed — save now always closes the modal;
+ *    the pending-row display keeps the UX consistent.
  */
 (function (window) {
   'use strict';
+
+  /* ── pending queue keyed by container element ─────────────────────── */
+  var _pendingRows = new WeakMap(); // container → [{layout, pk, data}]
+
+  function getPending(container) {
+    if (!_pendingRows.has(container)) _pendingRows.set(container, []);
+    return _pendingRows.get(container);
+  }
 
   /* ── tiny helpers ─────────────────────────────────────────────────── */
   function esc(s) {
@@ -46,12 +51,12 @@
     var body = container.querySelector('.nu-subform-body');
     if (!body) return;
 
-    // If no parent_id yet (new unsaved parent), show empty grid shell only
+    // If no parent_id yet (new unsaved parent), show pending rows only
     if (!m.parentId) {
       apiJson('api/form.php?action=subform_fields&code=' + encodeURIComponent(m.code))
         .then(function (json) {
           if (!json.success) { body.innerHTML = '<div style="padding:12px;color:red;">' + esc(json.error) + '</div>'; return; }
-          render(container, json.data.layout, [], json.data.pk || 'id');
+          renderWithPending(container, json.data.layout, [], json.data.pk || 'id');
         })
         .catch(function (e) { body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>'; });
       return;
@@ -60,13 +65,27 @@
     body.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:13px;">Loading...</div>';
 
     apiJson('api/form.php?action=subform_list&code=' + encodeURIComponent(m.code)
-      + '&fk='       + encodeURIComponent(m.fk)
+      + '&fk='        + encodeURIComponent(m.fk)
       + '&parent_id=' + encodeURIComponent(m.parentId))
     .then(function (json) {
       if (!json.success) { body.innerHTML = '<div style="padding:12px;color:red;">' + esc(json.error) + '</div>'; return; }
-      render(container, json.data.layout, json.data.records, json.data.pk || 'id');
+      renderWithPending(container, json.data.layout, json.data.records, json.data.pk || 'id');
     })
     .catch(function (e) { body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>'; });
+  }
+
+  /* ── merge saved records + pending rows before rendering ─────────── */
+  function renderWithPending(container, layout, records, pk) {
+    var pending = getPending(container);
+    // Build synthetic pending records with a temporary _pending flag
+    var pendingRecords = pending.map(function (item, idx) {
+      var r = Object.assign({}, item.data);
+      r[pk] = '__pending__' + idx;
+      r._pending = true;
+      return r;
+    });
+    var allRecords = records.concat(pendingRecords);
+    render(container, layout, allRecords, pk);
   }
 
   function render(container, layout, records, pk) {
@@ -84,10 +103,30 @@
     else                          body.innerHTML = renderFormList(displayLayout, records, pk, m);
 
     body.querySelectorAll('[data-sf-delete]').forEach(function (btn) {
-      btn.addEventListener('click', function () { deleteRow(container, btn.dataset.sfDelete, pk); });
+      btn.addEventListener('click', function () {
+        var id = btn.dataset.sfDelete;
+        if (String(id).indexOf('__pending__') === 0) {
+          // Remove from pending queue
+          var idx = parseInt(id.replace('__pending__', ''), 10);
+          getPending(container).splice(idx, 1);
+          load(container);
+        } else {
+          deleteRow(container, id, pk);
+        }
+      });
     });
     body.querySelectorAll('[data-sf-edit]').forEach(function (btn) {
-      btn.addEventListener('click', function () { openModal(container, layout, pk, btn.dataset.sfEdit, records); });
+      btn.addEventListener('click', function () {
+        var id = btn.dataset.sfEdit;
+        if (String(id).indexOf('__pending__') === 0) {
+          // Edit pending row — reopen modal with existing data
+          var idx = parseInt(id.replace('__pending__', ''), 10);
+          var item = getPending(container)[idx];
+          if (item) openModal(container, item.layout, item.pk, null, [], item.data, idx);
+        } else {
+          openModal(container, layout, pk, id, records);
+        }
+      });
     });
     body.querySelectorAll('[data-sf-inline-save]').forEach(function (btn) {
       btn.addEventListener('click', function () { saveInlineRow(container, btn, pk); });
@@ -107,13 +146,15 @@
       html += '<tr><td colspan="' + (layout.length + 1) + '" style="padding:20px;text-align:center;color:#999;">No rows yet</td></tr>';
     } else {
       records.forEach(function (row) {
-        var id = row[pk];
-        html += '<tr style="border-bottom:1px solid #eee;">';
+        var id      = row[pk];
+        var pending = !!row._pending;
+        var rowStyle = pending ? 'border-bottom:1px solid #eee;opacity:0.7;background:#fffbe6;' : 'border-bottom:1px solid #eee;';
+        html += '<tr style="' + rowStyle + '">';
         layout.forEach(function (f) {
           var fname = f.name || f.fieldname || '';
           var type  = f.type || f.fieldtype || 'text';
           var val   = row[fname + '_display'] !== undefined ? row[fname + '_display'] : (row[fname] !== undefined ? row[fname] : '');
-          html += '<td style="padding:8px 10px;">' + cellDisplay(type, val) + '</td>';
+          html += '<td style="padding:8px 10px;">' + cellDisplay(type, val) + (pending ? ' <em style="color:#999;font-size:10px;">(pending)</em>' : '') + '</td>';
         });
         html += '<td style="padding:8px 10px;white-space:nowrap;">';
         html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-edit="' + esc(id) + '" style="margin-right:4px;">Edit</button>';
@@ -186,9 +227,9 @@
       });
       return '<select ' + base + '>' + opts + '</select>';
     }
-    if (type === 'checkbox') return '<input type="checkbox" name="' + esc(name) + '" value="1"' + (value ? ' checked' : '') + '>';
-    if (type === 'date')     return '<input type="date" '           + base + ' value="' + esc(value) + '">';
-    if (type === 'time')     return '<input type="time" '           + base + ' value="' + esc(value) + '">';
+    if (type === 'checkbox')  return '<input type="checkbox" name="' + esc(name) + '" value="1"' + (value ? ' checked' : '') + '>';
+    if (type === 'date')      return '<input type="date" '           + base + ' value="' + esc(value) + '">';
+    if (type === 'time')      return '<input type="time" '           + base + ' value="' + esc(value) + '">';
     if (type === 'datetime') {
       var v = value ? String(value).replace(' ', 'T').substring(0, 16) : '';
       return '<input type="datetime-local" ' + base + ' value="' + esc(v) + '">';
@@ -203,9 +244,10 @@
   }
 
   /* ── modal for add/edit ───────────────────────────────────────────── */
-  function openModal(container, layout, pk, rowId, records) {
-    var row = {};
-    if (rowId) {
+  // pendingIdx: if set, we're editing an existing pending-queue entry
+  function openModal(container, layout, pk, rowId, records, prefillData, pendingIdx) {
+    var row = prefillData || {};
+    if (rowId && !prefillData) {
       records.forEach(function (r) { if (String(r[pk]) === String(rowId)) row = r; });
     }
 
@@ -216,7 +258,8 @@
     var box = document.createElement('div');
     box.style.cssText = 'background:#fff;border-radius:12px;padding:24px;max-width:640px;width:94%;max-height:90vh;overflow-y:auto;';
 
-    var title = rowId ? 'Edit Row' : 'Add Row';
+    var isPending = pendingIdx !== undefined && pendingIdx !== null;
+    var title = (rowId || isPending) ? 'Edit Row' : 'Add Row';
     box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
       + '<h3 style="margin:0;">' + title + '</h3>'
       + '<button type="button" style="background:none;border:none;font-size:22px;cursor:pointer;line-height:1;" onclick="this.closest(\'[data-sf-overlay]\').remove()">&times;</button>'
@@ -256,6 +299,7 @@
     saveBtn.className = 'nu-btn nu-btn-primary';
     saveBtn.textContent = 'Save';
     saveBtn.onclick = function () {
+      // Collect field values from the modal
       var data = {};
       layout.forEach(function (f) {
         var fname = f.name || f.fieldname || '';
@@ -267,10 +311,23 @@
         data[fname] = (ftype === 'checkbox') ? (el.checked ? 1 : 0) : el.value;
       });
 
-      // ── FIX Bug 2/3: always re-read parentId from dataset at save time.
-      // onParentSaved() may have updated it between modal open and save click.
       var m = meta(container);
 
+      // ── No parent yet: queue locally ──────────────────────────────
+      if (!m.parentId) {
+        var queue = getPending(container);
+        if (isPending) {
+          queue[pendingIdx] = { layout: layout, pk: pk, data: data };
+        } else {
+          queue.push({ layout: layout, pk: pk, data: data });
+        }
+        overlay.remove();
+        load(container); // re-render with pending rows shown
+        toast(isPending ? 'Row updated (will save when parent saves)' : 'Row queued — will save when parent is saved');
+        return;
+      }
+
+      // ── Has parent: save directly ──────────────────────────────────
       var url = 'api/form.php?action=subform_save'
               + '&code='      + encodeURIComponent(m.code)
               + '&fk='        + encodeURIComponent(m.fk)
@@ -289,7 +346,6 @@
             return;
           }
           overlay.remove();
-          // Re-read meta again — parentId may have just been written above
           load(container);
           toast(rowId ? 'Row updated' : 'Row added');
         })
@@ -343,6 +399,30 @@
     .catch(function (e) { btn.disabled = false; toast('Error: ' + e.message, 'error'); });
   }
 
+  /* ── flush pending queue to DB after parent saves ─────────────────── */
+  function flushPending(container, parentId) {
+    var queue = getPending(container);
+    if (!queue.length) return Promise.resolve();
+    var m = meta(container);
+
+    // Save sequentially to preserve order
+    return queue.reduce(function (chain, item) {
+      return chain.then(function () {
+        var url = 'api/form.php?action=subform_save'
+                + '&code='      + encodeURIComponent(m.code)
+                + '&fk='        + encodeURIComponent(m.fk)
+                + '&parent_id=' + encodeURIComponent(parentId);
+        return apiJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item.data) })
+          .then(function (json) {
+            if (!json.success) throw new Error(json.error || 'Subform row save failed');
+          });
+      });
+    }, Promise.resolve())
+    .then(function () {
+      _pendingRows.set(container, []); // clear queue
+    });
+  }
+
   /* ── public API ───────────────────────────────────────────────────── */
   var nuSubform = {
 
@@ -379,27 +459,28 @@
     },
 
     /**
-     * ── FIX Bug 2 ────────────────────────────────────────────────────────────
-     * Called by nubuilder-next.js (submitNuForm) immediately after the parent
-     * record is saved and a new id is returned.
-     *
-     * Writes newId into data-parent-id on EVERY .nu-subform-container inside
-     * the given scope (defaults to document), then reloads each one via
-     * subform_list so previously-saved rows become visible and new rows can
-     * be linked to the correct parent.
-     *
-     * @param {string|number} newId   - the newly-saved parent record id
-     * @param {Element}       [scope] - form element or any ancestor; defaults to document
+     * Called by nubuilder-next.js after the parent record saves.
+     * 1. Writes newId into data-parent-id on every subform container in scope.
+     * 2. Flushes any pending (queued) rows for each container.
+     * 3. Reloads each container from the DB.
      */
     onParentSaved: function (newId, scope) {
       scope = scope || document;
       var id = String(newId || '');
       if (!id) return;
-      scope.querySelectorAll('.nu-subform-container').forEach(function (el) {
+
+      var containers = Array.prototype.slice.call(scope.querySelectorAll('.nu-subform-container'));
+
+      containers.forEach(function (el) {
         el.dataset.parentId = id;
-        // Remove sfInit flag so initAll can re-init if needed
         delete el.dataset.sfInit;
-        load(el);
+
+        flushPending(el, id)
+          .then(function () { load(el); })
+          .catch(function (e) {
+            toast('Error saving queued subform rows: ' + e.message, 'error');
+            load(el);
+          });
       });
     }
   };
