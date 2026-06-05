@@ -2,27 +2,18 @@
  * nb-subform-fk-builder.js
  * FK-aware subform panel patches for nbFormBuilder.
  *
- * What this file does (3 targeted builder gaps from the FK proposal):
+ * GAP 1 — _fieldPanel() subform section
+ *   Replaces the single bare text-input with a proper panel:
+ *     • Child form dropdown  (fetched from api/forms.php?action=list)
+ *     • FK field dropdown    (fetched from that child form's layout)
+ *     • "＋ Create FK Field" button
+ *     • 3 flag toggles: is_fk, hide_in_grid, server_readonly
  *
- *  GAP 1 — _fieldPanel() subform section
- *    Replaces the single bare text-input (<input class="nu-subform-config">)
- *    with a proper panel:
- *      • Child form dropdown  (fetched from api/forms.php?action=list)
- *      • FK field dropdown    (fetched from that child form's layout)
- *      • "＋ Create FK Field" button — calls createFkField()
- *      • 3 flag toggles: is_fk, hide_in_grid, server_readonly
+ * GAP 2 — layout serialiser (_readFieldCard)
+ *   Persists new flags when collecting layout JSON.
  *
- *  GAP 2 — _readFieldCard()
- *    Persists the new flags (is_fk, hide_in_grid, server_readonly,
- *    subform.form_code, subform.fk_field) when collecting layout JSON.
- *
- *  GAP 3 — createFkField()
- *    Auto-adds a hidden FK field to the child form's layout in one click:
- *      { name: "<fk>", type: "hidden", is_fk: true,
- *        hide_in_grid: true, server_readonly: true }
- *
- * Loaded AFTER nubuilder-next.js (which defines nbFormBuilder).
- * Uses the same monkey-patch pattern as nb-form-builder-layout.js.
+ * GAP 3 — createFkField()
+ *   Auto-adds a hidden FK field to the child form's layout.
  */
 (function () {
   'use strict';
@@ -41,42 +32,33 @@
 
     /* ══════════════════════════════════════════════════════════════════
        GAP 1 — patch _fieldPanel() subform section
-       We hook into the existing field-card DOM after it is built.
-       nbFormBuilder builds a card and appends it; we find any card
-       whose type === 'subform' and replace its config panel HTML.
     ═══════════════════════════════════════════════════════════════════ */
 
-    /* Replace the raw text input with the full FK-aware panel */
     function upgradeSubformPanel(card) {
       if (card._sfPanelUpgraded) return;
       card._sfPanelUpgraded = true;
 
-      /* Find the container that currently holds the bare text input */
       var oldInput = card.querySelector('.nu-subform-config, input[placeholder*="order_id"], input[data-sf-config]');
-      var panelTarget = oldInput ? oldInput.parentElement : card.querySelector('.nb-field-config, .nb-cfield-config, .nb-sf-config');
+      var panelTarget = oldInput
+        ? oldInput.parentElement
+        : card.querySelector('.nb-field-config, .nb-cfield-config, .nb-sf-config');
       if (!panelTarget) {
-        /* Fallback: append to card body */
         panelTarget = card.querySelector('.nb-cfield-body') || card;
       }
       if (oldInput) oldInput.remove();
 
-      /* Read existing values (for edit-restore) */
       var existingData = _readSubformData(card);
-
       panelTarget.insertAdjacentHTML('beforeend', _subformPanelHTML(existingData));
 
       var panel = panelTarget.querySelector('.nb-sf-fk-panel');
       if (!panel) return;
 
-      /* Populate child form list asynchronously */
       _populateFormDropdown(panel, existingData.form_code, function () {
-        /* After forms load, populate FK field dropdown */
         if (existingData.form_code) {
           _populateFkDropdown(panel, existingData.form_code, existingData.fk_field);
         }
       });
 
-      /* When child form selection changes → reload FK dropdown */
       var formSel = panel.querySelector('.nb-sf-form-code');
       if (formSel) {
         formSel.addEventListener('change', function () {
@@ -84,7 +66,6 @@
         });
       }
 
-      /* "＋ Create FK Field" button */
       var createBtn = panel.querySelector('.nb-sf-create-fk');
       if (createBtn) {
         createBtn.addEventListener('click', function () {
@@ -94,23 +75,17 @@
     }
 
     function _subformPanelHTML(d) {
-      var fc = d.form_code || '';
-      var fk = d.fk_field  || '';
-      var isFk    = d.is_fk            ? 'checked' : '';
-      var hideGrid= d.hide_in_grid     ? 'checked' : '';
-      var srvRo   = d.server_readonly  ? 'checked' : '';
+      var isFk     = d.is_fk           ? 'checked' : '';
+      var hideGrid = d.hide_in_grid    ? 'checked' : '';
+      var srvRo    = d.server_readonly ? 'checked' : '';
       return [
         '<div class="nb-sf-fk-panel" style="display:flex;flex-direction:column;gap:8px;padding:10px 0;">',
-
-          /* ── Child form ── */
           '<div>',
             '<label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;color:var(--text-muted,#666);">Child Form</label>',
             '<select class="nu-input nb-sf-form-code" style="width:100%;">',
               '<option value="">— select form —</option>',
             '</select>',
           '</div>',
-
-          /* ── FK field ── */
           '<div>',
             '<label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;color:var(--text-muted,#666);">FK Field (links child → parent)</label>',
             '<div style="display:flex;gap:6px;">',
@@ -120,15 +95,12 @@
               '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm nb-sf-create-fk" title="Auto-create hidden FK field in child form">＋ Create FK Field</button>',
             '</div>',
           '</div>',
-
-          /* ── Flag toggles ── */
           '<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);">',
             '<label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">FK Field Flags</label>',
-            _toggleRow('is_fk',           'nb-sf-is-fk',           'is_fk',           isFk,     'FK field',       'Force hidden; builder locks this field'),
-            _toggleRow('hide_in_grid',    'nb-sf-hide-in-grid',    'hide_in_grid',    hideGrid, 'Hide in grid',   'Excludes column from subform table'),
-            _toggleRow('server_readonly', 'nb-sf-server-readonly', 'server_readonly', srvRo,    'Server readonly','PHP ignores POST value; always writes parent ID'),
+            _toggleRow('is_fk',           'nb-sf-is-fk',           'is_fk',           isFk,     'FK field',        'Force hidden; builder locks this field'),
+            _toggleRow('hide_in_grid',    'nb-sf-hide-in-grid',    'hide_in_grid',    hideGrid,  'Hide in grid',    'Excludes column from subform table'),
+            _toggleRow('server_readonly', 'nb-sf-server-readonly', 'server_readonly', srvRo,     'Server readonly', 'PHP ignores POST value; always writes parent ID'),
           '</div>',
-
         '</div>'
       ].join('');
     }
@@ -144,16 +116,13 @@
       ].join('');
     }
 
-    /* Fetch all forms and populate the <select> */
     function _populateFormDropdown(panel, selectedCode, cb) {
       var sel = panel.querySelector('.nb-sf-form-code');
       if (!sel) { if (cb) cb(); return; }
-
       fetch('api/forms.php?action=list', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (json) {
           var forms = (json && json.success && json.forms) ? json.forms : [];
-          /* Remove all except the placeholder */
           while (sel.options.length > 1) sel.remove(1);
           forms.forEach(function (f) {
             var opt = document.createElement('option');
@@ -167,22 +136,21 @@
         .catch(function () { if (cb) cb(); });
     }
 
-    /* Fetch child form layout and populate the FK <select> */
     function _populateFkDropdown(panel, formCode, selectedFk) {
       var sel = panel.querySelector('.nb-sf-fk-field');
       if (!sel || !formCode) return;
-
       fetch('api/form.php?action=subform_fields&code=' + encodeURIComponent(formCode), { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (json) {
-          var fields = (json && json.success && json.data) ? (json.data.all_fields || json.data.layout || []) : [];
+          var fields = (json && json.success && json.data)
+            ? (json.data.all_fields || json.data.layout || [])
+            : [];
           while (sel.options.length > 1) sel.remove(1);
           fields.forEach(function (f) {
             var fname = f.name || f.fieldname || '';
             var ftype = f.type || f.fieldtype || 'text';
             if (!fname) return;
-            var skip  = ['html','heading','divider','fieldset','subform','button'];
-            if (skip.indexOf(ftype) !== -1) return;
+            if (['html','heading','divider','fieldset','subform','button'].indexOf(ftype) !== -1) return;
             var opt = document.createElement('option');
             opt.value = fname;
             opt.textContent = (f.label || f.fieldlabel || fname) + ' [' + fname + ']';
@@ -193,21 +161,49 @@
         .catch(function () {});
     }
 
-    /* Read current subform config from card data attributes */
+    /* Read existing subform config from card data attributes
+       Supports both data-sf-* attributes AND nested subform{} JSON
+       stored in data-field-json (set by _rebuildCanvas). */
     function _readSubformData(card) {
-      return {
+      /* Try data-sf-* first (written back by our serialiser on prior saves) */
+      var fromAttrs = {
         form_code:       card.dataset.sfFormCode       || '',
         fk_field:        card.dataset.sfFkField        || '',
         is_fk:           card.dataset.sfIsFk           === '1',
         hide_in_grid:    card.dataset.sfHideInGrid     === '1',
         server_readonly: card.dataset.sfServerReadonly === '1',
       };
+      if (fromAttrs.form_code) return fromAttrs;
+
+      /* Fallback: try data-field-json which _rebuildCanvas may set */
+      var raw = card.dataset.fieldJson || card.dataset.fieldData || '';
+      if (raw) {
+        try {
+          var obj = JSON.parse(raw);
+          var sf  = obj.subform || {};
+          return {
+            form_code:       sf.form_code  || sf.formcode  || '',
+            fk_field:        sf.fk_field   || sf.fkfield   || '',
+            is_fk:           !!obj.is_fk,
+            hide_in_grid:    !!obj.hide_in_grid,
+            server_readonly: !!obj.server_readonly,
+          };
+        } catch (e) {}
+      }
+
+      /* Last resort: scan data-* attributes for any subform-related keys
+         e.g. data-subform-form-code, data-form-code, data-fk-field */
+      return {
+        form_code:       card.dataset.subformFormCode || card.dataset.formCode || '',
+        fk_field:        card.dataset.subformFkField  || card.dataset.fkField  || '',
+        is_fk:           false,
+        hide_in_grid:    false,
+        server_readonly: false,
+      };
     }
 
     /* ══════════════════════════════════════════════════════════════════
        GAP 3 — createFkField()
-       Adds { name, type:"hidden", is_fk:true, hide_in_grid:true,
-               server_readonly:true } to the child form layout via API.
     ═══════════════════════════════════════════════════════════════════ */
     function _createFkField(panel) {
       var formCodeSel = panel.querySelector('.nb-sf-form-code');
@@ -215,17 +211,13 @@
       var formCode = formCodeSel ? formCodeSel.value : '';
       var fkName   = fkFieldSel  ? fkFieldSel.value  : '';
 
-      if (!formCode) {
-        _sfToast('Select a child form first', 'error'); return;
-      }
+      if (!formCode) { _sfToast('Select a child form first', 'error'); return; }
       if (!fkName) {
-        /* Prompt for a name */
         fkName = window.prompt('Enter FK field name (e.g. order_id):');
         if (!fkName || !fkName.trim()) return;
         fkName = fkName.trim().replace(/[^a-zA-Z0-9_]/g, '_');
       }
 
-      /* Fetch the child form's current layout, then PATCH in the FK field */
       fetch('api/forms.php?action=get_by_code&code=' + encodeURIComponent(formCode), { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (json) {
@@ -235,7 +227,6 @@
           try { layout = JSON.parse(form.form_layout || '[]'); } catch (e) { layout = []; }
           if (!Array.isArray(layout)) layout = [];
 
-          /* Check if FK field already exists */
           var exists = layout.some(function (f) {
             return (f.name || f.fieldname || '') === fkName;
           });
@@ -244,29 +235,24 @@
             return null;
           }
 
-          /* Append the hidden FK field */
           layout.push({
-            name:            fkName,
-            label:           fkName,
-            type:            'hidden',
-            is_fk:           true,
-            hide_in_grid:    true,
-            server_readonly: true
+            name: fkName, label: fkName, type: 'hidden',
+            is_fk: true, hide_in_grid: true, server_readonly: true
           });
 
-          /* Save back via patch_layout */
-          return fetch('api/forms.php?action=patch_layout&id=' + encodeURIComponent(form.form_id || form.id || ''), {
-            method:  'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ form_layout: JSON.stringify(layout) })
-          }).then(function (r) { return r.json(); });
+          return fetch(
+            'api/forms.php?action=patch_layout&id=' + encodeURIComponent(form.form_id || form.id || ''),
+            {
+              method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ form_layout: JSON.stringify(layout) })
+            }
+          ).then(function (r) { return r.json(); });
         })
         .then(function (saveJson) {
           if (!saveJson) return;
           if (!saveJson.success) { _sfToast(saveJson.error || 'Save failed', 'error'); return; }
           _sfToast('FK field "' + fkName + '" created in child form ' + formCode);
-          /* Refresh the FK dropdown so the new field appears */
           _populateFkDropdown(panel, formCode, fkName);
         })
         .catch(function (e) { _sfToast('Error: ' + e.message, 'error'); });
@@ -278,40 +264,28 @@
     }
 
     /* ══════════════════════════════════════════════════════════════════
-       GAP 2 — patch layout serialiser (_readFieldCard)
-       We wrap whichever method nbFormBuilder uses to serialise the
-       canvas (getLayout / collectLayout / _serializeCanvas etc.) and
-       augment subform field objects with the FK panel values.
+       GAP 2 — patch layout serialiser
     ═══════════════════════════════════════════════════════════════════ */
-
     function _augmentSubformData(fieldObj, card) {
-      var type = fieldObj.type || fieldObj.fieldtype || '';
-      if (type !== 'subform') return fieldObj;
-
-      var panel = card.querySelector('.nb-sf-fk-panel');
+      if ((fieldObj.type || fieldObj.fieldtype || '') !== 'subform') return fieldObj;
+      var panel       = card.querySelector('.nb-sf-fk-panel');
       if (!panel) return fieldObj;
-
       var formCodeSel = panel.querySelector('.nb-sf-form-code');
       var fkFieldSel  = panel.querySelector('.nb-sf-fk-field');
       var isFkChk     = panel.querySelector('.nb-sf-is-fk');
       var hideChk     = panel.querySelector('.nb-sf-hide-in-grid');
       var srvRoChk    = panel.querySelector('.nb-sf-server-readonly');
-
-      var formCode = formCodeSel ? (formCodeSel.value || '') : '';
-      var fkField  = fkFieldSel  ? (fkFieldSel.value  || '') : '';
-
+      var formCode    = formCodeSel ? (formCodeSel.value || '') : '';
+      var fkField     = fkFieldSel  ? (fkFieldSel.value  || '') : '';
       if (!fieldObj.subform) fieldObj.subform = {};
       if (formCode) fieldObj.subform.form_code = formCode;
       if (fkField)  fieldObj.subform.fk_field  = fkField;
-
       if (isFkChk)  { if (isFkChk.checked)  fieldObj.is_fk           = true; else delete fieldObj.is_fk;           }
       if (hideChk)  { if (hideChk.checked)   fieldObj.hide_in_grid    = true; else delete fieldObj.hide_in_grid;    }
       if (srvRoChk) { if (srvRoChk.checked)  fieldObj.server_readonly = true; else delete fieldObj.server_readonly; }
-
       return fieldObj;
     }
 
-    /* Wrap all known layout-serialiser method names */
     var _serializerNames = ['getLayout','collectLayout','_serializeCanvas','serializeLayout','_getLayout'];
     _serializerNames.forEach(function (methodName) {
       if (typeof fb[methodName] !== 'function') return;
@@ -337,53 +311,89 @@
     });
 
     /* ══════════════════════════════════════════════════════════════════
-       Auto-upgrade existing subform cards when the builder canvas loads
+       Auto-upgrade: find every subform card and inject the panel
     ═══════════════════════════════════════════════════════════════════ */
-
     function upgradeAllSubformCards() {
       var canvas = document.getElementById('formCanvas');
       if (!canvas) return;
-      canvas.querySelectorAll('.nb-cfield').forEach(function (card) {
-        var type = card.dataset.type || card.dataset.fieldtype || '';
-        if (type === 'subform') upgradeSubformPanel(card);
-      });
+      canvas.querySelectorAll(
+        '.nb-cfield[data-type="subform"], .nb-cfield[data-fieldtype="subform"]'
+      ).forEach(upgradeSubformPanel);
     }
 
-    /* MutationObserver: upgrade new subform cards as they are added */
-    var _canvasObs = new MutationObserver(function (mutations) {
+    /* ── MutationObserver: upgrade cards as they are added ─────────── */
+    var _obs = new MutationObserver(function (mutations) {
       mutations.forEach(function (m) {
         m.addedNodes.forEach(function (node) {
           if (node.nodeType !== 1) return;
           var type = node.dataset && (node.dataset.type || node.dataset.fieldtype || '');
           if (type === 'subform') upgradeSubformPanel(node);
           if (node.querySelectorAll) {
-            node.querySelectorAll('.nb-cfield[data-type="subform"], .nb-cfield[data-fieldtype="subform"]')
-              .forEach(upgradeSubformPanel);
+            node.querySelectorAll(
+              '.nb-cfield[data-type="subform"], .nb-cfield[data-fieldtype="subform"]'
+            ).forEach(upgradeSubformPanel);
           }
         });
       });
     });
 
-    var canvas = document.getElementById('formCanvas');
-    if (canvas) {
-      _canvasObs.observe(canvas, { childList: true, subtree: true });
-      upgradeAllSubformCards();
+    function attachObserver() {
+      var canvas = document.getElementById('formCanvas');
+      if (!canvas) return;
+      /* disconnect any existing observation first to avoid duplicates */
+      try { _obs.disconnect(); } catch(e) {}
+      _obs.observe(canvas, { childList: true, subtree: true });
     }
 
-    /* Re-run when forms module is dynamically loaded */
+    /* ── Initial attach ─────────────────────────────────────────────── */
+    attachObserver();
+    upgradeAllSubformCards();
+
+    /* ── Re-attach + upgrade every time the forms module opens ─────── */
     document.addEventListener('nu:form:opened', function () {
+      /* Small delay gives _rebuildCanvas time to finish painting the DOM */
       setTimeout(function () {
-        var c = document.getElementById('formCanvas');
-        if (c) {
-          _canvasObs.observe(c, { childList: true, subtree: true });
-          upgradeAllSubformCards();
-        }
-      }, 100);
+        attachObserver();
+        upgradeAllSubformCards();
+      }, 150);
     });
 
-    /* Expose globally for direct HTML onclick usage */
-    window.nbCreateFkField = _createFkField;
+    /* ── Also hook _rebuildCanvas directly so edit-load is covered ─── */
+    if (typeof fb._rebuildCanvas === 'function') {
+      var _origRebuild = fb._rebuildCanvas.bind(fb);
+      fb._rebuildCanvas = function () {
+        var result = _origRebuild.apply(fb, arguments);
+        /* _rebuildCanvas may be async or sync; cover both */
+        setTimeout(function () {
+          attachObserver();
+          upgradeAllSubformCards();
+        }, 120);
+        if (result && typeof result.then === 'function') {
+          result.then(function () {
+            setTimeout(function () {
+              attachObserver();
+              upgradeAllSubformCards();
+            }, 120);
+          });
+        }
+        return result;
+      };
+    }
 
+    /* ── Also hook _initAfterLoad (called by NuApp.initModuleScripts) ─ */
+    if (typeof fb._initAfterLoad === 'function') {
+      var _origInit = fb._initAfterLoad.bind(fb);
+      fb._initAfterLoad = function () {
+        var result = _origInit.apply(fb, arguments);
+        setTimeout(function () {
+          attachObserver();
+          upgradeAllSubformCards();
+        }, 200);
+        return result;
+      };
+    }
+
+    window.nbCreateFkField = _createFkField;
     console.log('[nb-subform-fk-builder] FK-aware subform panel patches applied.');
   });
 
