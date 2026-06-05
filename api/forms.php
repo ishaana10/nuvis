@@ -53,7 +53,7 @@ function actionGet($db) {
 }
 
 // ── GET a single form by form_code ────────────────────────────────────────
-// Used by the FK-builder panel to fetch child form layout for createFkField()
+// No active filter — the builder and FK-panel need to find any form by code.
 function actionGetByCode($db) {
     $code = $_GET['code'] ?? '';
     if (!$code) {
@@ -76,22 +76,19 @@ function actionGetByCode($db) {
 }
 
 // ── PATCH only the form_layout column of a form ───────────────────────────
-// Used by createFkField() to inject a hidden FK field into the child layout
-// without touching any other form settings.
 function actionPatchLayout($db) {
     $id = $_GET['id'] ?? '';
     if (!$id) {
         echo json_encode(['success' => false, 'error' => 'Missing id']);
         return;
     }
-    $raw = file_get_contents('php://input');
+    $raw  = file_get_contents('php://input');
     $data = json_decode($raw, true);
     if (!is_array($data) || !isset($data['form_layout'])) {
         echo json_encode(['success' => false, 'error' => 'Missing form_layout in payload']);
         return;
     }
     $layout = $data['form_layout'];
-    // Accept either a JSON string or a raw array
     if (is_array($layout)) {
         $layout = json_encode($layout);
     }
@@ -145,7 +142,6 @@ function actionSave($db) {
         $formCode = preg_replace('/[^a-z0-9]+/', '_', strtolower($formName));
     }
 
-    // Encode layout if it's an array
     $formLayout = $data['form_layout'] ?? '';
     if (is_array($formLayout)) {
         $formLayout = json_encode($formLayout);
@@ -159,6 +155,9 @@ function actionSave($db) {
         'form_table_mode'          => $data['form_table_mode']          ?? 'new',
         'form_pk_type'             => $data['form_pk_type']             ?? 'autoincrement',
         'form_layout'              => $formLayout,
+        // Always mark active so nu_get_form() (which filters WHERE form_active=1)
+        // can find this form when it is referenced as a subform or previewed.
+        'form_active'              => 1,
         'browse_sql'               => $data['browse_sql']               ?? '',
         'browse_columns'           => $data['browse_columns']           ?? '',
         'browse_search_enabled'    => isset($data['browse_search_enabled'])    ? (int)$data['browse_search_enabled']    : 0,
@@ -176,12 +175,10 @@ function actionSave($db) {
 
     try {
         if ($formId) {
-            // UPDATE
             $row['updated_at'] = date('Y-m-d H:i:s');
             $db->update('nu_forms', $row, 'form_id = ?', [$formId]);
             echo json_encode(['success' => true, 'form_id' => $formId]);
         } else {
-            // INSERT — check unique code
             $existing = $db->fetchOne(
                 'SELECT form_id FROM nu_forms WHERE form_code = ?',
                 [$formCode]
