@@ -1,31 +1,9 @@
 /**
  * nuSubform — FK-aware runtime subform engine
  * Supports three views: grid | form | inline
- *
- * DEBUG BUILD — console tracing enabled at every key checkpoint.
- * Search DevTools console for [nuSubform] to filter all output.
- * Remove this build and restore the production build once the issue is resolved.
  */
 (function (window) {
   'use strict';
-
-  /* ── debug helper ─────────────────────────────────────────────────── */
-  var DBG = '[nuSubform]';
-  function dbg() {
-    var args = Array.prototype.slice.call(arguments);
-    args.unshift(DBG);
-    console.log.apply(console, args);
-  }
-  function dbgWarn() {
-    var args = Array.prototype.slice.call(arguments);
-    args.unshift(DBG + ' ⚠');
-    console.warn.apply(console, args);
-  }
-  function dbgErr() {
-    var args = Array.prototype.slice.call(arguments);
-    args.unshift(DBG + ' ✖');
-    console.error.apply(console, args);
-  }
 
   /* ── pending queue keyed by container element ─────────────────────── */
   var _pendingRows = new WeakMap();
@@ -87,62 +65,42 @@
   function load(container) {
     var m    = meta(container);
     var body = container.querySelector('.nu-subform-body');
-
-    console.group(DBG + ' load()');
-    dbg('container element:', container);
-    dbg('meta →', JSON.stringify(m));
-    dbg('data-parent-id attr (raw):', container.getAttribute('data-parent-id'));
-    dbg('container.dataset.parentId:', container.dataset.parentId);
-    if (!body) { dbgErr('No .nu-subform-body found inside container — aborting'); console.groupEnd(); return; }
+    if (!body) return;
 
     /* No parent_id yet (new unsaved parent) — show pending rows only */
     if (!m.parentId) {
-      dbgWarn('parentId is empty → new-record path, fetching subform_fields only');
       var fieldsUrl = 'api/form.php?action=subform_fields&code=' + encodeURIComponent(m.code);
-      dbg('GET', fieldsUrl);
       apiJson(fieldsUrl)
         .then(function (json) {
-          dbg('subform_fields response:', JSON.stringify(json));
           if (!json.success) {
-            dbgErr('subform_fields error:', json.error);
             body.innerHTML = '<div style="padding:12px;color:red;">' + esc(json.error) + '</div>';
-            console.groupEnd();
             return;
           }
           var data      = json.data || {};
           var allFields  = data.all_fields  || data.layout || [];
           var gridFields = data.layout      || [];
           var pk         = data.pk || 'id';
-          dbg('allFields count:', allFields.length, '| gridFields count:', gridFields.length, '| pk:', pk);
           container._sfAllFields  = allFields;
           container._sfGridFields = gridFields;
           renderWithPending(container, gridFields, allFields, [], pk);
-          console.groupEnd();
         })
         .catch(function (e) {
-          dbgErr('subform_fields fetch threw:', e);
           body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>';
-          console.groupEnd();
         });
       return;
     }
 
     /* Has parentId — fetch real rows */
-    dbg('parentId present → fetching subform_list');
     body.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:13px;">Loading...</div>';
 
     var listUrl = 'api/form.php?action=subform_list&code=' + encodeURIComponent(m.code)
       + '&fk='        + encodeURIComponent(m.fk)
       + '&parent_id=' + encodeURIComponent(m.parentId);
-    dbg('GET', listUrl);
 
     apiJson(listUrl)
     .then(function (json) {
-      dbg('subform_list raw response:', JSON.stringify(json));
       if (!json.success) {
-        dbgErr('subform_list error:', json.error);
         body.innerHTML = '<div style="padding:12px;color:red;">' + esc(json.error) + '</div>';
-        console.groupEnd();
         return;
       }
       var data       = json.data || {};
@@ -151,33 +109,19 @@
       var records    = data.records    || [];
       var pk         = data.pk || 'id';
 
-      dbg('gridFields count:', gridFields.length);
-      dbg('allFields count:', allFields.length);
-      dbg('records count:', records.length);
-      dbg('pk:', pk);
-      if (!records.length) {
-        dbgWarn('records array is EMPTY — check: (1) fk column name "' + m.fk + '", (2) parent_id "' + m.parentId + '", (3) the SQL query in nu_handle_subform_list()');
-      } else {
-        dbg('first record:', JSON.stringify(records[0]));
-      }
-
       container._sfAllFields  = allFields;
       container._sfGridFields = gridFields;
 
       renderWithPending(container, gridFields, allFields, records, pk);
-      console.groupEnd();
     })
     .catch(function (e) {
-      dbgErr('subform_list fetch threw:', e);
       body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>';
-      console.groupEnd();
     });
   }
 
   /* ── merge saved records + pending rows before rendering ─────────── */
   function renderWithPending(container, gridFields, allFields, records, pk) {
     var pending = getPending(container);
-    dbg('renderWithPending — saved:', records.length, '| pending:', pending.length);
     var pendingRecords = pending.map(function (item, idx) {
       var r = Object.assign({}, item.data);
       r[pk] = '__pending__' + idx;
@@ -193,8 +137,6 @@
     var body = container.querySelector('.nu-subform-body');
     if (!body) return;
 
-    dbg('render() — view:', m.view, '| total records to display:', records.length);
-
     /* Grid columns: strip UI-only types AND FK fields */
     var displayCols = gridFields.filter(function (f) {
       var t = f.type || f.fieldtype || 'text';
@@ -203,8 +145,6 @@
       if (isFkField(f)) return false;
       return true;
     });
-
-    dbg('displayCols after filtering:', displayCols.map(function(f){ return f.name||f.fieldname; }));
 
     if (m.view === 'grid')        body.innerHTML = renderGrid(displayCols, records, pk, m);
     else if (m.view === 'inline') body.innerHTML = renderInline(displayCols, records, pk, m);
@@ -245,7 +185,7 @@
     });
   }
 
-  /* ── grid view — FK columns excluded ────────────────────────────── */
+  /* ── grid view ────────────────────────────────────────────────────── */
   function renderGrid(displayCols, records, pk, m) {
     var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
     html += '<thead><tr style="background:var(--bg-elevated,#f8f9fa);">';
@@ -309,7 +249,7 @@
     return html;
   }
 
-  /* ── inline editable view — FK excluded ─────────────────────────── */
+  /* ── inline editable view ────────────────────────────────────────── */
   function renderInline(displayCols, records, pk, m) {
     var html = '<div style="padding:8px;">';
     if (!records.length) {
@@ -367,7 +307,7 @@
     return esc(val == null ? '' : val);
   }
 
-  /* ── modal for add/edit — FK fields rendered as hidden inputs ─────── */
+  /* ── modal for add/edit ───────────────────────────────────────────── */
   function openModal(container, allFields, pk, rowId, records, prefillData, pendingIdx) {
     var row = prefillData || {};
     if (rowId && !prefillData) {
@@ -376,17 +316,12 @@
       });
     }
 
-    dbg('openModal — rowId:', rowId, '| pendingIdx:', pendingIdx);
-    dbg('openModal — allFields:', (allFields||[]).map(function(f){ return (f.name||f.fieldname) + (isFkField(f)?'[FK]':''); }));
-    dbg('openModal — row data:', JSON.stringify(row));
-
     var overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:20000;display:flex;align-items:center;justify-content:center;';
     overlay.setAttribute('data-sf-overlay', '1');
 
     var box = document.createElement('div');
     box.style.cssText = 'background:var(--card-bg,#fff);border-radius:12px;padding:24px;max-width:640px;width:94%;max-height:90vh;overflow-y:auto;';
-
     box._sfAllFields = allFields;
 
     var isPending = pendingIdx !== undefined && pendingIdx !== null;
@@ -410,7 +345,6 @@
       var val = row[fname] !== undefined ? row[fname] : (f.default_value || f.defaultvalue || '');
 
       if (isFkField(f)) {
-        dbg('openModal — rendering FK field "' + fname + '" as hidden, value:', val);
         var hiddenEl = document.createElement('input');
         hiddenEl.type  = 'hidden';
         hiddenEl.name  = fname;
@@ -468,11 +402,9 @@
       });
 
       var m = meta(container);
-      dbg('modal save — meta:', JSON.stringify(m), '| collected data:', JSON.stringify(data));
 
       if (!m.parentId) {
-        dbgWarn('modal save — no parentId, queuing locally');
-        var queue = getPending(container);
+        var queue    = getPending(container);
         var safeData = stripProtectedFields(data, allFields);
         if (isPending) {
           queue[pendingIdx] = { allFields: allFields, pk: pk, data: safeData };
@@ -492,8 +424,6 @@
         + '&parent_id=' + encodeURIComponent(m.parentId)
         + (rowId ? '&id=' + encodeURIComponent(rowId) : '');
 
-      dbg('modal save POST →', url, '| payload:', JSON.stringify(postData));
-
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving...';
 
@@ -503,9 +433,7 @@
         body: JSON.stringify(postData)
       })
       .then(function (json) {
-        dbg('modal save response:', JSON.stringify(json));
         if (!json.success) {
-          dbgErr('modal save failed:', json.error);
           toast(json.error || 'Save failed', 'error');
           saveBtn.disabled = false;
           saveBtn.textContent = 'Save';
@@ -516,7 +444,6 @@
         toast(rowId ? 'Row updated' : 'Row added');
       })
       .catch(function (e) {
-        dbgErr('modal save threw:', e);
         toast('Error: ' + e.message, 'error');
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save';
@@ -534,22 +461,20 @@
   function deleteRow(container, rowId, pk) {
     if (!confirm('Delete this row?')) return;
     var m = meta(container);
-    dbg('deleteRow — id:', rowId);
     apiJson(
       'api/form.php?action=subform_delete&code=' + encodeURIComponent(m.code)
       + '&id=' + encodeURIComponent(rowId),
       { method: 'DELETE' }
     )
     .then(function (json) {
-      dbg('deleteRow response:', JSON.stringify(json));
       if (!json.success) { toast(json.error || 'Delete failed', 'error'); return; }
       load(container);
       toast('Row deleted');
     })
-    .catch(function (e) { dbgErr('deleteRow threw:', e); toast('Error: ' + e.message, 'error'); });
+    .catch(function (e) { toast('Error: ' + e.message, 'error'); });
   }
 
-  /* ── save inline row — strips FK + readonly ──────────────────────── */
+  /* ── save inline row ─────────────────────────────────────────────── */
   function saveInlineRow(container, btn, pk, allFields) {
     var rowEl = btn.closest('.nu-sf-inline-row');
     var rowId = rowEl ? rowEl.dataset.sfRowId : '';
@@ -560,7 +485,6 @@
       });
     }
     var data = stripProtectedFields(raw, allFields || container._sfAllFields || []);
-    dbg('saveInlineRow — rowId:', rowId, '| data:', JSON.stringify(data));
     btn.disabled = true;
     var m = meta(container);
     apiJson(
@@ -572,19 +496,17 @@
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }
     )
     .then(function (json) {
-      dbg('saveInlineRow response:', JSON.stringify(json));
       btn.disabled = false;
       if (!json.success) { toast(json.error || 'Save failed', 'error'); return; }
       load(container);
       toast('Saved');
     })
-    .catch(function (e) { btn.disabled = false; dbgErr('saveInlineRow threw:', e); toast('Error: ' + e.message, 'error'); });
+    .catch(function (e) { btn.disabled = false; toast('Error: ' + e.message, 'error'); });
   }
 
   /* ── flush pending queue to DB after parent saves ─────────────────── */
   function flushPending(container, parentId) {
     var queue = getPending(container);
-    dbg('flushPending — parentId:', parentId, '| queue length:', queue.length);
     if (!queue.length) return Promise.resolve();
     var m = meta(container);
 
@@ -596,18 +518,16 @@
           + '&code='      + encodeURIComponent(m.code)
           + '&fk='        + encodeURIComponent(m.fk)
           + '&parent_id=' + encodeURIComponent(parentId);
-        dbg('flushPending POST →', url, '| payload:', JSON.stringify(postData));
         return apiJson(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(postData)
         }).then(function (json) {
-          dbg('flushPending response:', JSON.stringify(json));
           if (!json.success) throw new Error(json.error || 'Subform row save failed');
         });
       });
     }, Promise.resolve())
-    .then(function () { _pendingRows.set(container, []); dbg('flushPending complete — queue cleared'); });
+    .then(function () { _pendingRows.set(container, []); });
   }
 
   /* ── public API ───────────────────────────────────────────────────── */
@@ -616,31 +536,18 @@
     initAll: function (scope) {
       scope = scope || document;
       var containers = scope.querySelectorAll('.nu-subform-container');
-      console.group(DBG + ' initAll() — found ' + containers.length + ' container(s)');
-      containers.forEach(function (el, i) {
+      containers.forEach(function (el) {
         var parentId = el.dataset.parentId || '';
-        dbg('container[' + i + ']',
-          '| code:', el.dataset.subformCode,
-          '| fk:', el.dataset.subformFk,
-          '| data-parent-id attr:', el.getAttribute('data-parent-id'),
-          '| dataset.parentId:', parentId,
-          '| sfInit:', el.dataset.sfInit || '(not set)'
-        );
         if (parentId) {
-          dbg('container[' + i + '] → existing record path → calling load()');
           delete el.dataset.sfInit;
           load(el);
         } else {
           if (!el.dataset.sfInit) {
-            dbgWarn('container[' + i + '] → new record path → calling load() once');
             el.dataset.sfInit = '1';
             load(el);
-          } else {
-            dbg('container[' + i + '] → sfInit already set, skipping');
           }
         }
       });
-      console.groupEnd();
     },
 
     load: load,
@@ -649,19 +556,15 @@
       var container = btn.closest('.nu-subform-container');
       if (!container) return;
       var m = meta(container);
-      dbg('addRow — meta:', JSON.stringify(m));
       if (!m.code) { toast('Subform not configured (missing form code)', 'error'); return; }
 
       if (container._sfAllFields && container._sfAllFields.length) {
-        dbg('addRow — using cached allFields, count:', container._sfAllFields.length);
         openModal(container, container._sfAllFields, container._sfPk || 'id', null, []);
         return;
       }
 
-      dbg('addRow — no cached fields, fetching subform_fields');
       apiJson('api/form.php?action=subform_fields&code=' + encodeURIComponent(m.code))
         .then(function (json) {
-          dbg('addRow subform_fields response:', JSON.stringify(json));
           if (!json.success) { toast(json.error || 'Failed to load subform', 'error'); return; }
           var data      = json.data || {};
           var allFields = data.all_fields || data.layout || [];
@@ -670,7 +573,7 @@
           container._sfPk        = pk;
           openModal(container, allFields, pk, null, []);
         })
-        .catch(function (e) { dbgErr('addRow fetch threw:', e); toast('Error: ' + e.message, 'error'); });
+        .catch(function (e) { toast('Error: ' + e.message, 'error'); });
     },
 
     setView: function (container, view) {
@@ -682,22 +585,19 @@
     onParentSaved: function (newId, scope) {
       scope = scope || document;
       var id = String(newId || '');
-      dbg('onParentSaved — newId:', id);
-      if (!id) { dbgWarn('onParentSaved called with empty id — subform rows will NOT be flushed'); return; }
+      if (!id) return;
 
       var containers = Array.prototype.slice.call(
         scope.querySelectorAll('.nu-subform-container')
       );
 
       containers.forEach(function (el, i) {
-        dbg('onParentSaved — setting container[' + i + '] data-parent-id to:', id);
         el.dataset.parentId = id;
         delete el.dataset.sfInit;
 
         flushPending(el, id)
           .then(function () { load(el); })
           .catch(function (e) {
-            dbgErr('flushPending error on container[' + i + ']:', e);
             toast('Error saving queued subform rows: ' + e.message, 'error');
             load(el);
           });
@@ -709,16 +609,66 @@
 
   /* ── auto-init after parent form opens ───────────────────────────── */
   document.addEventListener('nu:form:opened', function (e) {
-    dbg('nu:form:opened event received', e.detail || '');
     var scope = e.detail && e.detail.scope ? e.detail.scope : document;
     nuSubform.initAll(scope);
   });
 
   /* ── listen for parent save event ────────────────────────────────── */
   document.addEventListener('nu:parent:saved', function (e) {
-    dbg('nu:parent:saved event received', e.detail || '');
     var detail = e.detail || {};
     nuSubform.onParentSaved(detail.id, detail.scope || document);
   });
+
+  /* ── (merged from nusubform-patch.js)
+     Intercept NuApp.apiJson to dispatch nu:parent:saved automatically
+     after a successful parent-form save (api/form.php?action=save).
+     URL regex avoids matching action=subform_save.
+  ── */
+  var PARENT_SAVE_RE = /[?&]action=save(&|$)/;
+
+  function installParentSavePatch() {
+    var app = window.NuApp;
+    if (!app || typeof app.apiJson !== 'function') return;
+    if (app._nuSubformPatchApplied) return;
+    app._nuSubformPatchApplied = true;
+
+    var _origApiJson = app.apiJson.bind(app);
+    app.apiJson = function (url, options) {
+      return _origApiJson(url, options).then(function (json) {
+        if (
+          typeof url === 'string' &&
+          PARENT_SAVE_RE.test(url) &&
+          json && json.success
+        ) {
+          var savedId = String(
+            (json.data && (json.data.id || json.data.record_id))
+              || json.id
+              || json.record_id
+              || ''
+          );
+          if (savedId) {
+            var box = null;
+            document.querySelectorAll('.nu-form-overlay').forEach(function (ov) {
+              if (ov.querySelector('.nu-subform-container')) box = ov;
+            });
+            var scope = box || document;
+            scope.querySelectorAll('.nu-subform-container').forEach(function (el) {
+              el.dataset.parentId = savedId;
+            });
+            document.dispatchEvent(new CustomEvent('nu:parent:saved', {
+              detail: { id: savedId, scope: scope }
+            }));
+          }
+        }
+        return json;
+      });
+    };
+  }
+
+  if (window.NuApp && window.NuApp.apiJson) {
+    installParentSavePatch();
+  } else {
+    document.addEventListener('DOMContentLoaded', installParentSavePatch);
+  }
 
 }(window));
