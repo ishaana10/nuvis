@@ -13,6 +13,13 @@
  *  - addRow()      uses subform_fields all_fields; FK auto-renders hidden
  *  - Pending-row queue: rows held in memory when parent_id is empty
  *  - onParentSaved() flushes queue then reloads
+ *
+ * Fix (2026-06-08):
+ *  - initAll() now always calls load() for containers that already have
+ *    data-parent-id set in the HTML (existing-record edit path), so saved
+ *    subform rows are shown immediately when opening Edit #N forms.
+ *    The sfInit guard is only applied to containers without a parent_id
+ *    (new-record path) to avoid double-loading the pending-only state.
  */
 (function (window) {
   'use strict';
@@ -554,12 +561,38 @@
   /* ── public API ───────────────────────────────────────────────────── */
   var nuSubform = {
 
+    /**
+     * initAll(scope)
+     *
+     * Called whenever a form is opened (nu:form:opened event or direct call).
+     *
+     * Two behaviours depending on whether the container already has a
+     * data-parent-id value baked in by PHP (existing-record edit path):
+     *
+     *  • parentId present  → always call load(), even if sfInit is already
+     *    set.  PHP stamped the correct parent ID into the HTML, so we must
+     *    fetch the real rows.  We do NOT set sfInit here so a subsequent
+     *    call (e.g. from the nu:form:opened event that fires a moment later)
+     *    will also load correctly.
+     *
+     *  • parentId absent   → new-record path.  Only load() once (guard with
+     *    sfInit) to avoid re-rendering the pending-only state repeatedly.
+     */
     initAll: function (scope) {
       scope = scope || document;
       scope.querySelectorAll('.nu-subform-container').forEach(function (el) {
-        if (!el.dataset.sfInit) {
-          el.dataset.sfInit = '1';
+        var parentId = el.dataset.parentId || '';
+        if (parentId) {
+          /* Existing record: always reload so saved rows are shown.
+             Clear the guard so re-entry also works. */
+          delete el.dataset.sfInit;
           load(el);
+        } else {
+          /* New record: load once only */
+          if (!el.dataset.sfInit) {
+            el.dataset.sfInit = '1';
+            load(el);
+          }
         }
       });
     },
