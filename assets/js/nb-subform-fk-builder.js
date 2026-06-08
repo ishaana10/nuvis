@@ -6,7 +6,7 @@
  *
  * What this file does:
  *   GAP 1 — injects a rich config panel (child-form dropdown, FK field
- *             dropdown, ”＋ Create FK Field” button, 3 flag toggles) into
+ *             dropdown, "＋ Create FK Field" button, 3 flag toggles) into
  *             every subform card on the builder canvas.
  *
  *   GAP 2 — registers window._nbSfAugmentLayout(layout) so that
@@ -15,7 +15,7 @@
  *             any fetch/saveForm intercept layer.
  *
  *   GAP 3 — _createFkField(): auto-adds a hidden FK field to the child
- *             form’s layout via the API.
+ *             form's layout via the API.
  *
  * Changelog:
  *   2026-06-07  Initial saveForm intercept approach.
@@ -25,6 +25,11 @@
  *               serialiser loop with _nbSfAugmentLayout hook (called by
  *               nb-form-builder-layout.js). Use window._nbSfData for
  *               all data-sf-* reads/writes.
+ *   2026-06-08d Fix: _augmentLayout now uses positional (index) matching
+ *               of subform fields → canvas cards so field-name mismatches
+ *               no longer cause the fk_field to be dropped from saved JSON.
+ *               Remove stale fb._rebuildCanvas wrap (was capturing the
+ *               pre-nb-form-edit version and causing upgrade race).
  */
 (function () {
   'use strict';
@@ -199,35 +204,69 @@
     /* ══════════════════════════════════════════════════════════════════
        GAP 2 — register _nbSfAugmentLayout hook
        Called by nb-form-builder-layout.js from its layout serialiser.
+
+       FIX (2026-06-08d): Use POSITIONAL matching — iterate subform fields
+       in layout order, map them to subform cards in DOM order. This is
+       unambiguous even when data-field-name doesn't match f.name.
+       Also fall back to reading _nbSfData from the card when the panel
+       dropdown is blank (e.g. async populate not yet complete).
     ═══════════════════════════════════════════════════════════════════ */
     function _augmentSubformData(fieldObj, card) {
       if ((fieldObj.type || fieldObj.fieldtype || '') !== 'subform') return fieldObj;
-      var panel = card.querySelector('.nb-sf-fk-panel');
-      if (!panel) return fieldObj;
 
-      var formCodeSel = panel.querySelector('.nb-sf-form-code');
-      var fkFieldSel  = panel.querySelector('.nb-sf-fk-field');
-      var isFkChk     = panel.querySelector('.nb-sf-is-fk');
-      var hideChk     = panel.querySelector('.nb-sf-hide-in-grid');
-      var srvRoChk    = panel.querySelector('.nb-sf-server-readonly');
-      var formCode    = formCodeSel ? (formCodeSel.value || '') : '';
-      var fkField     = fkFieldSel  ? (fkFieldSel.value  || '') : '';
+      var panel = card.querySelector('.nb-sf-fk-panel');
+
+      var formCode = '';
+      var fkField  = '';
+      var isFkChecked  = false;
+      var hideChecked  = false;
+      var srvRoChecked = false;
+
+      if (panel) {
+        var formCodeSel = panel.querySelector('.nb-sf-form-code');
+        var fkFieldSel  = panel.querySelector('.nb-sf-fk-field');
+        var isFkChk     = panel.querySelector('.nb-sf-is-fk');
+        var hideChk     = panel.querySelector('.nb-sf-hide-in-grid');
+        var srvRoChk    = panel.querySelector('.nb-sf-server-readonly');
+
+        formCode    = formCodeSel ? (formCodeSel.value || '') : '';
+        fkField     = fkFieldSel  ? (fkFieldSel.value  || '') : '';
+        isFkChecked  = !!(isFkChk  && isFkChk.checked);
+        hideChecked  = !!(hideChk  && hideChk.checked);
+        srvRoChecked = !!(srvRoChk && srvRoChk.checked);
+      }
+
+      // If the panel dropdowns are empty (async populate still in flight),
+      // fall back to whatever is already stamped in the data store / attrs.
+      if (!formCode || !fkField) {
+        var stored = window._nbSfData
+          ? window._nbSfData.read(card)
+          : _localRead(card);
+        if (!formCode) formCode = stored.form_code || '';
+        if (!fkField)  fkField  = stored.fk_field  || '';
+        if (!panel) {
+          // No panel at all — use stored flags too
+          isFkChecked  = stored.is_fk;
+          hideChecked  = stored.hide_in_grid;
+          srvRoChecked = stored.server_readonly;
+        }
+      }
 
       if (!fieldObj.subform) fieldObj.subform = {};
       if (formCode) fieldObj.subform.form_code = formCode;
       if (fkField)  fieldObj.subform.fk_field  = fkField;
-      if (isFkChk)  { if (isFkChk.checked)  fieldObj.is_fk           = true; else delete fieldObj.is_fk;           }
-      if (hideChk)  { if (hideChk.checked)   fieldObj.hide_in_grid    = true; else delete fieldObj.hide_in_grid;    }
-      if (srvRoChk) { if (srvRoChk.checked)  fieldObj.server_readonly = true; else delete fieldObj.server_readonly; }
+      if (isFkChecked)  fieldObj.is_fk           = true; else delete fieldObj.is_fk;
+      if (hideChecked)  fieldObj.hide_in_grid    = true; else delete fieldObj.hide_in_grid;
+      if (srvRoChecked) fieldObj.server_readonly = true; else delete fieldObj.server_readonly;
 
       // Write back to shared data store
       if (window._nbSfData) {
         window._nbSfData.write(card, {
           form_code:       formCode,
           fk_field:        fkField,
-          is_fk:           !!(isFkChk  && isFkChk.checked),
-          hide_in_grid:    !!(hideChk  && hideChk.checked),
-          server_readonly: !!(srvRoChk && srvRoChk.checked)
+          is_fk:           isFkChecked,
+          hide_in_grid:    hideChecked,
+          server_readonly: srvRoChecked
         });
       }
 
@@ -238,17 +277,21 @@
       if (!Array.isArray(layout)) return layout;
       var canvas = document.getElementById('formCanvas');
       if (!canvas) return layout;
-      var cards = canvas.querySelectorAll('.nb-cfield[data-type="subform"], .nb-cfield[data-fieldtype="subform"]');
+
+      // Collect subform cards in DOM order (positional)
+      var sfCards = Array.prototype.slice.call(
+        canvas.querySelectorAll('.nb-cfield[data-type="subform"], .nb-cfield[data-fieldtype="subform"]')
+      );
+
+      // Walk layout, picking off sfCards[i] for each subform field encountered
+      var sfIndex = 0;
       layout.forEach(function (fieldObj) {
-        if ((fieldObj.type || '') !== 'subform') return;
-        var fname = fieldObj.name || fieldObj.fieldname || '';
-        var matchCard = null;
-        cards.forEach(function (c) {
-          if ((c.dataset.fieldName || c.dataset.name || '') === fname) matchCard = c;
-        });
-        if (!matchCard && cards.length === 1) matchCard = cards[0];
-        if (matchCard) _augmentSubformData(fieldObj, matchCard);
+        if ((fieldObj.type || fieldObj.fieldtype || '') !== 'subform') return;
+        var card = sfCards[sfIndex] || null;
+        sfIndex++;
+        if (card) _augmentSubformData(fieldObj, card);
       });
+
       return layout;
     }
 
@@ -315,6 +358,10 @@
 
     /* ══════════════════════════════════════════════════════════════════
        Auto-upgrade: MutationObserver + event hooks
+       NOTE (2026-06-08d): The stale fb._rebuildCanvas wrap that was here
+       is intentionally removed. nb-form-builder-layout.js owns that wrap
+       and nb-form-edit.js fires _nbSfUpgradeAll at 80ms after rebuild.
+       A second wrap here caused a timing race (120ms clobbering 80ms).
     ═══════════════════════════════════════════════════════════════════ */
     function upgradeAllSubformCards() {
       var canvas = document.getElementById('formCanvas');
@@ -355,17 +402,6 @@
         upgradeAllSubformCards();
       }, 150);
     });
-
-    if (typeof fb._rebuildCanvas === 'function') {
-      var _origRebuild = fb._rebuildCanvas.bind(fb);
-      fb._rebuildCanvas = function () {
-        var result = _origRebuild.apply(fb, arguments);
-        setTimeout(function () { attachObserver(); upgradeAllSubformCards(); }, 120);
-        if (result && typeof result.then === 'function')
-          result.then(function () { setTimeout(function () { attachObserver(); upgradeAllSubformCards(); }, 120); });
-        return result;
-      };
-    }
 
     if (typeof fb._initAfterLoad === 'function') {
       var _origInit = fb._initAfterLoad.bind(fb);
