@@ -1,0 +1,950 @@
+/**
+ * nb-form-builder.js
+ * Single consolidated file replacing:
+ *   nb-sf-data.js + nb-subform-fk-builder.js +
+ *   nb-form-builder-layout.js + nb-form-edit.js
+ *
+ * Defines window.nbFormBuilder (the core builder object) and
+ * window.saveForm. Subform panel injection, FK builder, layout
+ * row/span patches, canvas rebuild, and edit restore are all here.
+ *
+ * Load after nubuilder-next.js, before nusubform.js.
+ */
+(function (window) {
+  'use strict';
+
+  /* ════════════════════════════════════════════════════════════════════
+     SECTION 1 — _nbSfData  (was nb-sf-data.js)
+     Centralised read/write of data-sf-* attributes on canvas cards.
+  ═══════════════════════════════════════════════════════════════════ */
+  (function () {
+    function _sfRead(card) {
+      var fc = card.dataset.sfFormCode || '';
+      if (fc) {
+        return {
+          form_code:       fc,
+          fk_field:        card.dataset.sfFkField        || '',
+          is_fk:           card.dataset.sfIsFk           === '1',
+          hide_in_grid:    card.dataset.sfHideInGrid     === '1',
+          server_readonly: card.dataset.sfServerReadonly === '1'
+        };
+      }
+      var raw = card.dataset.fieldJson || card.dataset.fieldData || '';
+      if (raw) {
+        try {
+          var obj = JSON.parse(raw);
+          var sf  = (obj.subform && typeof obj.subform === 'object') ? obj.subform : {};
+          var fc2 = sf.form_code || sf.formcode || '';
+          if (fc2) {
+            _sfWrite(card, {
+              form_code:       fc2,
+              fk_field:        sf.fk_field || sf.fkfield || '',
+              is_fk:           !!obj.is_fk,
+              hide_in_grid:    !!obj.hide_in_grid,
+              server_readonly: !!obj.server_readonly
+            });
+            return _sfRead(card);
+          }
+        } catch (e) {}
+      }
+      return {
+        form_code:       card.dataset.subformFormCode || card.dataset.formCode || '',
+        fk_field:        card.dataset.subformFkField  || card.dataset.fkField  || '',
+        is_fk: false, hide_in_grid: false, server_readonly: false
+      };
+    }
+
+    function _sfWrite(card, obj) {
+      if (!obj) return;
+      if (obj.form_code) card.dataset.sfFormCode       = obj.form_code;
+      if (obj.fk_field)  card.dataset.sfFkField        = obj.fk_field;
+      card.dataset.sfIsFk           = obj.is_fk           ? '1' : '0';
+      card.dataset.sfHideInGrid     = obj.hide_in_grid    ? '1' : '0';
+      card.dataset.sfServerReadonly = obj.server_readonly ? '1' : '0';
+    }
+
+    function _sfClear(card) {
+      ['sfFormCode','sfFkField','sfIsFk','sfHideInGrid','sfServerReadonly',
+       'fieldJson','fieldData'].forEach(function (k) { delete card.dataset[k]; });
+      delete card._sfPanelUpgraded;
+    }
+
+    window._nbSfData = { read: _sfRead, write: _sfWrite, clear: _sfClear };
+  }());
+
+
+  /* ════════════════════════════════════════════════════════════════════
+     SECTION 2 — nbFormBuilder core object
+     Defines the builder: open/close, addField, addRow, getLayout, saveForm.
+  ═══════════════════════════════════════════════════════════════════ */
+  var _fieldCounter = 0;
+
+  function _esc(s) {
+    return String(s || '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  window.nbFormBuilder = {
+
+    open: function () {
+      var card = document.getElementById('formBuilderCard');
+      var list = document.getElementById('formsListSection');
+      if (card) card.style.display = 'block';
+      if (list) list.style.display = 'none';
+      var editId = document.getElementById('editFormId');
+      if (editId) editId.value = '';
+      var title = document.getElementById('builderTitle');
+      if (title) title.textContent = 'New Form';
+      this._clearForm();
+    },
+
+    close: function () {
+      var card = document.getElementById('formBuilderCard');
+      var list = document.getElementById('formsListSection');
+      if (card) card.style.display = 'none';
+      if (list) list.style.display = '';
+    },
+
+    _clearForm: function () {
+      ['builderFormName','builderFormCode','builderFormTable',
+       'formBrowseSql','formBrowseColumns','formBrowseDefaultSort',
+       'formBrowseSearchPlaceholder','formBrowseSearchFields',
+       'formCustomJs','formJsBeforeSave','formJsAfterSave',
+       'formCustomPhp','formCustomCss'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      var ps = document.getElementById('formBrowsePageSize');
+      if (ps) ps.value = '20';
+      var srch = document.getElementById('formBrowseSearchEnabled');
+      if (srch) srch.checked = false;
+      var canvas = document.getElementById('formCanvas');
+      if (canvas) canvas.querySelectorAll('.nb-row').forEach(function (r) { r.remove(); });
+      this._updateEmptyState();
+      this.selectFormType('main',  document.querySelector('input[name="formType"][value="main"]')   ? document.querySelector('input[name="formType"][value="main"]').closest('.nb-ftype-card')  : null);
+      this.selectTableMode('new',  document.querySelector('input[name="formTableMode"][value="new"]')? document.querySelector('input[name="formTableMode"][value="new"]').closest('.nb-tmode-card') : null);
+      this.selectPkType('autoincrement', document.querySelector('input[name="formPkType"][value="autoincrement"]') ? document.querySelector('input[name="formPkType"][value="autoincrement"]').closest('.nb-pk-card') : null);
+      this.selectDisplayMode('inline', document.querySelector('input[name="browseDisplayMode"][value="inline"]') ? document.querySelector('input[name="browseDisplayMode"][value="inline"]').closest('.nb-display-mode-card') : null);
+    },
+
+    switchTab: function (btn) {
+      if (!btn) return;
+      document.querySelectorAll('.nb-tab').forEach(function (t) { t.classList.remove('active'); });
+      document.querySelectorAll('.nb-tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var panel = document.getElementById(btn.dataset.panel);
+      if (panel) panel.classList.add('active');
+    },
+
+    selectFormType: function (type, card) {
+      document.querySelectorAll('.nb-ftype-card').forEach(function (c) { c.classList.remove('selected'); });
+      if (card) card.classList.add('selected');
+      var radio = document.querySelector('input[name="formType"][value="' + type + '"]');
+      if (radio) radio.checked = true;
+      var browseTabEl = document.getElementById('browseTab');
+      var browseNotice = document.getElementById('browseNotApplicable');
+      var isBrowseable = (type === 'main' || type === 'popup');
+      if (browseTabEl)  browseTabEl.style.opacity    = isBrowseable ? '1' : '0.4';
+      if (browseNotice) browseNotice.style.display   = isBrowseable ? 'none' : 'block';
+    },
+
+    selectTableMode: function (mode, card) {
+      document.querySelectorAll('.nb-tmode-card').forEach(function (c) { c.classList.remove('selected'); });
+      if (card) card.classList.add('selected');
+      var radio = document.querySelector('input[name="formTableMode"][value="' + mode + '"]');
+      if (radio) radio.checked = true;
+      var nw = document.getElementById('newTableWrap');
+      var ex = document.getElementById('existingTableWrap');
+      if (nw) nw.style.display = (mode === 'new')      ? '' : 'none';
+      if (ex) ex.style.display = (mode === 'existing') ? '' : 'none';
+    },
+
+    selectPkType: function (type, card) {
+      document.querySelectorAll('.nb-pk-card').forEach(function (c) { c.classList.remove('selected'); });
+      if (card) card.classList.add('selected');
+      var radio = document.querySelector('input[name="formPkType"][value="' + type + '"]');
+      if (radio) radio.checked = true;
+    },
+
+    selectDisplayMode: function (mode, card) {
+      document.querySelectorAll('.nb-display-mode-card').forEach(function (c) { c.classList.remove('selected'); });
+      if (card) card.classList.add('selected');
+      var radio = document.querySelector('input[name="browseDisplayMode"][value="' + mode + '"]');
+      if (radio) radio.checked = true;
+    },
+
+    _updateEmptyState: function () {
+      var canvas = document.getElementById('formCanvas');
+      var empty  = document.getElementById('canvasEmpty');
+      if (!canvas || !empty) return;
+      empty.style.display = canvas.querySelector('.nb-cfield') ? 'none' : 'block';
+    },
+
+    // ── addRow ────────────────────────────────────────────────────
+    addRow: function () {
+      var canvas = document.getElementById('formCanvas');
+      if (!canvas) return null;
+      var empty = document.getElementById('canvasEmpty');
+      if (empty) empty.style.display = 'none';
+
+      var row = document.createElement('div');
+      row.className = 'nb-row';
+      row.innerHTML =
+        '<div class="nb-row-header">'
+          + '<span class="nb-row-drag" title="Drag row">⠿</span>'
+          + '<span class="nb-row-label">Row</span>'
+          + '<span class="nb-row-actions">'
+            + '<button class="nb-row-btn del" onclick="this.closest(\'.nb-row\').remove();window.nbFormBuilder._updateEmptyState();">✕</button>'
+          + '</span>'
+        + '</div>'
+        + '<div class="nb-row-body">'
+          + '<div class="nb-row-drop-hint">Drop fields here</div>'
+        + '</div>';
+      canvas.appendChild(row);
+
+      var body = row.querySelector('.nb-row-body');
+      if (body) _attachRowBodyDrop(body);
+      return row;
+    },
+
+    // ── addField ──────────────────────────────────────────────────
+    addField: function (type, extraData) {
+      var canvas = document.getElementById('formCanvas');
+      if (!canvas) return null;
+      var extra = extraData || {};
+      var label = extra.label || extra.fieldlabel || (type.charAt(0).toUpperCase() + type.slice(1) + ' Field');
+      var name  = extra.name  || extra.fieldname  || (type + '_' + (++_fieldCounter));
+      var col   = parseInt(extra.col || extra.colspan, 10) || 12;
+
+      var card = this._makeFieldCard(type, label, name, !!extra.required, extra);
+      if (!card) return null;
+
+      // Target: last row body, or create a row
+      var rows = canvas.querySelectorAll('.nb-row-body');
+      var targetBody = rows.length ? rows[rows.length - 1] : null;
+      if (!targetBody) {
+        var newRow = this.addRow();
+        targetBody = newRow ? newRow.querySelector('.nb-row-body') : null;
+      }
+      if (!targetBody) { canvas.appendChild(card); return card; }
+
+      var hint = targetBody.querySelector('.nb-row-drop-hint');
+      if (hint) hint.remove();
+
+      card.id = card.id || ('nb-card-' + Date.now() + '-' + Math.random().toString(36).slice(2,5));
+      card.setAttribute('draggable','true');
+      card.addEventListener('dragstart', function (ev) {
+        ev.dataTransfer.setData('text/nb-card-id', card.id);
+        card.classList.add('drag-source');
+      });
+      card.addEventListener('dragend', function () { card.classList.remove('drag-source'); });
+      targetBody.appendChild(card);
+      this._applyColSpan(card, col);
+      return card;
+    },
+
+    // ── _makeFieldCard ────────────────────────────────────────────
+    _makeFieldCard: function (type, label, name, required, extra) {
+      extra = extra || {};
+      var col = parseInt(extra.col || extra.colspan, 10) || 12;
+
+      var spanBtns = [3,4,6,8,12].map(function (n) {
+        return '<button type="button" class="nb-span-btn' + (n === col ? ' active' : '') + '" data-span="' + n + '">' + n + '</button>';
+      }).join('');
+
+      var extraBody = '';
+      if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
+        var opts = (extra.options || []).map(function (o) {
+          return typeof o === 'object' ? (o.value + '|' + o.label) : o;
+        }).join('\n');
+        extraBody += '<div class="nb-fp nb-fp-full"><label>Options (value|label per line)</label>'
+          + '<textarea class="nu-input nb-field-options" rows="3">' + _esc(opts) + '</textarea></div>';
+      }
+      if (type === 'subform') {
+        extraBody += '<div class="nb-sf-config"></div>';
+      }
+
+      var card = document.createElement('div');
+      card.className = 'nb-cfield';
+      card.dataset.type = type;
+      card.style.gridColumn = 'span ' + col;
+      card.dataset.col = String(col);
+      card.innerHTML =
+        '<div class="nb-cfield-header" onclick="this.nextElementSibling.nextElementSibling.classList.toggle(\' open\');">'
+          + '<span class="nb-cfield-drag">⠿</span>'
+          + '<span class="nb-cfield-type-badge">' + _esc(type) + '</span>'
+          + '<span class="nb-cfield-label">' + _esc(label) + '</span>'
+          + '<span class="nb-cfield-span-badge">' + col + '/12</span>'
+          + '<span class="nb-cfield-actions">'
+            + '<button class="nb-cfield-btn del" onclick="event.stopPropagation();this.closest(\'.nb-cfield\').remove();window.nbFormBuilder._updateEmptyState();">✕</button>'
+          + '</span>'
+        + '</div>'
+        + '<div class="nb-span-bar">'
+          + '<span class="nb-span-bar-label">Width</span>'
+          + spanBtns
+          + '<span class="nb-span-preview">' + col + '/12 cols</span>'
+        + '</div>'
+        + '<div class="nb-cfield-body">'
+          + '<div class="nb-fp-grid">'
+            + '<div class="nb-fp"><label>Label</label><input type="text" class="nu-input nb-field-label" value="' + _esc(label) + '"></div>'
+            + '<div class="nb-fp"><label>Field Name</label><input type="text" class="nu-input nb-field-name" value="' + _esc(name) + '"></div>'
+            + '<div class="nb-fp"><label class="nb-fp-check"><input type="checkbox" class="nb-field-required"' + (required ? ' checked' : '') + '> Required</label></div>'
+            + (type !== 'subform' ? '<div class="nb-fp"><label>Placeholder</label><input type="text" class="nu-input nb-field-placeholder" value="' + _esc(extra.placeholder || '') + '"></div>' : '')
+            + (type !== 'subform' ? '<div class="nb-fp"><label>Default Value</label><input type="text" class="nu-input nb-field-default" value="' + _esc(extra.default_value || extra.defaultvalue || '') + '"></div>' : '')
+            + extraBody
+          + '</div>'
+        + '</div>';
+
+      // Wire span buttons
+      var self = this;
+      card.querySelectorAll('.nb-span-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          self._applyColSpan(card, parseInt(btn.dataset.span, 10) || 12);
+        });
+      });
+
+      return card;
+    },
+
+    // ── _applyColSpan ─────────────────────────────────────────────
+    _applyColSpan: function (card, col) {
+      var c = parseInt(col, 10) || 12;
+      if (c < 1 || c > 12) c = 12;
+      card.style.gridColumn = 'span ' + c;
+      card.dataset.col = String(c);
+      var badge = card.querySelector('.nb-cfield-span-badge');
+      if (badge) badge.textContent = c + '/12';
+      var preview = card.querySelector('.nb-span-preview');
+      if (preview) preview.textContent = c + '/12 cols';
+      card.querySelectorAll('.nb-span-btn').forEach(function (btn) {
+        btn.classList.toggle('active', parseInt(btn.dataset.span, 10) === c);
+      });
+    },
+
+    // ── getLayout ─────────────────────────────────────────────────
+    getLayout: function () {
+      var canvas = document.getElementById('formCanvas');
+      if (!canvas) return [];
+      var fields = [];
+      canvas.querySelectorAll('.nb-cfield').forEach(function (card) {
+        var type   = card.dataset.type || 'text';
+        var labelEl = card.querySelector('.nb-field-label');
+        var nameEl  = card.querySelector('.nb-field-name');
+        var reqEl   = card.querySelector('.nb-field-required');
+        var phEl    = card.querySelector('.nb-field-placeholder');
+        var defEl   = card.querySelector('.nb-field-default');
+        var optsEl  = card.querySelector('.nb-field-options');
+
+        var field = {
+          type:          type,
+          label:         labelEl ? labelEl.value  : '',
+          name:          nameEl  ? nameEl.value   : '',
+          required:      reqEl   ? reqEl.checked  : false,
+          placeholder:   phEl    ? phEl.value     : '',
+          default_value: defEl   ? defEl.value    : '',
+          col:           parseInt(card.dataset.col, 10) || 12
+        };
+
+        if (optsEl) {
+          field.options = optsEl.value.split('\n').map(function (l) {
+            l = l.trim(); if (!l) return null;
+            var parts = l.split('|');
+            return parts.length >= 2
+              ? { value: parts[0].trim(), label: parts[1].trim() }
+              : { value: l, label: l };
+          }).filter(Boolean);
+        }
+
+        if (type === 'subform') field.subform = {};
+        fields.push(field);
+      });
+
+      // Augment subform entries with live panel values
+      if (typeof window._nbSfAugmentLayout === 'function') {
+        fields = window._nbSfAugmentLayout(fields);
+      }
+      return fields;
+    },
+
+    // ── saveForm ──────────────────────────────────────────────────
+    saveForm: async function () {
+      var nameEl  = document.getElementById('builderFormName');
+      var codeEl  = document.getElementById('builderFormCode');
+      var tableEl = document.getElementById('builderFormTable');
+      var editEl  = document.getElementById('editFormId');
+
+      var name   = nameEl  ? nameEl.value.trim()  : '';
+      var code   = codeEl  ? codeEl.value.trim()  : '';
+      var table  = tableEl ? tableEl.value.trim()  : '';
+      var editId = editEl  ? editEl.value.trim()   : '';
+
+      if (!name) { NuApp.toast('Form name is required', 'error'); return; }
+
+      var _r = function (n) { var e = document.querySelector('input[name="' + n + '"]:checked'); return e ? e.value : ''; };
+      var _v = function (id) { var e = document.getElementById(id); return e ? e.value : ''; };
+      var _c = function (id) { var e = document.getElementById(id); return !!(e && e.checked); };
+
+      var layout = this.getLayout();
+
+      var payload = {
+        form_name:       name,
+        form_code:       code,
+        form_table:      table,
+        form_type:       _r('formType')        || 'main',
+        form_table_mode: _r('formTableMode')   || 'new',
+        form_pk_type:    _r('formPkType')      || 'autoincrement',
+        form_layout:     JSON.stringify(layout),
+        browse_display_mode:       _r('browseDisplayMode') || 'inline',
+        browse_sql:                _v('formBrowseSql'),
+        browse_columns:            _v('formBrowseColumns'),
+        browse_page_size:          _v('formBrowsePageSize'),
+        browse_default_sort:       _v('formBrowseDefaultSort'),
+        browse_search_enabled:     _c('formBrowseSearchEnabled') ? 1 : 0,
+        browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
+        browse_search_fields:      _v('formBrowseSearchFields'),
+        form_custom_js:            _v('formCustomJs'),
+        form_js_before_save:       _v('formJsBeforeSave'),
+        form_js_after_save:        _v('formJsAfterSave'),
+        form_custom_php:           _v('formCustomPhp'),
+        form_custom_css:           _v('formCustomCss')
+      };
+
+      var action = editId
+        ? 'update&id=' + encodeURIComponent(editId)
+        : 'create';
+
+      try {
+        var res = await NuApp.apiJson('api/forms.php?action=' + action, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res && res.success) {
+          NuApp.toast(editId ? 'Form updated!' : 'Form created!', 'success');
+          this.close();
+          NuApp.loadModule('forms');
+        } else {
+          NuApp.toast((res && res.error) || 'Save failed', 'error');
+        }
+      } catch (err) {
+        NuApp.toast('Save error: ' + err.message, 'error');
+      }
+    },
+
+    // Called by NuApp.initModuleScripts after forms module loads
+    _initAfterLoad: function () {
+      _attachAllRowDrops();
+      _upgradeAllSubformCards();
+    }
+  };
+
+  // expose saveForm on window (called from forms.php button)
+  window.saveForm = function () { return window.nbFormBuilder.saveForm(); };
+
+
+  /* ════════════════════════════════════════════════════════════════════
+     SECTION 3 — Row/span canvas patches  (was nb-form-builder-layout.js)
+  ═══════════════════════════════════════════════════════════════════ */
+
+  // nuToggleContainer
+  if (!window.nuToggleContainer) {
+    window.nuToggleContainer = function (btn) {
+      if (!btn) return;
+      var body = document.getElementById(btn.getAttribute('data-target'));
+      if (!body) return;
+      var hidden = body.style.display === 'none' || body.style.display === '';
+      body.style.display = hidden ? 'block' : 'none';
+      btn.innerHTML = hidden ? '&#9660;' : '&#9654;';
+    };
+  }
+
+  function _attachRowBodyDrop(rowBody) {
+    if (rowBody._nuDropPatched) return;
+    rowBody._nuDropPatched = true;
+
+    rowBody.addEventListener('dragover', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      rowBody.classList.add('drag-col-over');
+    });
+    rowBody.addEventListener('dragleave', function (e) {
+      if (!rowBody.contains(e.relatedTarget)) rowBody.classList.remove('drag-col-over');
+    });
+    rowBody.addEventListener('drop', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      rowBody.classList.remove('drag-col-over');
+
+      var cardId = e.dataTransfer.getData('text/nb-card-id');
+      if (cardId) {
+        var existing = document.getElementById(cardId);
+        if (existing) {
+          var oldRow = existing.closest('.nb-row');
+          rowBody.appendChild(existing);
+          window.nbFormBuilder._applyColSpan(existing, existing.dataset.col || 12);
+          if (oldRow && !oldRow.querySelector('.nb-cfield')) oldRow.remove();
+          window.nbFormBuilder._updateEmptyState();
+          return;
+        }
+      }
+      var dtype = e.dataTransfer.getData('text/nb-type') || e.dataTransfer.getData('text/plain');
+      if (dtype) {
+        var card = window.nbFormBuilder.addField(dtype, { col: 6 });
+        if (card) {
+          var hint = rowBody.querySelector('.nb-row-drop-hint');
+          if (hint) hint.remove();
+          rowBody.appendChild(card);
+          window.nbFormBuilder._applyColSpan(card, 6);
+        }
+        window.nbFormBuilder._updateEmptyState();
+      }
+    });
+  }
+
+  function _attachAllRowDrops() {
+    var canvas = document.getElementById('formCanvas');
+    if (!canvas) return;
+    canvas.querySelectorAll('.nb-row-body').forEach(_attachRowBodyDrop);
+  }
+
+  // Toolbox dragstart
+  document.addEventListener('dragstart', function (e) {
+    var tool = e.target.closest ? e.target.closest('.nb-tool[data-type]') : null;
+    if (tool) e.dataTransfer.setData('text/nb-type', tool.dataset.type);
+    var card = e.target.closest ? e.target.closest('.nb-cfield[id]') : null;
+    if (card) {
+      if (!card.id) card.id = 'nb-card-' + Date.now();
+      e.dataTransfer.setData('text/nb-card-id', card.id);
+    }
+  }, true);
+
+
+  /* ════════════════════════════════════════════════════════════════════
+     SECTION 4 — Subform FK panel  (was nb-subform-fk-builder.js)
+  ═══════════════════════════════════════════════════════════════════ */
+
+  function _isSubformCard(card) {
+    var t = card.dataset.type || card.dataset.fieldtype || card.dataset.fieldType
+         || card.dataset.nbType || card.dataset.ftype || '';
+    if (t === 'subform') return true;
+    var badge = card.querySelector('.nb-cfield-type-badge');
+    if (badge && badge.textContent.trim().toLowerCase() === 'subform') return true;
+    var raw = card.dataset.fieldJson || card.dataset.fieldData || '';
+    if (raw) {
+      try { if ((JSON.parse(raw).type || '') === 'subform') return true; } catch (e) {}
+    }
+    return false;
+  }
+
+  function _getSubformCards() {
+    var canvas = document.getElementById('formCanvas');
+    if (!canvas) return [];
+    return Array.prototype.slice.call(canvas.querySelectorAll('.nb-cfield')).filter(_isSubformCard);
+  }
+
+  function _readCardConfig(card) {
+    var formCode = '', fkField = '', isFk = false, hideGrid = false, srvRo = false;
+    var panel = card.querySelector('.nb-sf-fk-panel');
+    if (panel) {
+      var fcSel  = panel.querySelector('.nb-sf-form-code');
+      var fkSel  = panel.querySelector('.nb-sf-fk-field');
+      var isFkC  = panel.querySelector('.nb-sf-is-fk');
+      var hideC  = panel.querySelector('.nb-sf-hide-in-grid');
+      var srvRoC = panel.querySelector('.nb-sf-server-readonly');
+      if (fcSel)  formCode = fcSel.value  || '';
+      if (fkSel)  fkField  = fkSel.value  || '';
+      if (isFkC)  isFk     = isFkC.checked;
+      if (hideC)  hideGrid = hideC.checked;
+      if (srvRoC) srvRo    = srvRoC.checked;
+    }
+    if (!formCode) formCode = card.dataset.sfFormCode || '';
+    if (!fkField)  fkField  = card.dataset.sfFkField  || '';
+    if (!isFk)     isFk     = card.dataset.sfIsFk           === '1';
+    if (!hideGrid) hideGrid = card.dataset.sfHideInGrid     === '1';
+    if (!srvRo)    srvRo    = card.dataset.sfServerReadonly === '1';
+    if (!formCode) {
+      var raw = card.dataset.fieldJson || card.dataset.fieldData || '';
+      if (raw) {
+        try {
+          var obj = JSON.parse(raw);
+          var sf  = (obj.subform && typeof obj.subform === 'object') ? obj.subform : {};
+          formCode = sf.form_code || sf.formcode || '';
+          fkField  = sf.fk_field  || sf.fkfield  || '';
+          if (!isFk)     isFk     = !!obj.is_fk;
+          if (!hideGrid) hideGrid = !!obj.hide_in_grid;
+          if (!srvRo)    srvRo    = !!obj.server_readonly;
+        } catch (e) {}
+      }
+    }
+    return { form_code: formCode, fk_field: fkField, is_fk: isFk, hide_in_grid: hideGrid, server_readonly: srvRo };
+  }
+
+  // _nbSfAugmentLayout — called inside getLayout()
+  function _augmentLayout(layout) {
+    if (!Array.isArray(layout)) return layout;
+    var sfCards = _getSubformCards();
+    var sfIndex = 0;
+    layout.forEach(function (fieldObj) {
+      if ((fieldObj.type || fieldObj.fieldtype || '') !== 'subform') return;
+      var card = sfCards[sfIndex++] || null;
+      if (!card) return;
+      var cfg = _readCardConfig(card);
+      if (!fieldObj.subform) fieldObj.subform = {};
+      if (cfg.form_code) fieldObj.subform.form_code = cfg.form_code;
+      if (cfg.fk_field)  fieldObj.subform.fk_field  = cfg.fk_field;
+      if (cfg.is_fk)            fieldObj.is_fk            = true; else delete fieldObj.is_fk;
+      if (cfg.hide_in_grid)     fieldObj.hide_in_grid     = true; else delete fieldObj.hide_in_grid;
+      if (cfg.server_readonly)  fieldObj.server_readonly  = true; else delete fieldObj.server_readonly;
+    });
+    return layout;
+  }
+  window._nbSfAugmentLayout = _augmentLayout;
+
+  function _toggleRow(cls, dataKey, checkedAttr, label, hint) {
+    return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">'
+      + '<input type="checkbox" class="' + cls + '" data-fk-flag="' + dataKey + '" ' + checkedAttr + '>'
+      + '<span><strong>' + label + '</strong>'
+      + (hint ? ' <span style="color:var(--text-muted,#999);font-size:11px;">— ' + hint + '</span>' : '')
+      + '</span></label>';
+  }
+
+  function _subformPanelHTML(d) {
+    var isFk     = d.is_fk           ? 'checked' : '';
+    var hideGrid = d.hide_in_grid    ? 'checked' : '';
+    var srvRo    = d.server_readonly ? 'checked' : '';
+    return [
+      '<div class="nb-sf-fk-panel" style="display:flex;flex-direction:column;gap:8px;padding:10px 0;">',
+        '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Child Form</label>',
+        '<select class="nu-input nb-sf-form-code" style="width:100%;"><option value="">— select form —</option></select></div>',
+        '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">FK Field (links child → parent)</label>',
+        '<div style="display:flex;gap:6px;">',
+          '<select class="nu-input nb-sf-fk-field" style="flex:1;"><option value="">— select FK field —</option></select>',
+          '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm nb-sf-create-fk">＋ Create FK Field</button>',
+        '</div></div>',
+        '<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);">',
+          '<label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">FK Field Flags</label>',
+          _toggleRow('nb-sf-is-fk',           'is_fk',           isFk,     'FK field',        'Force hidden; builder locks this field'),
+          _toggleRow('nb-sf-hide-in-grid',    'hide_in_grid',    hideGrid, 'Hide in grid',    'Excludes column from subform table'),
+          _toggleRow('nb-sf-server-readonly', 'server_readonly', srvRo,    'Server readonly', 'PHP ignores POST value; always writes parent ID'),
+        '</div>',
+      '</div>'
+    ].join('');
+  }
+
+  function _populateFormDropdown(panel, selectedCode, cb) {
+    var sel = panel.querySelector('.nb-sf-form-code');
+    if (!sel) { if (cb) cb(); return; }
+    fetch('api/forms.php?action=list', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (json) {
+        var forms = (json && json.success && json.forms) ? json.forms : [];
+        while (sel.options.length > 1) sel.remove(1);
+        forms.forEach(function (f) {
+          var opt = document.createElement('option');
+          opt.value = f.form_code || f.code || '';
+          opt.textContent = (f.form_name || f.name || opt.value) + ' (' + opt.value + ')';
+          sel.appendChild(opt);
+        });
+        if (selectedCode) {
+          sel.value = selectedCode;
+          if (sel.value !== selectedCode) {
+            var m = document.createElement('option');
+            m.value = selectedCode; m.textContent = selectedCode + ' (saved)';
+            sel.insertBefore(m, sel.options[1] || null);
+            sel.value = selectedCode;
+          }
+        }
+        if (cb) cb();
+      })
+      .catch(function () { if (cb) cb(); });
+  }
+
+  function _populateFkDropdown(panel, formCode, selectedFk) {
+    var sel = panel.querySelector('.nb-sf-fk-field');
+    if (!sel || !formCode) return;
+    fetch('api/form.php?action=subform_fields&code=' + encodeURIComponent(formCode), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (json) {
+        var fields = (json && json.success && json.data)
+          ? (json.data.all_fields || json.data.layout || []) : [];
+        while (sel.options.length > 1) sel.remove(1);
+        fields.forEach(function (f) {
+          var fname = f.name || f.fieldname || '';
+          var ftype = f.type || f.fieldtype || 'text';
+          if (!fname || ['html','heading','divider','fieldset','subform','button'].indexOf(ftype) !== -1) return;
+          var opt = document.createElement('option');
+          opt.value = fname;
+          opt.textContent = (f.label || f.fieldlabel || fname) + ' [' + fname + ']';
+          sel.appendChild(opt);
+        });
+        if (selectedFk) {
+          sel.value = selectedFk;
+          if (sel.value !== selectedFk) {
+            var m = document.createElement('option');
+            m.value = selectedFk; m.textContent = selectedFk + ' (saved)';
+            sel.insertBefore(m, sel.options[1] || null);
+            sel.value = selectedFk;
+          }
+        }
+      })
+      .catch(function () {});
+  }
+
+  function _createFkField(panel) {
+    var formCodeSel = panel.querySelector('.nb-sf-form-code');
+    var fkFieldSel  = panel.querySelector('.nb-sf-fk-field');
+    var formCode = formCodeSel ? formCodeSel.value : '';
+    var fkName   = fkFieldSel  ? fkFieldSel.value  : '';
+    if (!formCode) { NuApp.toast('Select a child form first', 'error'); return; }
+    if (!fkName) {
+      fkName = window.prompt('Enter FK field name (e.g. order_id):');
+      if (!fkName || !fkName.trim()) return;
+      fkName = fkName.trim().replace(/[^a-zA-Z0-9_]/g, '_');
+    }
+    fetch('api/forms.php?action=get_by_code&code=' + encodeURIComponent(formCode), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (json) {
+        if (!json.success || !json.form) throw new Error(json.error || 'Child form not found');
+        var form = json.form;
+        var layout = [];
+        try { layout = JSON.parse(form.form_layout || '[]'); } catch (e) { layout = []; }
+        if (!Array.isArray(layout)) layout = [];
+        if (layout.some(function (f) { return (f.name || f.fieldname || '') === fkName; })) {
+          NuApp.toast('Field "' + fkName + '" already exists in ' + formCode, 'error');
+          return null;
+        }
+        layout.push({ name: fkName, label: fkName, type: 'hidden', is_fk: true, hide_in_grid: true, server_readonly: true });
+        return fetch(
+          'api/forms.php?action=patch_layout&id=' + encodeURIComponent(form.form_id || form.id || ''),
+          { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ form_layout: JSON.stringify(layout) }) }
+        ).then(function (r) { return r.json(); });
+      })
+      .then(function (saveJson) {
+        if (!saveJson) return;
+        if (!saveJson.success) { NuApp.toast(saveJson.error || 'Save failed', 'error'); return; }
+        NuApp.toast('FK field "' + fkName + '" created in ' + formCode);
+        _populateFkDropdown(panel, formCode, fkName);
+      })
+      .catch(function (e) { NuApp.toast('Error: ' + e.message, 'error'); });
+  }
+
+  function _upgradeSubformPanel(card) {
+    if (!_isSubformCard(card)) return;
+    if (card._sfPanelUpgraded) {
+      var existing = card.querySelector('.nb-sf-fk-panel');
+      if (existing) {
+        var sel = existing.querySelector('.nb-sf-form-code');
+        if (sel && sel.value) return; // already has data
+        existing.remove();
+      }
+      card._sfPanelUpgraded = false;
+    }
+    card._sfPanelUpgraded = true;
+
+    var panelTarget = card.querySelector('.nb-sf-config')
+      || card.querySelector('.nb-cfield-body')
+      || card;
+
+    var existingData = window._nbSfData.read(card);
+    panelTarget.insertAdjacentHTML('beforeend', _subformPanelHTML(existingData));
+
+    var panel = panelTarget.querySelector('.nb-sf-fk-panel');
+    if (!panel) return;
+
+    _populateFormDropdown(panel, existingData.form_code, function () {
+      if (existingData.form_code) _populateFkDropdown(panel, existingData.form_code, existingData.fk_field);
+    });
+
+    var formSel = panel.querySelector('.nb-sf-form-code');
+    if (formSel) {
+      formSel.addEventListener('change', function () {
+        _populateFkDropdown(panel, formSel.value, '');
+      });
+    }
+    var createBtn = panel.querySelector('.nb-sf-create-fk');
+    if (createBtn) createBtn.addEventListener('click', function () { _createFkField(panel); });
+  }
+
+  function _upgradeAllSubformCards() {
+    var canvas = document.getElementById('formCanvas');
+    if (!canvas) return;
+    canvas.querySelectorAll('.nb-cfield').forEach(_upgradeSubformPanel);
+  }
+  window._nbSfUpgradeAll = _upgradeAllSubformCards;
+
+  // MutationObserver auto-upgrade
+  var _obs = new MutationObserver(function (mutations) {
+    mutations.forEach(function (m) {
+      m.addedNodes.forEach(function (node) {
+        if (node.nodeType !== 1) return;
+        if (_isSubformCard(node)) _upgradeSubformPanel(node);
+        if (node.querySelectorAll) node.querySelectorAll('.nb-cfield').forEach(function (c) {
+          if (_isSubformCard(c)) _upgradeSubformPanel(c);
+        });
+      });
+    });
+  });
+
+  function _attachObserver() {
+    var canvas = document.getElementById('formCanvas');
+    if (!canvas) return;
+    try { _obs.disconnect(); } catch (e) {}
+    _obs.observe(canvas, { childList: true, subtree: true });
+  }
+
+  document.addEventListener('nu:form:opened', function () {
+    setTimeout(function () { _attachObserver(); _upgradeAllSubformCards(); }, 150);
+  });
+
+  window.nbCreateFkField = _createFkField;
+
+
+  /* ════════════════════════════════════════════════════════════════════
+     SECTION 5 — Edit restore  (was nb-form-edit.js)
+     nbFormBuilder.edit(formId) — fetches saved form and restores all
+     builder fields + canvas.
+  ═══════════════════════════════════════════════════════════════════ */
+
+  window.nbFormBuilder.edit = async function (formId) {
+    if (!formId) { NuApp.toast('No form ID', 'error'); return; }
+    try {
+      var res = await NuApp.apiJson(
+        'api/forms.php?action=get&id=' + encodeURIComponent(formId),
+        { credentials: 'same-origin' }
+      );
+      if (!res.success || !res.form) { NuApp.toast(res.error || 'Form not found', 'error'); return; }
+
+      var f = res.form;
+      window.nbFormBuilder.open();
+      await new Promise(function (r) { setTimeout(r, 0); });
+
+      var _sv = function (id, val) { var e = document.getElementById(id); if (e) e.value = val; };
+      var _sc = function (id, val) { var e = document.getElementById(id); if (e) e.checked = !!(Number(val) || val === true); };
+
+      var editIdEl = document.getElementById('editFormId');
+      if (editIdEl) editIdEl.value = f.form_id || formId;
+      var titleEl = document.getElementById('builderTitle');
+      if (titleEl) titleEl.textContent = 'Edit Form';
+
+      _sv('builderFormName', f.form_name || '');
+      _sv('builderFormCode', f.form_code || '');
+
+      var ftype = f.form_type || 'main';
+      var ftypeRadio = document.querySelector('input[name="formType"][value="' + ftype + '"]');
+      window.nbFormBuilder.selectFormType(ftype, ftypeRadio ? ftypeRadio.closest('.nb-ftype-card') : null);
+
+      var tableMode = f.form_table_mode || 'new';
+      var tModeRadio = document.querySelector('input[name="formTableMode"][value="' + tableMode + '"]');
+      window.nbFormBuilder.selectTableMode(tableMode, tModeRadio ? tModeRadio.closest('.nb-tmode-card') : null);
+
+      _sv('builderFormTable', f.form_table || '');
+      if (tableMode === 'existing') {
+        var exEl = document.getElementById('builderFormTableExisting');
+        if (exEl) {
+          exEl.value = f.form_table || '';
+          if (exEl.value !== (f.form_table || '') && f.form_table) {
+            var opt = document.createElement('option');
+            opt.value = f.form_table; opt.textContent = f.form_table + ' (current)';
+            exEl.prepend(opt); exEl.value = f.form_table;
+          }
+        }
+      }
+
+      var pkType = f.form_pk_type || 'autoincrement';
+      var pkRadio = document.querySelector('input[name="formPkType"][value="' + pkType + '"]');
+      window.nbFormBuilder.selectPkType(pkType, pkRadio ? pkRadio.closest('.nb-pk-card') : null);
+
+      _sv('formBrowseSql',               f.browse_sql                || '');
+      _sv('formBrowseColumns',            f.browse_columns            || '');
+      _sv('formBrowsePageSize',           f.browse_page_size          || 20);
+      _sv('formBrowseDefaultSort',        f.browse_default_sort       || '');
+      _sv('formBrowseSearchPlaceholder',  f.browse_search_placeholder || '');
+      _sv('formBrowseSearchFields',       f.browse_search_fields      || '');
+      _sc('formBrowseSearchEnabled',      f.browse_search_enabled);
+
+      var bdm = f.browse_display_mode || 'inline';
+      var bdmRadio = document.querySelector('input[name="browseDisplayMode"][value="' + bdm + '"]');
+      window.nbFormBuilder.selectDisplayMode(bdm, bdmRadio ? bdmRadio.closest('.nb-display-mode-card') : null);
+
+      _sv('formCustomJs',     f.form_custom_js      || '');
+      _sv('formJsBeforeSave', f.form_js_before_save || '');
+      _sv('formJsAfterSave',  f.form_js_after_save  || '');
+      _sv('formCustomPhp',    f.form_custom_php     || '');
+      _sv('formCustomCss',    f.form_custom_css     || '');
+
+      // Rebuild canvas
+      _rebuildCanvas(f.form_layout);
+
+    } catch (err) {
+      console.error('nbFormBuilder.edit error', err);
+      NuApp.toast('Edit error: ' + err.message, 'error');
+    }
+  };
+
+  function _rebuildCanvas(layoutJson) {
+    var canvas = document.getElementById('formCanvas');
+    var empty  = document.getElementById('canvasEmpty');
+    if (!canvas) return;
+
+    canvas.querySelectorAll('.nb-row').forEach(function (r) { r.remove(); });
+
+    var fields = [];
+    try {
+      fields = typeof layoutJson === 'string'
+        ? JSON.parse(layoutJson)
+        : (Array.isArray(layoutJson) ? layoutJson : []);
+    } catch (e) { fields = []; }
+
+    if (!fields.length) { if (empty) empty.style.display = 'block'; return; }
+    if (empty) empty.style.display = 'none';
+
+    fields.forEach(function (f) {
+      var beforeCount = canvas.querySelectorAll('.nb-cfield').length;
+      window.nbFormBuilder.addField(f.type || f.fieldtype || 'text', f);
+
+      if ((f.type || f.fieldtype || '') === 'subform') {
+        var allCards = canvas.querySelectorAll('.nb-cfield');
+        var newCard  = allCards[beforeCount] || allCards[allCards.length - 1];
+        if (newCard) {
+          try { newCard.dataset.fieldJson = JSON.stringify(f); } catch (e) {}
+          var sf = (f.subform && typeof f.subform === 'object') ? f.subform : {};
+          window._nbSfData.write(newCard, {
+            form_code:       sf.form_code || sf.formcode || '',
+            fk_field:        sf.fk_field  || sf.fkfield  || '',
+            is_fk:           !!f.is_fk,
+            hide_in_grid:    !!f.hide_in_grid,
+            server_readonly: !!f.server_readonly
+          });
+          delete newCard._sfPanelUpgraded;
+        }
+      }
+    });
+
+    // Re-attach row drops after rebuild
+    _attachAllRowDrops();
+
+    // Upgrade all subform panels after canvas is complete
+    setTimeout(function () { _upgradeAllSubformCards(); }, 80);
+  }
+
+
+  /* ════════════════════════════════════════════════════════════════════
+     SECTION 6 — Init
+  ═══════════════════════════════════════════════════════════════════ */
+  function _init() {
+    _attachAllRowDrops();
+    _attachObserver();
+    _upgradeAllSubformCards();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _init);
+  } else {
+    _init();
+  }
+
+  console.log('[nb-form-builder] ready.');
+
+}(window));
