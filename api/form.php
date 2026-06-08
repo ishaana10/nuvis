@@ -96,12 +96,6 @@ function nu_form_columns() {
         'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode'];
 }
 
-/**
- * nu_get_form()
- *
- * Looks up a form by code. We try the active=1 query first (normal path),
- * then fall back to any form with that code regardless of active state.
- */
 function nu_get_form($code) {
     $table = nu_form_table_name();
     $c = nu_form_columns();
@@ -221,56 +215,9 @@ function nu_render_lookup_display($field, $value) {
     } catch (Throwable $e) { return ''; }
 }
 
-// ── Field flag helpers ───────────────────────────────────────────────────────────────────
 function nu_field_is_fk($field)           { return !empty($field['is_fk']); }
 function nu_field_hide_in_grid($field)     { return !empty($field['hide_in_grid']); }
 function nu_field_server_readonly($field)  { return !empty($field['server_readonly']); }
-
-/**
- * nu_resolve_parent_id()
- *
- * Reliably extracts the parent record's PK value from $record.
- *
- * Strategy (in order):
- *  1. If $parentTable is known, ask MySQL for the real PK column name and
- *     look it up directly in $record.
- *  2. Scan $record keys: prefer an exact 'id' key, then the first key that
- *     ends with '_id' (common convention), then the very first key.
- *  3. Return '' if $record is empty.
- *
- * This replaces the previous single-line lookup that silently returned ''
- * when the parent PK column was not literally named 'id'.
- */
-function nu_resolve_parent_id(array $record, string $parentTable): string {
-    if (empty($record)) return '';
-
-    // Strategy 1 — known table: get the real PK column name from MySQL
-    if ($parentTable !== '') {
-        $pkCol = nu_get_pk($parentTable);
-        if (array_key_exists($pkCol, $record) && (string)$record[$pkCol] !== '') {
-            return (string)$record[$pkCol];
-        }
-    }
-
-    // Strategy 2a — literal 'id' key
-    if (array_key_exists('id', $record) && (string)$record['id'] !== '') {
-        return (string)$record['id'];
-    }
-
-    // Strategy 2b — first key ending in '_id'
-    foreach (array_keys($record) as $key) {
-        if (substr($key, -3) === '_id' && (string)$record[$key] !== '') {
-            return (string)$record[$key];
-        }
-    }
-
-    // Strategy 3 — first non-empty value in the record
-    foreach ($record as $val) {
-        if ((string)$val !== '') return (string)$val;
-    }
-
-    return '';
-}
 
 function nu_render_field($field, $value = '', $record = []) {
     $type  = nu_field_type($field);
@@ -422,18 +369,16 @@ function nu_render_field($field, $value = '', $record = []) {
             $sfFk   = nu_safe_ident($sf['fk_field']  ?? ($sf['fkfield']  ?? ''));
             $sfView = in_array($sf['view'] ?? 'grid', ['grid','form','inline'], true) ? ($sf['view'] ?? 'grid') : 'grid';
 
-            // ── Resolve parent ID robustly ───────────────────────────────────
-            // $field['_parent_table'] is injected by nu_inject_parent_table().
-            // nu_resolve_parent_id() tries the real PK column first, then
-            // falls back to scanning $record keys so we never get '' on forms
-            // whose PK column is not literally named 'id'.
-            $parentTable = nu_safe_ident($field['_parent_table'] ?? '');
-            $sfParent    = nu_resolve_parent_id(is_array($record) ? $record : [], $parentTable);
+            // ── Use the injected parent ID directly (the actual record ID from
+            //    the URL), bypassing nu_resolve_parent_id() guess logic entirely.
+            //    _parent_id is injected by nu_inject_parent_context() which
+            //    receives $recordId from nu_render_form_html().
+            $sfParent = (string)($field['_parent_id'] ?? '');
 
             $control = '<div class="nu-subform-container"'
-                     . ' data-subform-code="'  . nu_attr($sfCode)  . '"'
-                     . ' data-subform-fk="'    . nu_attr($sfFk)    . '"'
-                     . ' data-subform-view="'  . nu_attr($sfView)  . '"'
+                     . ' data-subform-code="'  . nu_attr($sfCode)   . '"'
+                     . ' data-subform-fk="'    . nu_attr($sfFk)     . '"'
+                     . ' data-subform-view="'  . nu_attr($sfView)   . '"'
                      . ' data-parent-id="'     . nu_attr($sfParent) . '"'
                      . ' style="border:1px solid #ddd;border-radius:8px;overflow:hidden;">'
                      . '<div class="nu-subform-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-elevated,#f8f9fa);border-bottom:1px solid #ddd;">'
@@ -480,7 +425,6 @@ function nu_render_field($field, $value = '', $record = []) {
     return $wrapStart . $labelHtml . $control . $helpHtml . '</div>';
 }
 
-// ── Section colour palette ───────────────────────────────────────────────────────────────────
 function nu_section_color($index) {
     $palette = [
         ['border'=>'#01696f','bg'=>'rgba(1,105,111,0.04)','head'=>'rgba(1,105,111,0.08)','text'=>'#01696f'],
@@ -508,7 +452,6 @@ function nu_toggle_script() {
          . '</s' . 'cript>';
 }
 
-// ── Recursive layout renderer ───────────────────────────────────────────────────────────────────
 function nu_render_layout_node($node, $record, $sectionIndex = 0) {
     $type = $node['type'] ?? 'field';
 
@@ -611,7 +554,9 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
     $formTable= $form[$c['table']] ?? '';
     $formName = $form[$c['name']]  ?? $formCode;
 
-    $layout = nu_inject_parent_table($layout, $formTable);
+    // Inject both the parent table name AND the actual record ID into every
+    // subform node so nu_render_field() can use the ground-truth ID directly.
+    $layout = nu_inject_parent_context($layout, $formTable, (string)($recordId ?? ''));
 
     $html  = '<form class="nu-generated-form"'
            . ' data-form-code="'  . nu_attr($formCode)   . '"'
@@ -634,13 +579,26 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
     return $html;
 }
 
-function nu_inject_parent_table(array $layout, string $parentTable): array {
+/**
+ * nu_inject_parent_context()
+ *
+ * Walks the layout tree and injects two keys onto every subform node:
+ *   _parent_table  — the DB table of the parent form (for reference)
+ *   _parent_id     — the ACTUAL record ID passed from the URL (?id=N)
+ *
+ * Using _parent_id directly eliminates all the guesswork in
+ * nu_resolve_parent_id() that was picking the wrong column value.
+ *
+ * Replaces the old nu_inject_parent_table() function.
+ */
+function nu_inject_parent_context(array $layout, string $parentTable, string $parentId): array {
     foreach ($layout as &$node) {
         $t = $node['type'] ?? 'field';
         if ($t === 'subform') {
             $node['_parent_table'] = $parentTable;
+            $node['_parent_id']    = $parentId;
         } elseif (in_array($t, ['section', 'group', 'row'], true) && isset($node['children'])) {
-            $node['children'] = nu_inject_parent_table($node['children'], $parentTable);
+            $node['children'] = nu_inject_parent_context($node['children'], $parentTable, $parentId);
         }
     }
     unset($node);
@@ -669,7 +627,7 @@ function nu_flatten_layout_for_grid($layout) {
     ));
 }
 
-/* ── Subform handlers ───────────────────────────────────────────────────── */
+/* ── Subform handlers ───────────────────────────────────────────── */
 
 function nu_handle_subform_fields() {
     $code = $_GET['code'] ?? '';
@@ -825,7 +783,7 @@ function nu_handle_subform_delete() {
     nu_json(['success' => true]);
 }
 
-/* ── Standard handlers ───────────────────────────────────────────────────── */
+/* ── Standard handlers ───────────────────────────────────────────── */
 
 function nu_handle_render() {
     $code = $_GET['code'] ?? '';
@@ -969,7 +927,7 @@ function nu_handle_save() {
     }
 }
 
-/* ── Router ───────────────────────────────────────────────────── */
+/* ── Router ────────────────────────────────────────── */
 try {
     $action = $_GET['action'] ?? '';
     switch ($action) {
