@@ -26,6 +26,14 @@
  *   payload before the fetch fires, guaranteeing subform.form_code and
  *   subform.fk_field are always present. The serialiser name intercept is
  *   kept as a secondary safety net.
+ *
+ * FIX (2026-06-08) — dropdown population in edit mode
+ *   _populateFormDropdown and _populateFkDropdown now explicitly call
+ *   sel.value = selectedValue after all <option> elements are appended.
+ *   Previously only opt.selected was set inline, which was unreliable
+ *   because the browser may not honour it until the select's value is
+ *   forced. This caused the Child Form and FK Field dropdowns to appear
+ *   blank when re-opening a saved subform field in the builder.
  */
 (function () {
   'use strict';
@@ -128,6 +136,13 @@
       ].join('');
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // _populateFormDropdown
+    // FIX (2026-06-08): after appending all options, explicitly set
+    // sel.value = selectedCode so the browser honours the selection.
+    // Previously only opt.selected was set inline which could be ignored
+    // if the <select> had already rendered with a different value.
+    // ─────────────────────────────────────────────────────────────────
     function _populateFormDropdown(panel, selectedCode, cb) {
       var sel = panel.querySelector('.nb-sf-form-code');
       if (!sel) { if (cb) cb(); return; }
@@ -140,14 +155,30 @@
             var opt = document.createElement('option');
             opt.value = f.form_code || f.code || '';
             opt.textContent = (f.form_name || f.name || f.form_code || '') + ' (' + opt.value + ')';
-            if (opt.value === selectedCode) opt.selected = true;
             sel.appendChild(opt);
           });
+          // FIX: force the value after all options are in the DOM
+          if (selectedCode) {
+            sel.value = selectedCode;
+            // If the option didn't exist (form deleted), add a placeholder
+            if (sel.value !== selectedCode) {
+              var missing = document.createElement('option');
+              missing.value = selectedCode;
+              missing.textContent = selectedCode + ' (saved)';
+              sel.insertBefore(missing, sel.options[1] || null);
+              sel.value = selectedCode;
+            }
+          }
           if (cb) cb();
         })
         .catch(function () { if (cb) cb(); });
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // _populateFkDropdown
+    // FIX (2026-06-08): same fix — explicitly set sel.value = selectedFk
+    // after all options are appended.
+    // ─────────────────────────────────────────────────────────────────
     function _populateFkDropdown(panel, formCode, selectedFk) {
       var sel = panel.querySelector('.nb-sf-fk-field');
       if (!sel || !formCode) return;
@@ -166,9 +197,20 @@
             var opt = document.createElement('option');
             opt.value = fname;
             opt.textContent = (f.label || f.fieldlabel || fname) + ' [' + fname + ']';
-            if (fname === selectedFk) opt.selected = true;
             sel.appendChild(opt);
           });
+          // FIX: force the value after all options are in the DOM
+          if (selectedFk) {
+            sel.value = selectedFk;
+            // If the option didn't exist (field removed), add a placeholder
+            if (sel.value !== selectedFk) {
+              var missing = document.createElement('option');
+              missing.value = selectedFk;
+              missing.textContent = selectedFk + ' (saved)';
+              sel.insertBefore(missing, sel.options[1] || null);
+              sel.value = selectedFk;
+            }
+          }
         })
         .catch(function () {});
     }
