@@ -145,8 +145,8 @@
       var browseTabEl = document.getElementById('browseTab');
       var browseNotice = document.getElementById('browseNotApplicable');
       var isBrowseable = (type === 'main' || type === 'popup');
-      if (browseTabEl)  browseTabEl.style.opacity    = isBrowseable ? '1' : '0.4';
-      if (browseNotice) browseNotice.style.display   = isBrowseable ? 'none' : 'block';
+      if (browseTabEl)  browseTabEl.style.opacity  = isBrowseable ? '1' : '0.4';
+      if (browseNotice) browseNotice.style.display  = isBrowseable ? 'none' : 'block';
     },
 
     selectTableMode: function (mode, card) {
@@ -245,6 +245,7 @@
     },
 
     // ── _makeFieldCard ────────────────────────────────────────────
+    // NOTE: header toggle is wired via addEventListener below — NO inline onclick.
     _makeFieldCard: function (type, label, name, required, extra) {
       extra = extra || {};
       var col = parseInt(extra.col || extra.colspan, 10) || 12;
@@ -271,13 +272,13 @@
       card.style.gridColumn = 'span ' + col;
       card.dataset.col = String(col);
       card.innerHTML =
-        '<div class="nb-cfield-header" onclick="this.nextElementSibling.nextElementSibling.classList.toggle(\' open\');">'
+        '<div class="nb-cfield-header">'
           + '<span class="nb-cfield-drag">⠿</span>'
           + '<span class="nb-cfield-type-badge">' + _esc(type) + '</span>'
           + '<span class="nb-cfield-label">' + _esc(label) + '</span>'
           + '<span class="nb-cfield-span-badge">' + col + '/12</span>'
           + '<span class="nb-cfield-actions">'
-            + '<button class="nb-cfield-btn del" onclick="event.stopPropagation();this.closest(\'.nb-cfield\').remove();window.nbFormBuilder._updateEmptyState();">✕</button>'
+            + '<button class="nb-cfield-btn del" type="button">✕</button>'
           + '</span>'
         + '</div>'
         + '<div class="nb-span-bar">'
@@ -296,7 +297,28 @@
           + '</div>'
         + '</div>';
 
-      // Wire span buttons
+      // ── Wire header toggle (no inline onclick — avoids space-in-token bug) ──
+      var header = card.querySelector('.nb-cfield-header');
+      var body   = card.querySelector('.nb-cfield-body');
+      if (header && body) {
+        header.addEventListener('click', function (e) {
+          // Don't toggle when clicking action buttons inside header
+          if (e.target.closest('.nb-cfield-actions')) return;
+          body.classList.toggle('open');
+        });
+      }
+
+      // ── Wire delete button ──
+      var delBtn = card.querySelector('.nb-cfield-btn.del');
+      if (delBtn) {
+        delBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          card.remove();
+          window.nbFormBuilder._updateEmptyState();
+        });
+      }
+
+      // ── Wire span buttons ──
       var self = this;
       card.querySelectorAll('.nb-span-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
@@ -329,7 +351,7 @@
       if (!canvas) return [];
       var fields = [];
       canvas.querySelectorAll('.nb-cfield').forEach(function (card) {
-        var type   = card.dataset.type || 'text';
+        var type    = card.dataset.type || 'text';
         var labelEl = card.querySelector('.nb-field-label');
         var nameEl  = card.querySelector('.nb-field-name');
         var reqEl   = card.querySelector('.nb-field-required');
@@ -449,7 +471,6 @@
      SECTION 3 — Row/span canvas patches  (was nb-form-builder-layout.js)
   ═══════════════════════════════════════════════════════════════════ */
 
-  // nuToggleContainer
   if (!window.nuToggleContainer) {
     window.nuToggleContainer = function (btn) {
       if (!btn) return;
@@ -593,9 +614,9 @@
       if (!fieldObj.subform) fieldObj.subform = {};
       if (cfg.form_code) fieldObj.subform.form_code = cfg.form_code;
       if (cfg.fk_field)  fieldObj.subform.fk_field  = cfg.fk_field;
-      if (cfg.is_fk)            fieldObj.is_fk            = true; else delete fieldObj.is_fk;
-      if (cfg.hide_in_grid)     fieldObj.hide_in_grid     = true; else delete fieldObj.hide_in_grid;
-      if (cfg.server_readonly)  fieldObj.server_readonly  = true; else delete fieldObj.server_readonly;
+      if (cfg.is_fk)           fieldObj.is_fk           = true; else delete fieldObj.is_fk;
+      if (cfg.hide_in_grid)    fieldObj.hide_in_grid    = true; else delete fieldObj.hide_in_grid;
+      if (cfg.server_readonly) fieldObj.server_readonly = true; else delete fieldObj.server_readonly;
     });
     return layout;
   }
@@ -624,9 +645,9 @@
         '</div></div>',
         '<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);">',
           '<label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">FK Field Flags</label>',
-          _toggleRow('nb-sf-is-fk',           'is_fk',           isFk,     'FK field',        'Force hidden; builder locks this field'),
-          _toggleRow('nb-sf-hide-in-grid',    'hide_in_grid',    hideGrid, 'Hide in grid',    'Excludes column from subform table'),
-          _toggleRow('nb-sf-server-readonly', 'server_readonly', srvRo,    'Server readonly', 'PHP ignores POST value; always writes parent ID'),
+          _toggleRow('nb-sf-is-fk',           'is_fk',        isFk,     'FK field',        'Force hidden; builder locks this field'),
+          _toggleRow('nb-sf-hide-in-grid',    'hide_in_grid', hideGrid, 'Hide in grid',    'Excludes column from subform table'),
+          _toggleRow('nb-sf-server-readonly', 'server_readonly', srvRo, 'Server readonly', 'PHP ignores POST value; always writes parent ID'),
         '</div>',
       '</div>'
     ].join('');
@@ -736,7 +757,7 @@
       var existing = card.querySelector('.nb-sf-fk-panel');
       if (existing) {
         var sel = existing.querySelector('.nb-sf-form-code');
-        if (sel && sel.value) return; // already has data
+        if (sel && sel.value) return;
         existing.remove();
       }
       card._sfPanelUpgraded = false;
@@ -774,7 +795,6 @@
   }
   window._nbSfUpgradeAll = _upgradeAllSubformCards;
 
-  // MutationObserver auto-upgrade
   var _obs = new MutationObserver(function (mutations) {
     mutations.forEach(function (m) {
       m.addedNodes.forEach(function (node) {
@@ -803,8 +823,6 @@
 
   /* ════════════════════════════════════════════════════════════════════
      SECTION 5 — Edit restore  (was nb-form-edit.js)
-     nbFormBuilder.edit(formId) — fetches saved form and restores all
-     builder fields + canvas.
   ═══════════════════════════════════════════════════════════════════ */
 
   window.nbFormBuilder.edit = async function (formId) {
@@ -874,7 +892,6 @@
       _sv('formCustomPhp',    f.form_custom_php     || '');
       _sv('formCustomCss',    f.form_custom_css     || '');
 
-      // Rebuild canvas
       _rebuildCanvas(f.form_layout);
 
     } catch (err) {
@@ -922,10 +939,7 @@
       }
     });
 
-    // Re-attach row drops after rebuild
     _attachAllRowDrops();
-
-    // Upgrade all subform panels after canvas is complete
     setTimeout(function () { _upgradeAllSubformCards(); }, 80);
   }
 
