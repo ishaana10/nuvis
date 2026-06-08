@@ -10,11 +10,20 @@
  *   2. Calls nuSubform.onParentSaved() to flush the pending queue → DB
  *   3. Fires the nu:parent:saved DOM event for any other listeners
  *
+ * IMPORTANT: The URL check must match ONLY the parent-form save action
+ * (action=save) and NOT the subform save action (action=subform_save).
+ * Using indexOf('action=save') matches both, which causes onParentSaved()
+ * to re-fire on every subform row flush → duplicate rows created.
+ * We use a regex word-boundary check instead: /[?&]action=save(&|$)/.
+ *
  * Load this file AFTER nubuilder-next.js and nusubform.js.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 (function (window) {
   'use strict';
+
+  /* Matches api/form.php?action=save or &action=save but NOT action=subform_save */
+  var PARENT_SAVE_RE = /[?&]action=save(&|$)/;
 
   function applyPatch() {
     var app = window.NuApp;
@@ -25,10 +34,10 @@
     app.apiJson = function (url, options) {
       return _origApiJson(url, options).then(function (json) {
 
-        /* Only act on a successful parent-form save */
+        /* Only act on a successful PARENT-form save — not subform_save */
         if (
           typeof url === 'string' &&
-          url.indexOf('action=save') !== -1 &&
+          PARENT_SAVE_RE.test(url) &&
           json && json.success
         ) {
           /* Resolve the new record id from whichever shape the API returns */
