@@ -101,19 +101,11 @@ function nu_form_columns() {
  *
  * Looks up a form by code. We try the active=1 query first (normal path),
  * then fall back to any form with that code regardless of active state.
- *
- * Why the fallback?
- * - The builder's actionSave() now always writes form_active=1, but forms
- *   created before that fix (or via direct DB insert) may have active=NULL
- *   or active=0 and would silently return null, producing "Child form not found".
- * - The runtime renderer and subform handlers should be able to find any form
- *   that exists; active/inactive is a builder UI concern, not a render concern.
  */
 function nu_get_form($code) {
     $table = nu_form_table_name();
     $c = nu_form_columns();
 
-    // 1. Try active=1 first (preferred path for newly-saved forms)
     $stmt = nu_q(
         "SELECT * FROM `{$table}` WHERE `{$c['code']}` = ? AND `{$c['active']}` = 1 LIMIT 1",
         [$code]
@@ -121,9 +113,6 @@ function nu_get_form($code) {
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($form) return $form;
 
-    // 2. Fallback: find the form regardless of active flag.
-    //    Covers forms saved before the form_active=1 fix and
-    //    any form inserted directly into the DB.
     $stmt = nu_q(
         "SELECT * FROM `{$table}` WHERE `{$c['code']}` = ? LIMIT 1",
         [$code]
@@ -236,6 +225,52 @@ function nu_render_lookup_display($field, $value) {
 function nu_field_is_fk($field)           { return !empty($field['is_fk']); }
 function nu_field_hide_in_grid($field)     { return !empty($field['hide_in_grid']); }
 function nu_field_server_readonly($field)  { return !empty($field['server_readonly']); }
+
+/**
+ * nu_resolve_parent_id()
+ *
+ * Reliably extracts the parent record's PK value from $record.
+ *
+ * Strategy (in order):
+ *  1. If $parentTable is known, ask MySQL for the real PK column name and
+ *     look it up directly in $record.
+ *  2. Scan $record keys: prefer an exact 'id' key, then the first key that
+ *     ends with '_id' (common convention), then the very first key.
+ *  3. Return '' if $record is empty.
+ *
+ * This replaces the previous single-line lookup that silently returned ''
+ * when the parent PK column was not literally named 'id'.
+ */
+function nu_resolve_parent_id(array $record, string $parentTable): string {
+    if (empty($record)) return '';
+
+    // Strategy 1 — known table: get the real PK column name from MySQL
+    if ($parentTable !== '') {
+        $pkCol = nu_get_pk($parentTable);
+        if (array_key_exists($pkCol, $record) && (string)$record[$pkCol] !== '') {
+            return (string)$record[$pkCol];
+        }
+    }
+
+    // Strategy 2a — literal 'id' key
+    if (array_key_exists('id', $record) && (string)$record['id'] !== '') {
+        return (string)$record['id'];
+    }
+
+    // Strategy 2b — first key ending in '_id'
+    foreach (array_keys($record) as $key) {
+        if (substr($key, -3) === '_id' && (string)$record[$key] !== '') {
+            return (string)$record[$key];
+        }
+    }
+
+    // Strategy 3 — first non-empty value in the record
+    foreach ($record as $val) {
+        if ((string)$val !== '') return (string)$val;
+    }
+
+    return '';
+}
 
 function nu_render_field($field, $value = '', $record = []) {
     $type  = nu_field_type($field);
@@ -387,19 +422,19 @@ function nu_render_field($field, $value = '', $record = []) {
             $sfFk   = nu_safe_ident($sf['fk_field']  ?? ($sf['fkfield']  ?? ''));
             $sfView = in_array($sf['view'] ?? 'grid', ['grid','form','inline'], true) ? ($sf['view'] ?? 'grid') : 'grid';
 
+            // ── Resolve parent ID robustly ───────────────────────────────────
+            // $field['_parent_table'] is injected by nu_inject_parent_table().
+            // nu_resolve_parent_id() tries the real PK column first, then
+            // falls back to scanning $record keys so we never get '' on forms
+            // whose PK column is not literally named 'id'.
             $parentTable = nu_safe_ident($field['_parent_table'] ?? '');
-            if ($parentTable === '') {
-                $parentPk = 'id';
-            } else {
-                $parentPk = nu_get_pk($parentTable);
-            }
-            $sfParent = nu_attr($record[$parentPk] ?? ($record['id'] ?? ''));
+            $sfParent    = nu_resolve_parent_id(is_array($record) ? $record : [], $parentTable);
 
             $control = '<div class="nu-subform-container"'
                      . ' data-subform-code="'  . nu_attr($sfCode)  . '"'
                      . ' data-subform-fk="'    . nu_attr($sfFk)    . '"'
                      . ' data-subform-view="'  . nu_attr($sfView)  . '"'
-                     . ' data-parent-id="'     . $sfParent         . '"'
+                     . ' data-parent-id="'     . nu_attr($sfParent) . '"'
                      . ' style="border:1px solid #ddd;border-radius:8px;overflow:hidden;">'
                      . '<div class="nu-subform-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-elevated,#f8f9fa);border-bottom:1px solid #ddd;">'
                      . '<span style="font-weight:600;font-size:13px;">' . nu_html($label) . '</span>'
