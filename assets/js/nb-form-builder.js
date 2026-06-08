@@ -302,7 +302,6 @@
       var body   = card.querySelector('.nb-cfield-body');
       if (header && body) {
         header.addEventListener('click', function (e) {
-          // Don't toggle when clicking action buttons inside header
           if (e.target.closest('.nb-cfield-actions')) return;
           body.classList.toggle('open');
         });
@@ -433,12 +432,15 @@
         form_custom_css:           _v('formCustomCss')
       };
 
-      var action = editId
-        ? 'update&id=' + encodeURIComponent(editId)
-        : 'create';
+      // ── FIX: always use action=save; include form_id in payload for updates ──
+      // api/forms.php only has action=save — it decides insert vs UPDATE
+      // based on whether form_id is present in the JSON body.
+      if (editId) {
+        payload.form_id = editId;
+      }
 
       try {
-        var res = await NuApp.apiJson('api/forms.php?action=' + action, {
+        var res = await NuApp.apiJson('api/forms.php?action=save', {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
