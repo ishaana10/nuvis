@@ -9,6 +9,10 @@
  * row/span patches, canvas rebuild, and edit restore are all here.
  *
  * Load after nubuilder-next.js, before nusubform.js.
+ *
+ * Class-naming convention:
+ *   nu-field-*  per-field config inputs  (label, name, required, …)
+ *   nb-*        builder canvas structure (rows, card shell, span bar, …)
  */
 (function (window) {
   'use strict';
@@ -16,7 +20,7 @@
   /* ════════════════════════════════════════════════════════════════════
      SECTION 1 — _nbSfData  (was nb-sf-data.js)
      Centralised read/write of data-sf-* attributes on canvas cards.
-     Now also tracks subform_view (grid|form) and help_text.
+     Tracks subform_view (grid|form) and help_text.
   ═══════════════════════════════════════════════════════════════════ */
   (function () {
     function _sfRead(card) {
@@ -253,6 +257,8 @@
     },
 
     // ── _makeFieldCard ────────────────────────────────────────────
+    // Field input classes use the  nu-field-*  prefix for consistency
+    // with the rest of the nu-* design system.
     _makeFieldCard: function (type, label, name, required, extra) {
       extra = extra || {};
       var col = parseInt(extra.col || extra.colspan, 10) || 12;
@@ -262,13 +268,33 @@
       }).join('');
 
       var extraBody = '';
+
       if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
         var opts = (extra.options || []).map(function (o) {
           return typeof o === 'object' ? (o.value + '|' + o.label) : o;
         }).join('\n');
         extraBody += '<div class="nb-fp nb-fp-full"><label>Options (value|label per line)</label>'
-          + '<textarea class="nu-input nb-field-options" rows="3">' + _esc(opts) + '</textarea></div>';
+          + '<textarea class="nu-input nu-field-options" rows="3">' + _esc(opts) + '</textarea></div>';
       }
+
+      if (type === 'calculated') {
+        extraBody += '<div class="nb-fp nb-fp-full"><label>Formula / Expression</label>'
+          + '<textarea class="nu-input nu-field-formula" rows="2" placeholder="e.g. {qty} * {price}">'
+          + _esc(extra.formula || extra.calc_formula || '') + '</textarea></div>';
+      }
+
+      if (type === 'lookup') {
+        extraBody += '<div class="nb-fp nb-fp-full"><label>Popup Form Code</label>'
+          + '<input type="text" class="nu-input nu-field-lookup-form" placeholder="form_code" value="'
+          + _esc(extra.lookup_form || '') + '"></div>';
+        extraBody += '<div class="nb-fp"><label>Display Column</label>'
+          + '<input type="text" class="nu-input nu-field-lookup-display" placeholder="column shown to user" value="'
+          + _esc(extra.lookup_display || '') + '"></div>';
+        extraBody += '<div class="nb-fp"><label>Store Column</label>'
+          + '<input type="text" class="nu-input nu-field-lookup-store" placeholder="value saved to DB" value="'
+          + _esc(extra.lookup_store || '') + '"></div>';
+      }
+
       if (type === 'subform') {
         extraBody += '<div class="nb-sf-config"></div>';
       }
@@ -295,12 +321,12 @@
         + '</div>'
         + '<div class="nb-cfield-body">'
           + '<div class="nb-fp-grid">'
-            + '<div class="nb-fp"><label>Label</label><input type="text" class="nu-input nb-field-label" value="' + _esc(label) + '"></div>'
-            + '<div class="nb-fp"><label>Field Name</label><input type="text" class="nu-input nb-field-name" value="' + _esc(name) + '"></div>'
-            + '<div class="nb-fp"><label class="nb-fp-check"><input type="checkbox" class="nb-field-required"' + (required ? ' checked' : '') + '> Required</label></div>'
-            + (type !== 'subform' ? '<div class="nb-fp"><label>Placeholder</label><input type="text" class="nu-input nb-field-placeholder" value="' + _esc(extra.placeholder || '') + '"></div>' : '')
-            + (type !== 'subform' ? '<div class="nb-fp"><label>Default Value</label><input type="text" class="nu-input nb-field-default" value="' + _esc(extra.default_value || extra.defaultvalue || '') + '"></div>' : '')
-            + '<div class="nb-fp nb-fp-full"><label>Help Text</label><input type="text" class="nu-input nb-field-help" value="' + _esc(extra.help_text || extra.field_help_text || '') + '"></div>'
+            + '<div class="nb-fp"><label>Label</label><input type="text" class="nu-input nu-field-label" value="' + _esc(label) + '"></div>'
+            + '<div class="nb-fp"><label>Field Name</label><input type="text" class="nu-input nu-field-name" value="' + _esc(name) + '"></div>'
+            + '<div class="nb-fp"><label class="nb-fp-check"><input type="checkbox" class="nu-field-required"' + (required ? ' checked' : '') + '> Required</label></div>'
+            + (type !== 'subform' ? '<div class="nb-fp"><label>Placeholder</label><input type="text" class="nu-input nu-field-placeholder" value="' + _esc(extra.placeholder || '') + '"></div>' : '')
+            + (type !== 'subform' ? '<div class="nb-fp"><label>Default Value</label><input type="text" class="nu-input nu-field-default" value="' + _esc(extra.default_value || extra.defaultvalue || '') + '"></div>' : '')
+            + '<div class="nb-fp nb-fp-full"><label>Help Text</label><input type="text" class="nu-input nu-field-help" value="' + _esc(extra.help_text || extra.field_help_text || '') + '"></div>'
             + extraBody
           + '</div>'
         + '</div>';
@@ -355,14 +381,18 @@
       if (!canvas) return [];
       var fields = [];
       canvas.querySelectorAll('.nb-cfield').forEach(function (card) {
-        var type    = card.dataset.type || 'text';
-        var labelEl = card.querySelector('.nb-field-label');
-        var nameEl  = card.querySelector('.nb-field-name');
-        var reqEl   = card.querySelector('.nb-field-required');
-        var phEl    = card.querySelector('.nb-field-placeholder');
-        var defEl   = card.querySelector('.nb-field-default');
-        var optsEl  = card.querySelector('.nb-field-options');
-        var helpEl  = card.querySelector('.nb-field-help');
+        var type       = card.dataset.type || 'text';
+        var labelEl    = card.querySelector('.nu-field-label');
+        var nameEl     = card.querySelector('.nu-field-name');
+        var reqEl      = card.querySelector('.nu-field-required');
+        var phEl       = card.querySelector('.nu-field-placeholder');
+        var defEl      = card.querySelector('.nu-field-default');
+        var optsEl     = card.querySelector('.nu-field-options');
+        var helpEl     = card.querySelector('.nu-field-help');
+        var formulaEl  = card.querySelector('.nu-field-formula');
+        var lkFormEl   = card.querySelector('.nu-field-lookup-form');
+        var lkDispEl   = card.querySelector('.nu-field-lookup-display');
+        var lkStoreEl  = card.querySelector('.nu-field-lookup-store');
 
         var field = {
           type:          type,
@@ -384,6 +414,11 @@
               : { value: l, label: l };
           }).filter(Boolean);
         }
+
+        if (formulaEl)  field.formula        = formulaEl.value;
+        if (lkFormEl)   field.lookup_form    = lkFormEl.value;
+        if (lkDispEl)   field.lookup_display = lkDispEl.value;
+        if (lkStoreEl)  field.lookup_store   = lkStoreEl.value;
 
         if (type === 'subform') field.subform = {};
         fields.push(field);
@@ -582,8 +617,8 @@
       if (hideC)   hideGrid    = hideC.checked;
       if (srvRoC)  srvRo       = srvRoC.checked;
     }
-    // read help_text from the shared nb-field-help input on the card
-    var helpEl = card.querySelector('.nb-field-help');
+    // read help_text from the shared nu-field-help input on the card
+    var helpEl = card.querySelector('.nu-field-help');
     if (helpEl) helpText = helpEl.value || '';
 
     if (!formCode)    formCode    = card.dataset.sfFormCode    || '';
