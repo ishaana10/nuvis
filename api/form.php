@@ -203,16 +203,30 @@ function nu_resolve_lookup_id_col($lookup) {
     return 'id';
 }
 
+/**
+ * Resolve the display column from a lookup config, checking all common key variants.
+ * Returns '' (empty string) if none found — callers must handle the empty case gracefully.
+ */
+function nu_resolve_lookup_display_col($lookup) {
+    $col = $lookup['display_column']
+        ?? $lookup['displaycolumn']
+        ?? $lookup['display_col']
+        ?? $lookup['displayCol']
+        ?? '';
+    return nu_safe_ident($col);
+}
+
 function nu_render_lookup_display($field, $value) {
     $lookup     = $field['lookup'] ?? [];
     $table      = nu_safe_ident($lookup['table'] ?? '');
     $idCol      = nu_resolve_lookup_id_col($lookup);
-    $displayCol = nu_safe_ident($lookup['display_column'] ?? ($lookup['displaycolumn'] ?? 'name'));
-    if ($table === '' || $idCol === '' || $displayCol === '' || $value === '' || $value === null) return '';
+    $displayCol = nu_resolve_lookup_display_col($lookup);
+    // If no display column configured, fall back to showing the raw stored value
+    if ($table === '' || $idCol === '' || $displayCol === '' || $value === '' || $value === null) return (string)($value ?? '');
     try {
         $stmt = nu_q("SELECT `{$displayCol}` FROM `{$table}` WHERE `{$idCol}` = ? LIMIT 1", [$value]);
         return (string)($stmt->fetchColumn() ?: '');
-    } catch (Throwable $e) { return ''; }
+    } catch (Throwable $e) { return (string)$value; }
 }
 
 function nu_field_is_fk($field)           { return !empty($field['is_fk']); }
@@ -349,7 +363,7 @@ function nu_render_field($field, $value = '', $record = []) {
             $lookup      = $field['lookup'] ?? [];
             $lTable      = $lookup['table'] ?? '';
             $lIdCol      = nu_resolve_lookup_id_col($lookup);
-            $lDisplayCol = nu_safe_ident($lookup['display_column'] ?? ($lookup['displaycolumn'] ?? 'name'));
+            $lDisplayCol = nu_resolve_lookup_display_col($lookup);
             $lFilter     = $lookup['filter'] ?? '';
             $lExtra      = $lookup['extra']  ?? '';
             $displayVal  = nu_render_lookup_display($field, $value);
