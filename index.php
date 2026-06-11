@@ -223,8 +223,8 @@ function nu_asset(string $path): string {
                 </svg>
                 <span>Calendar</span>
             </a>
-            <a href="#aiassistant" class="nu-nav-item" data-module="aiassistant"
-               onclick="NuApp.loadModule('aiassistant'); return false;">
+            <a href="#ai" class="nu-nav-item" data-module="ai"
+               onclick="NuApp.loadModule('ai'); return false;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
                     <path d="M12 2a10 10 0 0 1 10 10"/>
