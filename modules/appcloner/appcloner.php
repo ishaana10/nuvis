@@ -2,91 +2,51 @@
 /**
  * nuBuilder 5 – App Cloner Module
  * Admin UI: full clone wizard with live progress, SQL export, and dry-run.
+ * Uses nub5 design system (nu-card, nu-btn, nu-input, etc.) – no own HTML wrapper.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../../core/module_bootstrap.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>App Cloner – nuBuilder 5</title>
-<style>
-  :root{--accent:#4a90d9;--bg:#f4f6f9;--card:#fff;--border:#dde3ec;--red:#e74c3c;--green:#27ae60;--grey:#6c757d}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:#333;font-size:14px}
-  .wrap{max-width:900px;margin:30px auto;padding:0 16px}
-  h1{font-size:22px;font-weight:600;margin-bottom:20px;color:var(--accent)}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-  .card h2{font-size:15px;font-weight:600;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  label{display:block;font-size:12px;font-weight:600;color:var(--grey);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
-  input[type=text],input[type=password],input[type=number],select{
-    width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;transition:border .2s
-  }
-  input:focus,select:focus{border-color:var(--accent)}
-  .opts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .opt-box{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;cursor:pointer;font-size:12px;transition:border .2s}
-  .opt-box:hover,.opt-box.active{border-color:var(--accent);background:#eef4fd}
-  .opt-box input{width:auto;margin:0}
-  .toggle-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px}
-  .toggle-row input{width:auto}
-  .btn-row{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
-  .btn{padding:9px 20px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s}
-  .btn:hover{opacity:.85}
-  .btn-primary{background:var(--accent);color:#fff}
-  .btn-success{background:var(--green);color:#fff}
-  .btn-danger{background:var(--red);color:#fff}
-  .btn-grey{background:#e0e5ee;color:#333}
-  #progress-panel{display:none}
-  #progress-log{list-style:none;font-size:12px;max-height:320px;overflow-y:auto;background:#1e2330;color:#c9d1d9;border-radius:6px;padding:12px}
-  #progress-log li{padding:3px 0;border-bottom:1px solid #2d3244;line-height:1.5}
-  #progress-log li.done{color:#4caf50}
-  #progress-log li.error{color:#f44336}
-  #progress-log li.running{color:#90caf9}
-  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;text-transform:uppercase}
-  .badge-success{background:#d4edda;color:var(--green)}
-  .badge-error{background:#fce4e4;color:var(--red)}
-  .badge-running{background:#e3f0fd;color:var(--accent)}
-  .table-picker{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px}
-  .table-picker label{font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
-  .table-picker label:hover{background:var(--bg)}
-  .section-title{font-size:11px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 6px}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>⚙️ App Cloner</h1>
 
-  <!-- TARGET DATABASE -->
-  <div class="card">
-    <h2>Target Database</h2>
-    <div class="grid2">
-      <div><label>Host</label><input id="tgtHost" type="text" value="localhost"></div>
-      <div><label>Port</label><input id="tgtPort" type="number" value="3306"></div>
-      <div><label>Database Name (new)</label><input id="tgtDB" type="text" placeholder="my_cloned_app"></div>
-      <div><label>Charset</label>
-        <select id="tgtCharset">
+<div class="nu-module-header" style="margin-bottom:20px">
+  <h2 class="nu-module-title">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>
+    App Cloner
+  </h2>
+  <p style="color:var(--text-muted);font-size:13px;margin-top:4px">Clone this nuBuilder 5 application to a new database and/or file path.</p>
+</div>
+
+<!-- TARGET DATABASE -->
+<div class="nu-card" style="margin-bottom:16px">
+  <div class="nu-card-header"><h3 class="nu-card-title">Target Database</h3></div>
+  <div class="nu-card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="nu-field"><label>Host</label><input id="tgtHost" type="text" class="nu-input" value="localhost"></div>
+      <div class="nu-field"><label>Port</label><input id="tgtPort" type="number" class="nu-input" value="3306"></div>
+      <div class="nu-field"><label>Database Name (new)</label><input id="tgtDB" type="text" class="nu-input" placeholder="my_cloned_app"></div>
+      <div class="nu-field"><label>Charset</label>
+        <select id="tgtCharset" class="nu-input">
           <option value="utf8mb4" selected>utf8mb4 (recommended)</option>
           <option value="utf8">utf8</option>
           <option value="latin1">latin1</option>
         </select>
       </div>
-      <div><label>Username</label><input id="tgtUser" type="text"></div>
-      <div><label>Password</label><input id="tgtPass" type="password"></div>
-    </div>
-    <div class="grid2" style="margin-top:12px">
-      <div>
+      <div class="nu-field"><label>Username</label><input id="tgtUser" type="text" class="nu-input"></div>
+      <div class="nu-field"><label>Password</label><input id="tgtPass" type="password" class="nu-input"></div>
+      <div class="nu-field">
         <label>If DB Exists</label>
-        <select id="dbMode">
+        <select id="dbMode" class="nu-input">
           <option value="fail">Abort (fail)</option>
           <option value="create">Use existing</option>
           <option value="clear">Clear &amp; overwrite</option>
         </select>
       </div>
-      <div>
+      <div class="nu-field">
         <label>File Mode</label>
-        <select id="fileMode">
+        <select id="fileMode" class="nu-input">
           <option value="fail">Abort if target dir exists</option>
           <option value="create">Create / use existing</option>
           <option value="clear">Clear then copy</option>
@@ -95,227 +55,267 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
       </div>
     </div>
   </div>
+</div>
 
-  <!-- FILE PATHS -->
-  <div class="card">
-    <h2>File Paths</h2>
-    <div class="grid2">
-      <div><label>Source Path (this install)</label><input id="srcPath" type="text" value="<?= htmlspecialchars(dirname(__DIR__, 2)) ?>"></div>
-      <div><label>Target Path</label><input id="tgtPath" type="text" placeholder="/var/www/myapp_clone"></div>
+<!-- FILE PATHS -->
+<div class="nu-card" style="margin-bottom:16px">
+  <div class="nu-card-header"><h3 class="nu-card-title">File Paths</h3></div>
+  <div class="nu-card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="nu-field"><label>Source Path (this install)</label><input id="srcPath" type="text" class="nu-input" value="<?= htmlspecialchars(dirname(__DIR__, 2)) ?>"></div>
+      <div class="nu-field"><label>Target Path</label><input id="tgtPath" type="text" class="nu-input" placeholder="/var/www/myapp_clone"></div>
     </div>
-    <div class="toggle-row"><input type="checkbox" id="copyFiles" checked><label for="copyFiles" style="font-weight:400">Copy files to target path</label></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:400">
+      <input type="checkbox" id="copyFiles" checked> Copy files to target path
+    </label>
   </div>
+</div>
 
-  <!-- CLONE OPTIONS -->
-  <div class="card">
-    <h2>What to Clone</h2>
-    <div class="opts-grid">
+<!-- CLONE OPTIONS -->
+<div class="nu-card" style="margin-bottom:16px">
+  <div class="nu-card-header"><h3 class="nu-card-title">What to Clone</h3></div>
+  <div class="nu-card-body">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
       <?php
       $optDefs = [
-        1 => ['icon'=>'🏗️','label'=>'System Tables/Views','desc'=>'zzzzsys_* CREATE'],
-        2 => ['icon'=>'📦','label'=>'User Tables/Views',  'desc'=>'Your tables CREATE'],
-        3 => ['icon'=>'⚙️','label'=>'System Records',     'desc'=>'nuBuilder core data'],
-        4 => ['icon'=>'📋','label'=>'App Definitions',    'desc'=>'Forms, reports, menus'],
-        5 => ['icon'=>'📊','label'=>'User Data',          'desc'=>'Your table rows'],
-        6 => ['icon'=>'ƒ', 'label'=>'Functions',          'desc'=>'DB functions'],
-        7 => ['icon'=>'🔧','label'=>'Procedures',         'desc'=>'Stored procedures'],
-        8 => ['icon'=>'⚡','label'=>'Triggers',           'desc'=>'DB triggers'],
-        9 => ['icon'=>'🕐','label'=>'Events',             'desc'=>'Scheduled events'],
+        1 => ['icon'=>'\uD83C\uDFD7\uFE0F', 'label'=>'System Tables/Views',  'desc'=>'nu_* & system tables'],
+        2 => ['icon'=>'\uD83D\uDCE6', 'label'=>'User Tables/Views',   'desc'=>'Your app tables'],
+        3 => ['icon'=>'\u2699\uFE0F',  'label'=>'System Records',      'desc'=>'nuBuilder core data'],
+        4 => ['icon'=>'\uD83D\uDCCB', 'label'=>'App Definitions',     'desc'=>'Forms, reports, menus'],
+        5 => ['icon'=>'\uD83D\uDCCA', 'label'=>'User Data',           'desc'=>'Your table rows'],
+        6 => ['icon'=>'\u0192',       'label'=>'Functions',           'desc'=>'DB functions'],
+        7 => ['icon'=>'\uD83D\uDD27', 'label'=>'Procedures',          'desc'=>'Stored procedures'],
+        8 => ['icon'=>'\u26A1',       'label'=>'Triggers',            'desc'=>'DB triggers'],
+        9 => ['icon'=>'\uD83D\uDD50', 'label'=>'Events',              'desc'=>'Scheduled events'],
       ];
       foreach ($optDefs as $n => $d): ?>
-      <label class="opt-box" onclick="this.classList.toggle('active')">
+      <label style="display:flex;align-items:flex-start;gap:8px;background:var(--bg-page,#f5f6fa);border:1px solid var(--border-color,#e0e4ef);border-radius:8px;padding:10px;cursor:pointer;font-size:12px;transition:border .2s" onclick="this.classList.toggle('nu-opt-active')">
         <input type="checkbox" class="opt-cb" value="<?= $n ?>" <?= in_array($n,[1,2,3,4]) ? 'checked' : '' ?>>
         <span><?= $d['icon'] ?></span>
         <span>
-          <strong><?= $d['label'] ?></strong><br>
-          <span style="color:var(--grey);font-size:11px"><?= $d['desc'] ?></span>
+          <strong style="font-size:12px"><?= htmlspecialchars($d['label']) ?></strong><br>
+          <span style="color:var(--text-muted);font-size:11px"><?= htmlspecialchars($d['desc']) ?></span>
         </span>
       </label>
       <?php endforeach; ?>
     </div>
 
-    <div class="section-title">Insert Method</div>
-    <select id="insertType" style="max-width:220px">
-      <option value="INSERT">INSERT</option>
-      <option value="INSERT IGNORE">INSERT IGNORE (skip dupes)</option>
-      <option value="REPLACE">REPLACE (upsert)</option>
-    </select>
+    <div style="margin-top:14px">
+      <label class="nu-label" style="margin-bottom:6px">Insert Method</label>
+      <select id="insertType" class="nu-input" style="max-width:240px">
+        <option value="INSERT">INSERT</option>
+        <option value="INSERT IGNORE">INSERT IGNORE (skip dupes)</option>
+        <option value="REPLACE">REPLACE (upsert)</option>
+      </select>
+    </div>
 
-    <div class="section-title" style="margin-top:14px">Advanced Options</div>
-    <div style="display:flex;flex-wrap:wrap;gap:14px">
-      <label class="toggle-row"><input type="checkbox" id="dryRun"> Dry Run (simulate only)</label>
-      <label class="toggle-row"><input type="checkbox" id="schemaOnly"> Schema Only (no data)</label>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:14px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="dryRun"> Dry Run (simulate only)</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="schemaOnly"> Schema Only (no data)</label>
     </div>
   </div>
+</div>
 
-  <!-- TABLE FILTER -->
-  <div class="card">
-    <h2>Table Filter <span style="font-weight:400;font-size:12px;color:var(--grey)">(optional – leave empty to clone all)</span></h2>
-    <p style="font-size:12px;color:var(--grey);margin-bottom:10px">Check only the tables you want to include. zzzzsys_* tables are always included.</p>
-    <div class="table-picker" id="tablePicker"><em style="color:var(--grey);font-size:12px">Loading tables…</em></div>
+<!-- TABLE FILTER -->
+<div class="nu-card" style="margin-bottom:16px">
+  <div class="nu-card-header">
+    <h3 class="nu-card-title">Table Filter <span style="font-weight:400;font-size:12px;color:var(--text-muted)">(optional — leave empty to clone all)</span></h3>
   </div>
+  <div class="nu-card-body">
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Select specific tables to include. System tables (nu_*) are controlled by the checkboxes above.</p>
+    <div id="tablePicker" style="max-height:200px;overflow-y:auto;border:1px solid var(--border-color,#e0e4ef);border-radius:6px;padding:8px">
+      <em style="color:var(--text-muted);font-size:12px">Loading tables…</em>
+    </div>
+  </div>
+</div>
 
-  <!-- SQL EXPORT -->
-  <div class="card">
-    <h2>SQL Export</h2>
-    <div class="grid2">
-      <div>
+<!-- SQL EXPORT -->
+<div class="nu-card" style="margin-bottom:16px">
+  <div class="nu-card-header"><h3 class="nu-card-title">SQL Export</h3></div>
+  <div class="nu-card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="nu-field">
         <label>Export Format</label>
-        <select id="sqlFormat">
+        <select id="sqlFormat" class="nu-input">
           <option value="mysql">MySQL</option>
           <option value="mssql">MS SQL Server</option>
         </select>
       </div>
-      <div>
+      <div class="nu-field">
         <label>Batch Size (rows per INSERT)</label>
-        <input type="number" id="batchSize" value="500" min="1" max="5000">
+        <input type="number" id="batchSize" class="nu-input" value="500" min="1" max="5000">
       </div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px">
-      <label class="toggle-row"><input type="checkbox" id="inclDrops" checked> Include DROP statements</label>
-      <label class="toggle-row"><input type="checkbox" id="gzipExport"> Compress as .sql.gz</label>
-      <label class="toggle-row"><input type="checkbox" id="schemaExport"> Schema only (no data)</label>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="inclDrops" checked> Include DROP statements</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="gzipExport"> Compress as .sql.gz</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="schemaExport"> Schema only (no data)</label>
     </div>
   </div>
+</div>
 
-  <!-- WEBHOOK -->
-  <div class="card">
-    <h2>Webhook <span style="font-weight:400;font-size:12px;color:var(--grey)">(optional – POST result JSON to URL)</span></h2>
-    <input type="text" id="webhookUrl" placeholder="https://your-app.com/clone-done">
+<!-- WEBHOOK -->
+<div class="nu-card" style="margin-bottom:16px">
+  <div class="nu-card-header"><h3 class="nu-card-title">Webhook <span style="font-weight:400;font-size:12px;color:var(--text-muted)">(optional)</span></h3></div>
+  <div class="nu-card-body">
+    <div class="nu-field">
+      <label>POST result JSON to URL</label>
+      <input type="text" id="webhookUrl" class="nu-input" placeholder="https://your-app.com/clone-done">
+    </div>
   </div>
+</div>
 
-  <!-- ACTIONS -->
-  <div class="btn-row">
-    <button class="btn btn-primary" onclick="startClone()">▶ Start Clone</button>
-    <button class="btn btn-success" onclick="exportSQL()">⬇ Download SQL</button>
-    <button class="btn btn-grey" onclick="testConn()">🔌 Test Connection</button>
+<!-- ACTIONS -->
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+  <button class="nu-btn nu-btn-primary" onclick="acStartClone()">&#x25B6; Start Clone</button>
+  <button class="nu-btn nu-btn-success" onclick="acExportSQL()">&darr; Download SQL</button>
+  <button class="nu-btn nu-btn-ghost" onclick="acTestConn()">&#x1F50C; Test Connection</button>
+</div>
+
+<!-- PROGRESS -->
+<div class="nu-card" id="ac-progress-panel" style="display:none">
+  <div class="nu-card-header">
+    <h3 class="nu-card-title">Progress <span id="ac-progress-badge"></span></h3>
   </div>
-
-  <!-- PROGRESS -->
-  <div class="card" id="progress-panel" style="margin-top:20px">
-    <h2>Progress <span id="progress-badge"></span></h2>
-    <ul id="progress-log"></ul>
+  <div class="nu-card-body">
+    <ul id="ac-progress-log" style="list-style:none;font-size:12px;max-height:320px;overflow-y:auto;background:var(--bg-sidebar,#0b1020);color:#c9d1d9;border-radius:6px;padding:12px"></ul>
   </div>
 </div>
 
 <script>
-// Load tables for picker
-fetch('<?= $nuConfig['baseUrl'] ?? '' ?>/api/appcloner.php?action=list_tables')
-  .then(r=>r.json())
-  .then(d=>{
-    const el = document.getElementById('tablePicker');
-    el.innerHTML = '';
-    (d.tables||[]).forEach(t=>{
-      if(t.TABLE_NAME.startsWith('zzzzsys_')) return; // always included, skip
-      const lbl = document.createElement('label');
-      lbl.innerHTML = `<input type="checkbox" class="tbl-cb" value="${t.TABLE_NAME}"> ${t.TABLE_NAME} <span style="color:#999;font-size:11px">(~${t.TABLE_ROWS||0} rows)</span>`;
-      el.appendChild(lbl);
-    });
-  }).catch(()=>{ document.getElementById('tablePicker').innerHTML = '<em style="color:#999">Could not load tables.</em>'; });
-
-function getOpts(){ return [...document.querySelectorAll('.opt-cb:checked')].map(e=>+e.value); }
-function getTables(){ return [...document.querySelectorAll('.tbl-cb:checked')].map(e=>e.value); }
-
-function payload(){
-  return {
-    targetDB:      document.getElementById('tgtDB').value.trim(),
-    targetHost:    document.getElementById('tgtHost').value.trim(),
-    targetUser:    document.getElementById('tgtUser').value.trim(),
-    targetPass:    document.getElementById('tgtPass').value,
-    targetCharset: document.getElementById('tgtCharset').value,
-    targetPort:    +document.getElementById('tgtPort').value,
-    targetPath:    document.getElementById('tgtPath').value.trim(),
-    sourcePath:    document.getElementById('srcPath').value.trim(),
-    databaseMode:  document.getElementById('dbMode').value,
-    fileMode:      document.getElementById('fileMode').value,
-    copyFiles:     document.getElementById('copyFiles').checked,
-    opts:          getOpts(),
-    insertType:    document.getElementById('insertType').value,
-    dryRun:        document.getElementById('dryRun').checked,
-    schemaOnly:    document.getElementById('schemaOnly').checked,
-    includeTables: getTables(),
-    webhookUrl:    document.getElementById('webhookUrl').value.trim(),
-  };
-}
-
-async function testConn(){
-  const p = payload();
-  const r = await fetch('<?= $nuConfig['baseUrl'] ?? '' ?>/api/appcloner.php?action=list_databases',{
-    method:'POST', body: new URLSearchParams({host:p.targetHost, user:p.targetUser, pass:p.targetPass, port:p.targetPort})
-  });
-  const d = await r.json();
-  if(d.databases) alert('✅ Connected! Found ' + d.databases.length + ' database(s) on ' + p.targetHost);
-  else alert('❌ Connection failed: ' + (d.error||'unknown'));
-}
-
-async function startClone(){
-  const p = payload();
-  if(!p.targetDB){ alert('Please enter a target database name.'); return; }
-  const panel = document.getElementById('progress-panel');
-  const log   = document.getElementById('progress-log');
-  panel.style.display = 'block';
-  log.innerHTML = '<li>Starting clone job…</li>';
-  document.getElementById('progress-badge').innerHTML = '<span class="badge badge-running">Running</span>';
-
-  const r = await fetch('<?= $nuConfig['baseUrl'] ?? '' ?>/api/appcloner.php?action=start',{
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(p)
-  });
-  const d = await r.json();
-  if(d.error){ log.innerHTML += `<li class="error">❌ ${d.error}</li>`; return; }
-  pollProgress(d.jobId, log);
-}
-
-function pollProgress(jobId, log){
-  let lastLen = 0;
-  const iv = setInterval(async ()=>{
-    const r  = await fetch(`<?= $nuConfig['baseUrl'] ?? '' ?>/api/appcloner.php?action=progress&jobId=${jobId}`);
-    const d  = await r.json();
-    const steps = d.steps || [];
-    for(let i = lastLen; i < steps.length; i++){
-      const s   = steps[i];
-      const li  = document.createElement('li');
-      li.className = s.status;
-      li.textContent = `[${s.status.toUpperCase()}] ${s.msg}`;
-      log.appendChild(li);
-      log.scrollTop = log.scrollHeight;
-    }
-    lastLen = steps.length;
-    if(d.done){
-      clearInterval(iv);
-      const last = steps[steps.length-1];
-      const badge = document.getElementById('progress-badge');
-      if(last && last.status === 'success'){
-        badge.innerHTML = '<span class="badge badge-success">Done ✓</span>';
-      } else {
-        badge.innerHTML = '<span class="badge badge-error">Error ✗</span>';
+(function(){
+  // Load table picker — exclude no tables by default; backend filters sys tables
+  fetch('api/appcloner.php?action=list_tables')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var el = document.getElementById('tablePicker');
+      el.innerHTML = '';
+      var tables = (d.tables || []);
+      if (!tables.length) {
+        el.innerHTML = '<em style="color:var(--text-muted);font-size:12px">No user tables found.</em>';
+        return;
       }
-    }
-  }, 1500);
-}
+      tables.forEach(function(t){
+        // Skip internal nuBuilder system tables from the picker;
+        // they are handled by the "System Tables" checkbox (option 1)
+        if (/^nu_/.test(t.TABLE_NAME)) return;
+        var lbl = document.createElement('label');
+        lbl.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;padding:4px 6px;border-radius:4px;cursor:pointer;';
+        lbl.innerHTML = '<input type="checkbox" class="tbl-cb" value="'+t.TABLE_NAME+'"> '
+          + t.TABLE_NAME
+          + ' <span style="color:var(--text-muted);font-size:11px">(~'+(t.TABLE_ROWS||0)+' rows)</span>';
+        el.appendChild(lbl);
+      });
+    })
+    .catch(function(){
+      document.getElementById('tablePicker').innerHTML = '<em style="color:var(--text-muted)">Could not load tables.</em>';
+    });
 
-async function exportSQL(){
-  const p = payload();
-  const body = JSON.stringify({
-    opts:         getOpts(),
-    targetDB:     p.targetDB || 'export',
-    format:       document.getElementById('sqlFormat').value,
-    insertType:   p.insertType,
-    batchSize:    +document.getElementById('batchSize').value,
-    includeDrops: document.getElementById('inclDrops').checked,
-    zip:          document.getElementById('gzipExport').checked,
-    schemaOnly:   document.getElementById('schemaExport').checked,
-  });
-  const r    = await fetch('<?= $nuConfig['baseUrl'] ?? '' ?>/api/appcloner.php?action=export_sql',{
-    method:'POST', headers:{'Content-Type':'application/json'}, body
-  });
-  const blob = await r.blob();
-  const cd   = r.headers.get('Content-Disposition') || '';
-  const fn   = (cd.match(/filename="([^"]+)"/) || [])[1] || 'export.sql';
-  const a    = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  a.download = fn;
-  a.click();
-}
+  function getOpts(){   return [...document.querySelectorAll('.opt-cb:checked')].map(function(e){ return +e.value; }); }
+  function getTables(){ return [...document.querySelectorAll('.tbl-cb:checked')].map(function(e){ return e.value; }); }
+
+  function payload(){
+    return {
+      targetDB:      document.getElementById('tgtDB').value.trim(),
+      targetHost:    document.getElementById('tgtHost').value.trim(),
+      targetUser:    document.getElementById('tgtUser').value.trim(),
+      targetPass:    document.getElementById('tgtPass').value,
+      targetCharset: document.getElementById('tgtCharset').value,
+      targetPort:    +document.getElementById('tgtPort').value,
+      targetPath:    document.getElementById('tgtPath').value.trim(),
+      sourcePath:    document.getElementById('srcPath').value.trim(),
+      databaseMode:  document.getElementById('dbMode').value,
+      fileMode:      document.getElementById('fileMode').value,
+      copyFiles:     document.getElementById('copyFiles').checked,
+      opts:          getOpts(),
+      insertType:    document.getElementById('insertType').value,
+      dryRun:        document.getElementById('dryRun').checked,
+      schemaOnly:    document.getElementById('schemaOnly').checked,
+      includeTables: getTables(),
+      webhookUrl:    document.getElementById('webhookUrl').value.trim(),
+    };
+  }
+
+  window.acTestConn = function(){
+    var p = payload();
+    fetch('api/appcloner.php?action=list_databases',{
+      method:'POST', body: new URLSearchParams({host:p.targetHost, user:p.targetUser, pass:p.targetPass, port:p.targetPort})
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if(d.databases) alert('\u2705 Connected! Found ' + d.databases.length + ' database(s) on ' + p.targetHost);
+      else alert('\u274C Connection failed: ' + (d.error||'unknown'));
+    });
+  };
+
+  window.acStartClone = function(){
+    var p = payload();
+    if(!p.targetDB){ alert('Please enter a target database name.'); return; }
+    var panel = document.getElementById('ac-progress-panel');
+    var log   = document.getElementById('ac-progress-log');
+    panel.style.display = 'block';
+    log.innerHTML = '<li>Starting clone job\u2026</li>';
+    document.getElementById('ac-progress-badge').innerHTML = '<span class="nu-badge nu-badge-warning">Running</span>';
+    fetch('api/appcloner.php?action=start',{
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(p)
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if(d.error){ log.innerHTML += '<li style="color:#f44336">\u274C ' + d.error + '</li>'; return; }
+      acPollProgress(d.jobId, log);
+    });
+  };
+
+  function acPollProgress(jobId, log){
+    var lastLen = 0;
+    var iv = setInterval(function(){
+      fetch('api/appcloner.php?action=progress&jobId='+jobId)
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          var steps = d.steps || [];
+          for(var i = lastLen; i < steps.length; i++){
+            var s  = steps[i];
+            var li = document.createElement('li');
+            li.style.cssText = 'padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06);line-height:1.5;';
+            li.style.color = s.status === 'done' ? '#4caf50' : s.status === 'error' ? '#f44336' : '#90caf9';
+            li.textContent = '[' + s.status.toUpperCase() + '] ' + s.msg;
+            log.appendChild(li);
+            log.scrollTop = log.scrollHeight;
+          }
+          lastLen = steps.length;
+          if(d.done){
+            clearInterval(iv);
+            var last  = steps[steps.length-1];
+            var badge = document.getElementById('ac-progress-badge');
+            badge.innerHTML = (last && last.status === 'done')
+              ? '<span class="nu-badge nu-badge-success">Done \u2713</span>'
+              : '<span class="nu-badge nu-badge-error">Error \u2717</span>';
+          }
+        });
+    }, 1500);
+  }
+
+  window.acExportSQL = function(){
+    var p = payload();
+    var body = JSON.stringify({
+      opts:         getOpts(),
+      targetDB:     p.targetDB || 'export',
+      format:       document.getElementById('sqlFormat').value,
+      insertType:   p.insertType,
+      batchSize:    +document.getElementById('batchSize').value,
+      includeDrops: document.getElementById('inclDrops').checked,
+      zip:          document.getElementById('gzipExport').checked,
+      schemaOnly:   document.getElementById('schemaExport').checked,
+      includeTables: getTables(),
+    });
+    fetch('api/appcloner.php?action=export_sql',{
+      method:'POST', headers:{'Content-Type':'application/json'}, body: body
+    }).then(function(r){
+      var cd = r.headers.get('Content-Disposition') || '';
+      var fn = (cd.match(/filename="([^"]+)"/) || [])[1] || 'export.sql';
+      return r.blob().then(function(blob){ return {blob:blob, fn:fn}; });
+    }).then(function(o){
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(o.blob);
+      a.download = o.fn;
+      a.click();
+    });
+  };
+})();
 </script>
-</body>
-</html>
