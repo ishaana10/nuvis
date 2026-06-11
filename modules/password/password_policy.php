@@ -22,7 +22,7 @@ $db = NuDatabase::getInstance();
     <button class="nu-tab-btn" onclick="plcShowTab('reset')" id="ptab-reset">Admin Reset</button>
 </div>
 
-<!-- ── PANEL: Password Policy ─────────────────────────────────────────────────── -->
+<!-- ── PANEL: Password Policy ───────────────────────────────────────────────────────── -->
 <div id="plc-panel-policy">
     <div class="nu-card" style="max-width:640px;">
         <div class="nu-card-header"><h3 class="nu-card-title">Password Policy Settings</h3></div>
@@ -71,7 +71,7 @@ $db = NuDatabase::getInstance();
     </div>
 </div>
 
-<!-- ── PANEL: Admin Reset ──────────────────────────────────────────────────── -->
+<!-- ── PANEL: Admin Reset ────────────────────────────────────────────────────── -->
 <div id="plc-panel-reset" style="display:none;">
     <div class="nu-card" style="max-width:480px;">
         <div class="nu-card-header"><h3 class="nu-card-title">Admin: Reset User Password</h3></div>
@@ -128,7 +128,7 @@ $db = NuDatabase::getInstance();
 <script>
 (function () {
 
-    // ── Tab switching ────────────────────────────────────────────────────────────
+    // ── Tab switching ────────────────────────────────────────────────────────────────
     window.plcShowTab = function (tab) {
         ['policy', 'reset'].forEach(function (t) {
             var panel = document.getElementById('plc-panel-' + t);
@@ -139,7 +139,7 @@ $db = NuDatabase::getInstance();
         });
     };
 
-    // ── Alert helper ───────────────────────────────────────────────────────────
+    // ── Alert helper ──────────────────────────────────────────────────────────────
     function showAlert(elId, msg, type) {
         var el  = document.getElementById(elId);
         if (!el) return;
@@ -149,7 +149,7 @@ $db = NuDatabase::getInstance();
         el.textContent = msg;
     }
 
-    // ── Show/hide password ────────────────────────────────────────────────────────
+    // ── Show/hide password ─────────────────────────────────────────────────────────────
     window.plcToggleVis = function (inputId, btn) {
         var inp = document.getElementById(inputId);
         if (!inp) return;
@@ -158,7 +158,7 @@ $db = NuDatabase::getInstance();
         btn.setAttribute('aria-pressed', show);
     };
 
-    // ── Generate strong password ─────────────────────────────────────────────────
+    // ── Generate strong password ─────────────────────────────────────────────────────
     window.plcGenerate = function (targetId) {
         var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
         var pwd   = '';
@@ -169,10 +169,10 @@ $db = NuDatabase::getInstance();
         if (inp) { inp.value = pwd; inp.type = 'text'; }
     };
 
-    // ── Load policy into form ────────────────────────────────────────────────────
+    // ── Load policy into form ───────────────────────────────────────────────────────────
     window.plcLoadPolicy = async function () {
         try {
-            var res  = await fetch('../api/password.php?action=get_policy');
+            var res  = await fetch('api/password.php?action=get_policy');
             var data = await res.json();
             if (!data.success) return;
             var p = data.policy;
@@ -190,7 +190,7 @@ $db = NuDatabase::getInstance();
         } catch (e) { console.error('plcLoadPolicy', e); }
     };
 
-    // ── Save policy ──────────────────────────────────────────────────────────────
+    // ── Save policy ────────────────────────────────────────────────────────────────
     window.plcSavePolicy = async function () {
         var g = function (id) { return document.getElementById(id); };
         var payload = {
@@ -206,13 +206,13 @@ $db = NuDatabase::getInstance();
             policy_force_change_on_first_login: g('plc-force-first')?.checked ? 1 : 0,
         };
         try {
-            var res  = await fetch('../api/password.php?action=save_policy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            var res  = await fetch('api/password.php?action=save_policy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             var data = await res.json();
             showAlert('plc-policy-alert', data.message || (data.success ? 'Policy saved.' : 'Error.'), data.success ? 'success' : 'error');
         } catch (e) { showAlert('plc-policy-alert', 'Network error.', 'error'); }
     };
 
-    // ── Admin reset ──────────────────────────────────────────────────────────────
+    // ── Admin reset ────────────────────────────────────────────────────────────────
     window.plcAdminReset = async function () {
         var payload = {
             user_id:      parseInt(document.getElementById('plc-rst-user-id')?.value || 0),
@@ -220,7 +220,7 @@ $db = NuDatabase::getInstance();
             force_change: document.getElementById('plc-rst-force')?.checked ?? true,
         };
         try {
-            var res  = await fetch('../api/password.php?action=admin_reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            var res  = await fetch('api/password.php?action=admin_reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             var data = await res.json();
             showAlert('plc-reset-alert', data.message || (data.success ? 'Password reset.' : 'Error.'), data.success ? 'success' : 'error');
             if (data.success) {
@@ -230,7 +230,7 @@ $db = NuDatabase::getInstance();
         } catch (e) { showAlert('plc-reset-alert', 'Network error.', 'error'); }
     };
 
-    // ── Auto-load policy on mount ──────────────────────────────────────────────
+    // ── Auto-load policy on mount ──────────────────────────────────────────────────
     plcLoadPolicy();
 
 })();
