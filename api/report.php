@@ -1,18 +1,15 @@
 <?php
 declare(strict_types=1);
 
-// ─ Catch any stray output (PHP warnings/notices) before our JSON header
 ob_start();
 
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/core/Database.php';
 require_once dirname(__DIR__) . '/core/Auth.php';
 
-// Discard any whitespace/BOM that crept in before this point
 ob_clean();
 header('Content-Type: application/json; charset=utf-8');
 
-// ─ Register a shutdown handler so a PHP fatal still returns valid JSON
 register_shutdown_function(function () {
     $e = error_get_last();
     if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
@@ -35,7 +32,6 @@ $db     = NuDatabase::getInstance();
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 
-// ─── READ BODY ─────────────────────────────────────────────────────────────
 $body = [];
 if ($method === 'POST') {
     $raw  = file_get_contents('php://input');
@@ -46,7 +42,7 @@ if ($method === 'POST') {
 try {
     switch ($action) {
 
-        // ── list all reports ────────────────────────────────────────────────────
+        // ── list all reports ────────────────────────────────────────────────────────────────
         case 'list':
             $rows = $db->fetchAll(
                 "SELECT report_id, report_code, report_name, report_type,
@@ -58,7 +54,7 @@ try {
             echo json_encode(['success' => true, 'data' => $rows]);
             break;
 
-        // ── get single report ──────────────────────────────────────────────────
+        // ── get single report ──────────────────────────────────────────────────────────
         case 'get':
             $id = (int)($_GET['id'] ?? 0);
             if (!$id) throw new Exception('Missing id');
@@ -74,7 +70,7 @@ try {
             echo json_encode(['success' => true, 'data' => $row]);
             break;
 
-        // ── preview — run raw SQL without saving (builder use only) ────────────
+        // ── preview — run raw SQL without saving ───────────────────────────────────────
         case 'preview':
             $sql     = trim($body['report_sql'] ?? '');
             $columns = $body['report_columns'] ?? [];
@@ -83,7 +79,6 @@ try {
             $firstWord = strtoupper(strtok(ltrim($sql), " \t\n\r"));
             if ($firstWord !== 'SELECT') throw new Exception('Only SELECT queries allowed');
 
-            // Limit preview to 100 rows via subquery wrap
             $previewSql = "SELECT * FROM ({$sql}) AS _preview LIMIT 100";
             $rows       = $db->fetchAll($previewSql, []);
 
@@ -95,7 +90,7 @@ try {
             echo json_encode(['success' => true, 'data' => $rows, 'columns' => $columns, 'total' => count($rows)]);
             break;
 
-        // ── save ────────────────────────────────────────────────────────────────
+        // ── save ────────────────────────────────────────────────────────────────────
         case 'save':
             $id       = (int)($body['report_id'] ?? 0);
             $name     = trim($body['report_name'] ?? '');
@@ -110,23 +105,22 @@ try {
             if (!$name) throw new Exception('Report name is required');
             if (!$sql)  throw new Exception('SQL query is required');
 
-            // auto-generate code from name if blank
             if (!$code) {
                 $code = strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim($name)));
                 $code = trim($code, '_');
             }
 
-            // SELECT-only guard
             $firstWord = strtoupper(strtok(ltrim($sql), " \t\n\r"));
             if ($firstWord !== 'SELECT') throw new Exception('Only SELECT queries are allowed');
 
             $colsJson     = json_encode(array_values($columns));
             $filtersJson  = json_encode(array_values($filters));
-            $settingsJson = json_encode((object)$settings); // always object, never array
+            $settingsJson = json_encode((object)$settings);
             $userId       = $_SESSION['user_id'] ?? null;
 
             if ($id) {
-                $affected = $db->execute(
+                // UPDATE — use $db->query() which exists on NuDatabase
+                $db->query(
                     "UPDATE nu_reports SET
                         report_name=?, report_code=?, report_type=?, report_view_mode=?,
                         report_sql=?, report_columns=?, report_filters=?, report_settings=?,
@@ -136,7 +130,8 @@ try {
                 );
                 echo json_encode(['success' => true, 'id' => $id, 'message' => 'Report updated']);
             } else {
-                $db->execute(
+                // INSERT — use $db->query() which exists on NuDatabase
+                $db->query(
                     "INSERT INTO nu_reports
                         (report_name, report_code, report_type, report_view_mode,
                          report_sql, report_columns, report_filters, report_settings,
@@ -149,15 +144,15 @@ try {
             }
             break;
 
-        // ── delete ─────────────────────────────────────────────────────────────
+        // ── delete ─────────────────────────────────────────────────────────────────
         case 'delete':
             $id = (int)($body['id'] ?? $_GET['id'] ?? 0);
             if (!$id) throw new Exception('Missing id');
-            $db->execute("DELETE FROM nu_reports WHERE report_id = ?", [$id]);
+            $db->query("DELETE FROM nu_reports WHERE report_id = ?", [$id]);
             echo json_encode(['success' => true, 'message' => 'Report deleted']);
             break;
 
-        // ── run saved report ────────────────────────────────────────────────────
+        // ── run saved report ───────────────────────────────────────────────────────────
         case 'run':
             $id   = (int)($_GET['id'] ?? 0);
             $code = trim($_GET['code'] ?? '');
@@ -220,14 +215,14 @@ try {
             ]);
             break;
 
-        // ── list tables ────────────────────────────────────────────────────────────
+        // ── list tables ─────────────────────────────────────────────────────────────────
         case 'tables':
             $tables = $db->fetchAll("SHOW TABLES");
             $flat   = array_map(fn($r) => array_values($r)[0], $tables);
             echo json_encode(['success' => true, 'data' => $flat]);
             break;
 
-        // ── list columns of a table ───────────────────────────────────────────────
+        // ── list columns of a table ────────────────────────────────────────────────────
         case 'columns':
             $table = preg_replace('/[^a-z0-9_]/i', '', $_GET['table'] ?? '');
             if (!$table) throw new Exception('table required');
