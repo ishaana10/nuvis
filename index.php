@@ -16,10 +16,16 @@ try {
     require_once __DIR__ . '/config.php';
     require_once __DIR__ . '/core/Database.php';
     require_once __DIR__ . '/core/Auth.php';
+    // ErrorLogger registered AFTER Database + Auth are loaded
+    require_once __DIR__ . '/core/ErrorLogger.php';
+    NuErrorLogger::register();
     $auth = NuAuth::getInstance();
 } catch (Throwable $e) {
-    error_log('[index.php boot] ' . $e->getMessage());
-    $bootError = 'Application failed to start. Please contact the administrator.';
+    // Show the REAL error message so you can diagnose it
+    $realMsg = get_class($e) . ': ' . $e->getMessage()
+             . ' in ' . $e->getFile() . ' on line ' . $e->getLine();
+    error_log('[index.php boot] ' . $realMsg);
+    $bootError = 'Application failed to start: ' . $realMsg;
 }
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
@@ -106,7 +112,7 @@ function nu_asset(string $path): string {
         </div>
 
         <?php if ($bootError !== ''): ?>
-            <div class="nu-login-error" style="background:rgba(255,193,7,.12);border-color:rgba(255,193,7,.4);color:#ffe9a8;display:block">
+            <div class="nu-login-error" style="background:rgba(255,193,7,.12);border-color:rgba(255,193,7,.4);color:#ffe9a8;display:block;word-break:break-word;font-size:0.8rem;">
                 ⚠ <?= h($bootError) ?>
             </div>
         <?php endif; ?>
@@ -276,6 +282,18 @@ function nu_asset(string $path): string {
                 </svg>
                 <span>Password Policy</span>
             </a>
+
+            <!-- Error Log — admin only -->
+            <a href="#errorlog" class="nu-nav-item" data-module="errorlog"
+               onclick="NuApp.loadModule('errorlog'); return false;"
+               style="color:var(--warning,#f59e0b);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Error Log</span>
+            </a>
             <?php endif; ?>
 
         </nav>
@@ -356,6 +374,7 @@ function nu_asset(string $path): string {
 <script src="<?= nu_asset('assets/js/nb-subform-fk-builder.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nb-form-builder-layout.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nb-form-edit.js') ?>"></script>
+<script src="<?= nu_asset('assets/js/nu-errorlogger.js') ?>"></script>
 <script>
 (function () {
     // Restore theme
