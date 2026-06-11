@@ -6,13 +6,13 @@
 
 -- ─── 1. WORKFLOW DEFINITIONS ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflows` (
-    `wf_id`          INT UNSIGNED   NOT NULL AUTO_INCREMENT,
+    `wf_id`          INT            NOT NULL AUTO_INCREMENT,
     `wf_code`        VARCHAR(64)    NOT NULL,
     `wf_name`        VARCHAR(128)   NOT NULL,
     `wf_description` TEXT,
     `wf_form_code`   VARCHAR(64)    DEFAULT NULL COMMENT 'optional: bind to a form',
     `wf_active`      TINYINT(1)     NOT NULL DEFAULT 1,
-    `wf_created_by`  INT UNSIGNED   DEFAULT NULL,
+    `wf_created_by`  INT            DEFAULT NULL,
     `wf_created_at`  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `wf_updated_at`  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`wf_id`),
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS `nu_workflows` (
 
 -- ─── 2. STAGES ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflow_stages` (
-    `wfs_id`          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    `wfs_wf_id`       INT UNSIGNED  NOT NULL,
+    `wfs_id`          INT           NOT NULL AUTO_INCREMENT,
+    `wfs_wf_id`       INT           NOT NULL,
     `wfs_code`        VARCHAR(64)   NOT NULL,
     `wfs_name`        VARCHAR(128)  NOT NULL,
     `wfs_description` TEXT,
@@ -42,14 +42,14 @@ CREATE TABLE IF NOT EXISTS `nu_workflow_stages` (
 
 -- ─── 3. TRANSITIONS ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflow_transitions` (
-    `wft_id`        INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    `wft_wf_id`     INT UNSIGNED  NOT NULL,
-    `wft_from_id`   INT UNSIGNED  NOT NULL,
-    `wft_to_id`     INT UNSIGNED  NOT NULL,
-    `wft_action`    VARCHAR(64)   NOT NULL DEFAULT 'advance' COMMENT 'advance|reject|escalate|return',
-    `wft_label`     VARCHAR(128)  NOT NULL DEFAULT 'Advance',
-    `wft_condition` TEXT          DEFAULT NULL COMMENT 'optional JSON condition',
-    `wft_created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `wft_id`         INT           NOT NULL AUTO_INCREMENT,
+    `wft_wf_id`      INT           NOT NULL,
+    `wft_from_id`    INT           NOT NULL,
+    `wft_to_id`      INT           NOT NULL,
+    `wft_action`     VARCHAR(64)   NOT NULL DEFAULT 'advance' COMMENT 'advance|reject|escalate|return',
+    `wft_label`      VARCHAR(128)  NOT NULL DEFAULT 'Advance',
+    `wft_condition`  TEXT          DEFAULT NULL COMMENT 'optional JSON condition',
+    `wft_created_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`wft_id`),
     KEY `idx_wft_wf`   (`wft_wf_id`),
     KEY `idx_wft_from` (`wft_from_id`),
@@ -60,16 +60,16 @@ CREATE TABLE IF NOT EXISTS `nu_workflow_transitions` (
 
 -- ─── 4. INSTANCES (running workflow per record) ────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflow_instances` (
-    `wfi_id`           INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    `wfi_wf_id`        INT UNSIGNED  NOT NULL,
-    `wfi_stage_id`     INT UNSIGNED  NOT NULL COMMENT 'current stage',
+    `wfi_id`           INT           NOT NULL AUTO_INCREMENT,
+    `wfi_wf_id`        INT           NOT NULL,
+    `wfi_stage_id`     INT           NOT NULL COMMENT 'current stage',
     `wfi_record_table` VARCHAR(64)   DEFAULT NULL,
     `wfi_record_id`    VARCHAR(64)   DEFAULT NULL,
     `wfi_status`       ENUM('active','completed','rejected','cancelled') NOT NULL DEFAULT 'active',
-    `wfi_started_by`   INT UNSIGNED  DEFAULT NULL,
+    `wfi_started_by`   INT           DEFAULT NULL,
     `wfi_started_at`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `wfi_completed_at` DATETIME      DEFAULT NULL,
-    `wfi_meta`         JSON          DEFAULT NULL,
+    `wfi_meta`         TEXT          DEFAULT NULL COMMENT 'JSON metadata (TEXT for broad MariaDB compat)',
     PRIMARY KEY (`wfi_id`),
     KEY `idx_wfi_wf`     (`wfi_wf_id`),
     KEY `idx_wfi_stage`  (`wfi_stage_id`),
@@ -81,12 +81,12 @@ CREATE TABLE IF NOT EXISTS `nu_workflow_instances` (
 
 -- ─── 5. HISTORY / AUDIT LOG ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflow_history` (
-    `wfh_id`         INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    `wfh_wfi_id`     INT UNSIGNED  NOT NULL,
-    `wfh_from_id`    INT UNSIGNED  DEFAULT NULL,
-    `wfh_to_id`      INT UNSIGNED  NOT NULL,
+    `wfh_id`         INT           NOT NULL AUTO_INCREMENT,
+    `wfh_wfi_id`     INT           NOT NULL,
+    `wfh_from_id`    INT           DEFAULT NULL,
+    `wfh_to_id`      INT           NOT NULL,
     `wfh_action`     VARCHAR(64)   NOT NULL,
-    `wfh_actor_id`   INT UNSIGNED  DEFAULT NULL,
+    `wfh_actor_id`   INT           DEFAULT NULL,
     `wfh_comment`    TEXT          DEFAULT NULL,
     `wfh_acted_at`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`wfh_id`),
