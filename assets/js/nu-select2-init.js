@@ -2,6 +2,9 @@
  * nu-select2-init.js
  * Initialises Select2 on any <select data-select2="1"> inside a given scope.
  * Called after every form open (preview, edit, add).
+ *
+ * FIX: dropdownParent is always document.body so the dropdown is never
+ * clipped by overflow-y:auto on the modal box div.
  */
 (function () {
 
@@ -10,11 +13,11 @@
     var $ = jQuery;
     var root = scope || document;
     $(root).find('select[data-select2="1"]').each(function () {
-      if ($(this).data('select2')) return; // already inited
+      if ($(this).hasClass('select2-hidden-accessible')) return; // already inited
       var opts = {
         width: '100%',
         theme: 'default',
-        dropdownParent: $(this).closest('.nu-form-overlay, .nu-app, body')
+        dropdownParent: $(document.body)  // always body — escapes overflow clipping in modal
       };
       // honour placeholder from the blank first <option>
       var blank = this.options[0];
