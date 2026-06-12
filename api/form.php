@@ -709,7 +709,6 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
     $layout   = nu_decode_layout($form);
     $formCode = $form[$c['code']]  ?? '';
     $formTable= $form[$c['table']] ?? '';
-    $formName = $form[$c['name']]  ?? $formCode;
 
     $layout = nu_inject_parent_context($layout, $formTable, (string)($recordId ?? ''));
 
@@ -721,10 +720,64 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
            . ' onsubmit="event.preventDefault(); submitNuForm(this);"'
            . ' style="font-size:13px;">';
 
-    $si = 0;
+    // ── Group flat fields by row_index before rendering ──────────────────
+    // Fields saved by the builder carry row_index + col but are stored as a
+    // flat array. Group them so fields sharing the same row_index share one
+    // nu-form-row grid container, letting col=6+col=6 sit side-by-side.
+    $structuredNodes = []; // section / group / row nodes (pass through as-is)
+    $flatByRow       = []; // row_index => [field, ...]
+    $flatNoRow       = []; // fields with no row_index
+
     foreach ($layout as $node) {
-        $html .= nu_render_layout_node($node, $record, $si++);
+        $type = $node['type'] ?? 'field';
+        if (in_array($type, ['section', 'group', 'row'], true)) {
+            // Flush any accumulated flat fields first, preserving order
+            if ($flatNoRow || $flatByRow) {
+                // emit pending flat rows in the order they were encountered
+                // We store them as sentinel entries keyed by insertion order
+                $structuredNodes[] = ['_flat_flush' => true, 'byRow' => $flatByRow, 'noRow' => $flatNoRow];
+                $flatByRow = [];
+                $flatNoRow = [];
+            }
+            $structuredNodes[] = ['_structured' => true, 'node' => $node];
+        } else {
+            $ri = $node['row_index'] ?? null;
+            if ($ri !== null) {
+                $flatByRow[(string)$ri][] = $node;
+            } else {
+                $flatNoRow[] = $node;
+            }
+        }
     }
+    // Flush remaining flat fields
+    if ($flatNoRow || $flatByRow) {
+        $structuredNodes[] = ['_flat_flush' => true, 'byRow' => $flatByRow, 'noRow' => $flatNoRow];
+    }
+
+    $ROW_STYLE = 'display:grid;grid-template-columns:repeat(12,1fr);gap:8px;margin-bottom:4px;align-items:start;';
+
+    $si = 0;
+    foreach ($structuredNodes as $entry) {
+        if (!empty($entry['_structured'])) {
+            $html .= nu_render_layout_node($entry['node'], $record, $si++);
+        } elseif (!empty($entry['_flat_flush'])) {
+            // Emit grouped rows first (fields sharing a row_index)
+            foreach ($entry['byRow'] as $rowFields) {
+                $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
+                foreach ($rowFields as $node) {
+                    $html .= nu_render_field($node, nu_field_value($record, $node), $record);
+                }
+                $html .= '</div>';
+            }
+            // Emit ungrouped fields, each in its own row
+            foreach ($entry['noRow'] as $node) {
+                $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
+                $html .= nu_render_field($node, nu_field_value($record, $node), $record);
+                $html .= '</div>';
+            }
+        }
+    }
+    // ── END: row_index grouping ──────────────────────────────────────────
 
     $html .= '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:12px;border-top:1px solid #eee;">';
     $html .= '<button type="button" class="nu-btn nu-btn-ghost" onclick="closeNuForm(this)">Cancel</button>';
