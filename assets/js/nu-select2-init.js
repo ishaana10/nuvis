@@ -29,9 +29,12 @@
   // expose globally so nubuilder-next.js can call it
   window.nuInitSelect2 = nuInitSelect2;
 
-  // also re-init on the custom event fired by _dispatchFormOpened
+  // Re-init on the custom event fired by _dispatchFormOpened.
+  // Defer one tick so the overlay is guaranteed to be in the live DOM
+  // before Select2 tries to measure element dimensions.
   document.addEventListener('nu:form:opened', function (e) {
-    nuInitSelect2(e.detail && e.detail.scope);
+    var scope = e.detail && e.detail.scope;
+    setTimeout(function () { nuInitSelect2(scope); }, 0);
   });
 
 })();

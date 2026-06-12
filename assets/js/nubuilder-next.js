@@ -136,7 +136,7 @@ window.NuApp = {
     document.dispatchEvent(new CustomEvent('nu:form:opened', { detail: { scope: box } }));
   },
 
-  // ─── BREADCRUMB HELPER ───────────────────────────────────────────────────────
+  // ─── BREADCRUMB HELPER ────────────────────────────────────────────────
   _renderBreadcrumb(crumbs) {
     const nav = document.createElement('nav');
     nav.setAttribute('aria-label', 'breadcrumb');
@@ -167,7 +167,7 @@ window.NuApp = {
     return nav;
   },
 
-  // ─── FULL-PAGE MODE HELPERS ──────────────────────────────────────────────────
+  // ─── FULL-PAGE MODE HELPERS ──────────────────────────────────────────────
   _enterFullPage() {
     const sidebar = document.querySelector('.nu-sidebar, #sidebar, [class*="sidebar"]');
     const header  = document.querySelector('.nu-header, #header, header');
@@ -192,7 +192,7 @@ window.NuApp = {
     delete document.body.dataset.nuFullPage;
   },
 
-  // ─── PREVIEW FORM — resizable modal (compact / standard / full) ──────────────
+  // ─── PREVIEW FORM — resizable modal (compact / standard / full) ─────────────────
   async previewForm(code, formLabel) {
     try {
       const json = await this.apiJson(
@@ -277,10 +277,12 @@ window.NuApp = {
       box.appendChild(formWrap);
 
       overlay.appendChild(box);
+      // ✔ Append to DOM FIRST so Select2 can measure element dimensions
       document.body.appendChild(overlay);
       applySize(currentSize);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+      // ✔ Dispatch AFTER overlay is in the live DOM
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
@@ -292,7 +294,7 @@ window.NuApp = {
     }
   },
 
-  // ─── EDIT RECORD — modal with breadcrumb ─────────────────────────────────────
+  // ─── EDIT RECORD — modal with breadcrumb ─────────────────────────────────
   async editRecord(code, id, fromBrowseLabel, displayMode) {
     try {
       const json = await this.apiJson(
@@ -337,9 +339,11 @@ window.NuApp = {
       box.appendChild(formWrap);
 
       overlay.appendChild(box);
+      // ✔ Append to DOM FIRST so Select2 can measure element dimensions
       document.body.appendChild(overlay);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+      // ✔ Dispatch AFTER overlay is in the live DOM
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
@@ -367,7 +371,7 @@ window.NuApp = {
     }
   },
 
-  // ─── Shared: fetch browse data ───────────────────────────────────────────────
+  // ─── Shared: fetch browse data ───────────────────────────────────────────
   async _fetchBrowseData(code, page, query) {
     page  = page  || 1;
     query = query || '';
@@ -381,7 +385,7 @@ window.NuApp = {
     return json;
   },
 
-  // ─── Shared: build browse table DOM ─────────────────────────────────────────
+  // ─── Shared: build browse table DOM ────────────────────────────────────
   _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit) {
     const data              = json.data || {};
     const layout            = Array.isArray(data.layout)  ? data.layout  : [];
@@ -512,7 +516,7 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 1: INLINE ──────────────────────────────────────────────────────────
+  // ─── MODE 1: INLINE ───────────────────────────────────────────────────────
   async _browseInline(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -563,7 +567,7 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 2: MODAL ───────────────────────────────────────────────────────────
+  // ─── MODE 2: MODAL ─────────────────────────────────────────────────────────
   async _browseModal(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -628,7 +632,7 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 3: FULL PAGE ───────────────────────────────────────────────────────
+  // ─── MODE 3: FULL PAGE ─────────────────────────────────────────────────────────
   async _browseFullPage(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -729,9 +733,7 @@ window.submitNuForm = async function (formElement) {
   }
 };
 
-// ─── Global window aliases ────────────────────────────────────────────────────
-// nbFormBuilder is defined in nb-form-builder.js (loads after this file).
-// saveForm is defined in nb-form-builder.js as well.
+// ─── Global window aliases ────────────────────────────────────────────────
 window.openFormBuilder = function ()                               { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
 window.previewForm     = function (code, label)                    { return NuApp.previewForm(code, label); };
 window.editForm        = function (id)                             { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
