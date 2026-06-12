@@ -2,14 +2,15 @@
  * nu-select2-init.js
  * Initialises Select2 on any <select data-select2="1"> inside a given scope.
  *
- * ROOT CAUSE: When formWrap.innerHTML is replaced, the old DOM nodes are
- * discarded but jQuery's internal $.data() store still holds a stale Select2
- * instance keyed to those nodes. When the new HTML is inserted the browser
- * may reuse the same node reference, so Select2's constructor finds the stale
- * data and crashes with "GetData(...).destroy is not a function".
+ * ROOT CAUSE: Select2 stores its instance using a private internal key
+ * (not standard jQuery .data()), so .removeData() and even .select2('destroy')
+ * do not fully clean up when the element was previously part of a discarded
+ * innerHTML tree. Select2's constructor then finds orphaned internal state
+ * and crashes: "r.GetData(...).destroy is not a function".
  *
- * FIX: Call $.removeData on each <select> to wipe any orphaned jQuery data
- * before calling .select2(), ensuring a completely clean init every time.
+ * FIX: Replace the <select> with a fresh clone before calling .select2().
+ * cloneNode(true) copies the element and its children (options) but carries
+ * NO jQuery data whatsoever, so Select2 always starts from a blank slate.
  */
 (function () {
 
@@ -19,24 +20,19 @@
     var root = scope || document;
 
     $(root).find('select[data-select2="1"]').each(function () {
-      var $el = $(this);
+      var original = this;
 
-      // 1. If Select2 is already attached, destroy it cleanly.
-      if ($el.hasClass('select2-hidden-accessible')) {
-        try { $el.select2('destroy'); } catch (e) {}
-      }
+      // Replace with a pristine clone — no jQuery data, no Select2 internals.
+      var clone = original.cloneNode(true);
+      original.parentNode.replaceChild(clone, original);
 
-      // 2. Wipe ALL jQuery internal data on this element to clear any
-      //    orphaned Select2 instance left over from a previous innerHTML swap.
-      try { $el.removeData(); } catch (e) {}
-
-      // 3. Fresh init — dropdownParent:body escapes modal overflow clipping.
+      var $el = $(clone);
       var opts = {
         width: '100%',
         theme: 'default',
         dropdownParent: $(document.body)
       };
-      var blank = this.options[0];
+      var blank = clone.options[0];
       if (blank && blank.value === '') {
         opts.placeholder = blank.textContent || blank.innerText || 'Select…';
         opts.allowClear  = true;
