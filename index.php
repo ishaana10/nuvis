@@ -379,6 +379,7 @@ function nu_asset(string $path): string {
 <?php if ($isLoggedIn): ?>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="<?= nu_asset('assets/js/select2.min.js') ?>"></script>
+<script src="<?= nu_asset('assets/js/nu-select2-init.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nubuilder-next.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nb-form-builder.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nusubform.js') ?>"></script>
