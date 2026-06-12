@@ -595,7 +595,23 @@ foreach ($forms as $f) {
 
           <div class="nb-tools-group">
             <div class="nb-tools-group-label">Choice</div>
-            <div class="nb-tool" data-type="select"         draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>Select</div>
+            <!-- 4 explicit select variants -->
+            <div class="nb-tool" data-type="select" data-preset="standard_select"    draggable="true"
+                 onclick="nbFormBuilder.addField('select','Standard Select','',false,{select2:false,multiple:false})">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>Standard Select
+            </div>
+            <div class="nb-tool" data-type="select" data-preset="select2_single"     draggable="true"
+                 onclick="nbFormBuilder.addField('select','Select2 (searchable)','',false,{select2:true,multiple:false})">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>Select2
+            </div>
+            <div class="nb-tool" data-type="select" data-preset="standard_multi"     draggable="true"
+                 onclick="nbFormBuilder.addField('select','Standard Multi-Select','',false,{select2:false,multiple:true})">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6M6 4l6 6 6-6"/></svg>Multi-Select
+            </div>
+            <div class="nb-tool" data-type="select" data-preset="select2_multi"      draggable="true"
+                 onclick="nbFormBuilder.addField('select','Select2 Multi-Select','',false,{select2:true,multiple:true})">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4M6 4l6 6 6-6"/></svg>S2 Multi
+            </div>
             <div class="nb-tool" data-type="radio"          draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>Radio</div>
             <div class="nb-tool" data-type="checkbox_group" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Checks</div>
           </div>
@@ -767,6 +783,26 @@ if (!window._nbFormsModuleInit) {
     const isBrowseable = type === 'main' || type === 'popup';
     if (browseTabEl) browseTabEl.style.opacity = isBrowseable ? '1' : '0.4';
     if (browseNotice) browseNotice.style.display = isBrowseable ? 'none' : 'block';
+  };
+
+  // ── Patch toolbox drag for preset-bearing select tools ───────────
+  // The 4 select variants use onclick for click-to-add with preset extra data.
+  // For drag-to-canvas we also need to carry the preset. We patch _initAfterLoad
+  // so dragstart stores the preset alongside the type.
+  const _origInitAfterLoad = nbFormBuilder._initAfterLoad;
+  nbFormBuilder._initAfterLoad = function() {
+    if (typeof _origInitAfterLoad === 'function') _origInitAfterLoad.call(nbFormBuilder);
+    // Override drag behaviour for preset tools
+    document.querySelectorAll('#panelFields .nb-tool[data-preset]').forEach(function(tool) {
+      tool.addEventListener('dragstart', function(e) {
+        e.stopImmediatePropagation();
+        window._nbDragPreset = tool.dataset.preset;
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      tool.addEventListener('dragend', function() {
+        window._nbDragPreset = null;
+      });
+    });
   };
 
   // ── Patch saveForm to include form_type ──────────────────────────
