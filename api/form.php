@@ -95,12 +95,25 @@ function nu_get_table_columns($table) {
  */
 function nu_filter_save_to_columns($save, $table, $pk) {
     $cols = nu_get_table_columns($table);
-    if (empty($cols)) return $save; // can't verify — pass through as-is
+    if (empty($cols)) return $save;
     $out = [];
     foreach ($save as $col => $val) {
         if ($col === $pk || isset($cols[$col])) $out[$col] = $val;
     }
     return $out;
+}
+
+/**
+ * Coerce a value coming from the JSON body so it is safe to pass to PDO.
+ *
+ * - Arrays (checkbox_group, select[multiple]) are joined to a comma-separated string.
+ * - null / scalar values pass through unchanged.
+ */
+function nu_coerce_save_value($value) {
+    if (is_array($value)) {
+        return implode(',', array_map('strval', $value));
+    }
+    return $value;
 }
 
 function nu_form_table_name() {
@@ -241,15 +254,19 @@ function nu_render_options($field, $selectedValue = null) {
     } elseif ($optSource === 'sql' && !empty($field['sql_source'])) {
         try { $options = nu_fetch_sql_options($field['sql_source']); } catch (Throwable $e) { $options = []; }
     } else {
-        // manual list — saved by builder as [{value, label}, ...]
         $options = is_array($field['options'] ?? null) ? $field['options'] : [];
     }
+
+    // Normalise selectedValue: split comma-stored strings back to array for multi-check
+    $selectedArr = is_array($selectedValue)
+        ? array_map('strval', $selectedValue)
+        : array_map('trim', explode(',', (string)$selectedValue));
 
     $html = '';
     foreach ($options as $opt) {
         $value    = (string)($opt['value'] ?? '');
         $label    = (string)($opt['label'] ?? $value);
-        $selected = ((string)$selectedValue === $value) ? ' selected' : '';
+        $selected = in_array($value, $selectedArr, true) ? ' selected' : '';
         $html .= '<option value="' . nu_attr($value) . '"' . $selected . '>' . nu_html($label) . '</option>';
     }
     return $html;
@@ -381,7 +398,7 @@ function nu_render_field($field, $value = '', $record = []) {
                 $options = is_array($field['options'] ?? null) ? $field['options'] : [];
             }
             $inputType   = ($type === 'radio') ? 'radio' : 'checkbox';
-            $currentVals = is_array($value) ? $value : explode(',', (string)$value);
+            $currentVals = is_array($value) ? array_map('strval', $value) : array_map('trim', explode(',', (string)$value));
             $control = '<div>';
             foreach ($options as $opt) {
                 $optValue = (string)($opt['value'] ?? '');
@@ -463,9 +480,7 @@ function nu_render_field($field, $value = '', $record = []) {
             $sfCode = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? $name));
             $sfFk   = nu_safe_ident($sf['fk_field']  ?? ($sf['fkfield']  ?? ''));
             $sfView = in_array($sf['view'] ?? 'grid', ['grid','form','inline'], true) ? ($sf['view'] ?? 'grid') : 'grid';
-
             $sfParent = (string)($field['_parent_id'] ?? '');
-
             $control = '<div class="nu-subform-container"'
                      . ' data-subform-code="'  . nu_attr($sfCode)   . '"'
                      . ' data-subform-fk="'    . nu_attr($sfFk)     . '"'
@@ -804,21 +819,19 @@ function nu_handle_subform_save() {
             continue;
         }
 
-        if (nu_field_server_readonly($field) || nu_field_is_fk($field)) {
-            continue;
-        }
+        if (nu_field_server_readonly($field) || nu_field_is_fk($field)) continue;
 
         if ($type === 'lookup') {
             $dbCol = nu_resolve_lookup_store_col($field);
             if ($dbCol === '') continue;
-            $save[$dbCol] = $data[$name] ?? null;
+            $save[$dbCol] = nu_coerce_save_value($data[$name] ?? null);
             continue;
         }
 
         if ($type === 'checkbox') {
             $save[$name] = !empty($data[$name]) ? 1 : 0;
         } else {
-            $save[$name] = $data[$name] ?? null;
+            $save[$name] = nu_coerce_save_value($data[$name] ?? null);
         }
     }
 
@@ -826,7 +839,6 @@ function nu_handle_subform_save() {
         $save[$fk] = $parentId;
     }
 
-    // Strip any columns that don't actually exist in the target table
     $save = nu_filter_save_to_columns($save, $table, $pk);
 
     $saveWithoutPk = array_filter($save, fn($k) => $k !== $pk, ARRAY_FILTER_USE_KEY);
@@ -990,14 +1002,17 @@ function nu_handle_save() {
         if ($type === 'lookup') {
             $dbCol = nu_resolve_lookup_store_col($field);
             if ($dbCol === '') continue;
-            $save[$dbCol] = $data[$name] ?? null;
+            $save[$dbCol] = nu_coerce_save_value($data[$name] ?? null);
             continue;
         }
 
-        $save[$name] = ($type === 'checkbox') ? (!empty($data[$name]) ? 1 : 0) : ($data[$name] ?? null);
+        if ($type === 'checkbox') {
+            $save[$name] = !empty($data[$name]) ? 1 : 0;
+        } else {
+            $save[$name] = nu_coerce_save_value($data[$name] ?? null);
+        }
     }
 
-    // Strip any columns that don't actually exist in the target table
     $save = nu_filter_save_to_columns($save, $table, $pk);
 
     $saveWithoutPk = array_filter($save, fn($k) => $k !== $pk, ARRAY_FILTER_USE_KEY);
