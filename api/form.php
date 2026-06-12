@@ -214,15 +214,37 @@ function nu_form_pk_type($form) {
     return strtolower(trim((string)($form[$c['pk_type']] ?? 'auto')));
 }
 
+/**
+ * Render <option> tags for select / radio / checkbox_group fields.
+ *
+ * Priority order for options source:
+ *   1. options_source === 'table'  — query options_table using options_value_col /
+ *      options_label_col with optional options_filter WHERE clause.
+ *   2. options_source === 'sql'    — run raw sql_source query.
+ *   3. Manual list                 — use field['options'] array (value|label pairs
+ *      saved by the form builder).
+ */
 function nu_render_options($field, $selectedValue = null) {
-    $options = [];
-    $sourceType = $field['source_type'] ?? ($field['sourcetype'] ?? 'static');
-    $sqlSource  = $field['sql_source']  ?? ($field['sqlsource']  ?? '');
-    if ($sourceType === 'sql' && $sqlSource !== '') {
-        try { $options = nu_fetch_sql_options($sqlSource); } catch (Throwable $e) { $options = []; }
-    } elseif (!empty($field['options']) && is_array($field['options'])) {
-        $options = $field['options'];
+    $options   = [];
+    $optSource = $field['options_source'] ?? ($field['source_type'] ?? 'manual');
+
+    if ($optSource === 'table') {
+        $tbl      = nu_safe_ident($field['options_table']     ?? '');
+        $valCol   = nu_safe_ident($field['options_value_col'] ?? '');
+        $labelCol = nu_safe_ident($field['options_label_col'] ?? $valCol);
+        $filter   = trim((string)($field['options_filter']   ?? ''));
+        if ($tbl !== '' && $valCol !== '') {
+            $sql = "SELECT `{$valCol}`, `{$labelCol}` FROM `{$tbl}`";
+            if ($filter !== '') $sql .= ' WHERE ' . $filter;
+            try { $options = nu_fetch_sql_options($sql); } catch (Throwable $e) { $options = []; }
+        }
+    } elseif ($optSource === 'sql' && !empty($field['sql_source'])) {
+        try { $options = nu_fetch_sql_options($field['sql_source']); } catch (Throwable $e) { $options = []; }
+    } else {
+        // manual list — saved by builder as [{value, label}, ...]
+        $options = is_array($field['options'] ?? null) ? $field['options'] : [];
     }
+
     $html = '';
     foreach ($options as $opt) {
         $value    = (string)($opt['value'] ?? '');
@@ -342,12 +364,21 @@ function nu_render_field($field, $value = '', $record = []) {
         case 'radio':
         case 'checkbox_group':
             $options = [];
-            $sourceType = $field['source_type'] ?? ($field['sourcetype'] ?? 'static');
-            $sqlSource  = $field['sql_source']  ?? ($field['sqlsource']  ?? '');
-            if ($sourceType === 'sql' && $sqlSource !== '') {
-                try { $options = nu_fetch_sql_options($sqlSource); } catch (Throwable $e) { $options = []; }
-            } elseif (!empty($field['options']) && is_array($field['options'])) {
-                $options = $field['options'];
+            $optSource  = $field['options_source'] ?? ($field['source_type'] ?? 'manual');
+            if ($optSource === 'table') {
+                $tbl      = nu_safe_ident($field['options_table']     ?? '');
+                $valCol   = nu_safe_ident($field['options_value_col'] ?? '');
+                $labelCol = nu_safe_ident($field['options_label_col'] ?? $valCol);
+                $filter   = trim((string)($field['options_filter']   ?? ''));
+                if ($tbl !== '' && $valCol !== '') {
+                    $sql = "SELECT `{$valCol}`, `{$labelCol}` FROM `{$tbl}`";
+                    if ($filter !== '') $sql .= ' WHERE ' . $filter;
+                    try { $options = nu_fetch_sql_options($sql); } catch (Throwable $e) { $options = []; }
+                }
+            } elseif ($optSource === 'sql' && !empty($field['sql_source'])) {
+                try { $options = nu_fetch_sql_options($field['sql_source']); } catch (Throwable $e) { $options = []; }
+            } else {
+                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
             }
             $inputType   = ($type === 'radio') ? 'radio' : 'checkbox';
             $currentVals = is_array($value) ? $value : explode(',', (string)$value);
