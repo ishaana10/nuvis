@@ -29,9 +29,9 @@ switch ($action) {
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . htmlspecialchars($action)]);
 }
 
-// ── GET single ────────────────────────────────────────────────────────────
+// ── GET single ────────────────────────────────────────────────────────────────
 function actionGet($db, $auth) {
-    if (!$auth->hasPermission('menus', 'view')) {
+    if (!$auth->hasPermission('menus.view')) {
         echo json_encode(['success' => false, 'error' => 'Permission denied']); return;
     }
     $id = (int)($_GET['id'] ?? 0);
@@ -49,9 +49,9 @@ function actionGet($db, $auth) {
     }
 }
 
-// ── CREATE ────────────────────────────────────────────────────────────────
+// ── CREATE ────────────────────────────────────────────────────────────────────
 function actionCreate($db, $auth) {
-    if (!$auth->hasPermission('menus', 'create')) {
+    if (!$auth->hasPermission('menus.create')) {
         echo json_encode(['success' => false, 'error' => 'Permission denied']); return;
     }
     $data = json_decode(file_get_contents('php://input'), true);
@@ -80,7 +80,6 @@ function actionCreate($db, $auth) {
         if (!$parentRow) {
             echo json_encode(['success' => false, 'error' => 'Parent menu item not found']); return;
         }
-        // Only allow one level of nesting
         if ((int)$parentRow['menu_parent_id'] > 0) {
             echo json_encode(['success' => false, 'error' => 'Cannot nest more than one level deep']); return;
         }
@@ -106,9 +105,9 @@ function actionCreate($db, $auth) {
     }
 }
 
-// ── UPDATE ────────────────────────────────────────────────────────────────
+// ── UPDATE ────────────────────────────────────────────────────────────────────
 function actionUpdate($db, $auth) {
-    if (!$auth->hasPermission('menus', 'edit')) {
+    if (!$auth->hasPermission('menus.edit')) {
         echo json_encode(['success' => false, 'error' => 'Permission denied']); return;
     }
     $data = json_decode(file_get_contents('php://input'), true);
@@ -136,7 +135,6 @@ function actionUpdate($db, $auth) {
     if (!$label && $type !== 'divider') {
         echo json_encode(['success' => false, 'error' => 'Label is required']); return;
     }
-    // Prevent a menu item from being its own parent
     if ($parent === $id) {
         echo json_encode(['success' => false, 'error' => 'A menu item cannot be its own parent']); return;
     }
@@ -173,9 +171,9 @@ function actionUpdate($db, $auth) {
     }
 }
 
-// ── DELETE ────────────────────────────────────────────────────────────────
+// ── DELETE ────────────────────────────────────────────────────────────────────
 function actionDelete($db, $auth) {
-    if (!$auth->hasPermission('menus', 'delete')) {
+    if (!$auth->hasPermission('menus.delete')) {
         echo json_encode(['success' => false, 'error' => 'Permission denied']); return;
     }
     $data = json_decode(file_get_contents('php://input'), true);
@@ -184,7 +182,6 @@ function actionDelete($db, $auth) {
         echo json_encode(['success' => false, 'error' => 'Missing id']); return;
     }
     try {
-        // Cascade: remove children first, then the item itself
         $db->query('DELETE FROM nu_menus WHERE menu_parent_id = ?', [$id]);
         $db->query('DELETE FROM nu_menus WHERE menu_id = ?',        [$id]);
         echo json_encode(['success' => true]);
@@ -193,10 +190,10 @@ function actionDelete($db, $auth) {
     }
 }
 
-// ── REORDER ───────────────────────────────────────────────────────────────
+// ── REORDER ───────────────────────────────────────────────────────────────────
 // Accepts: { items: [ { id: int, order: int }, ... ] }
 function actionReorder($db, $auth) {
-    if (!$auth->hasPermission('menus', 'edit')) {
+    if (!$auth->hasPermission('menus.edit')) {
         echo json_encode(['success' => false, 'error' => 'Permission denied']); return;
     }
     $data  = json_decode(file_get_contents('php://input'), true);

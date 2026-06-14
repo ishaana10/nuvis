@@ -16,6 +16,7 @@ try {
     require_once __DIR__ . '/config.php';
     require_once __DIR__ . '/core/Database.php';
     require_once __DIR__ . '/core/Auth.php';
+    require_once __DIR__ . '/core/MenuRenderer.php';
     // ErrorLogger registered AFTER Database + Auth are loaded
     require_once __DIR__ . '/core/ErrorLogger.php';
     NuErrorLogger::register();
@@ -84,6 +85,19 @@ function nu_asset(string $path): string {
     $full = __DIR__ . '/' . ltrim($path, '/');
     $v    = is_file($full) ? filemtime($full) : time();
     return h(ltrim($path, '/')) . '?v=' . $v;
+}
+
+// ─── Build sidebar nav ────────────────────────────────────────────────────────
+// NuMenuRenderer::render() returns HTML from nu_menus filtered by user role.
+// If nu_menus is empty (not yet populated), $dynNav is '' and the static
+// fallback nav below is shown instead.
+$dynNav = '';
+if ($isLoggedIn && $currentUser) {
+    try {
+        $dynNav = NuMenuRenderer::render($currentUser);
+    } catch (Throwable $e) {
+        error_log('[index.php menu] ' . $e->getMessage());
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -155,6 +169,10 @@ function nu_asset(string $path): string {
             <span class="nu-version">v<?= NU_VERSION ?></span>
         </div>
 
+        <?php if ($dynNav !== ''): ?>
+            <?= $dynNav ?>
+        <?php else: ?>
+        <!-- ══ Static fallback nav (shown until nu_menus is populated) ══ -->
         <nav class="nu-nav">
             <a href="#dashboard" class="nu-nav-item" data-module="dashboard"
                onclick="NuApp.loadModule('dashboard'); return false;">
@@ -320,6 +338,7 @@ function nu_asset(string $path): string {
             <?php endif; ?>
 
         </nav>
+        <?php endif; ?>
 
         <div class="nu-sidebar-footer">
             <div class="nu-user-info">
@@ -412,6 +431,23 @@ function nu_asset(string $path): string {
             if (app) app.classList.add('sidebar-collapsed');
         }
     } catch (e) {}
+
+    // ── Collapsible group children (dynamic nav only) ──────────────────────
+    document.querySelectorAll('.nu-nav-item--has-children').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            var expanded = this.getAttribute('aria-expanded') === 'true';
+            this.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            var ul = this.nextElementSibling;
+            if (ul && ul.classList.contains('nu-nav-children')) {
+                ul.style.display = expanded ? 'none' : 'block';
+            }
+        });
+    });
+    // Hide all child lists on load
+    document.querySelectorAll('.nu-nav-children').forEach(function (ul) {
+        ul.style.display = 'none';
+    });
 
     function _boot() {
         if (!window.NuApp) return;
