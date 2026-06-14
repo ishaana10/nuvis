@@ -1,10 +1,9 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
-// $auth, $nuConfig available. Session open under 'nu5sess'.
 
 $db    = NuDatabase::getInstance();
-$menus = $db->fetchAll("SELECT * FROM nu_menus ORDER BY menu_parent_id ASC, menu_order ASC");
+$menus = $db->fetchAll("SELECT * FROM nu_menus WHERE menu_active = 1 ORDER BY menu_parent_id ASC, menu_order ASC");
 
 // Build form list for target dropdown
 $forms = $db->fetchAll("SELECT form_code, form_name, form_type FROM nu_forms WHERE form_active = 1 ORDER BY form_name");
@@ -15,12 +14,12 @@ foreach ($menus as $m) {
     $pid = (int)($m['menu_parent_id'] ?? 0);
     $menuMap[$pid][] = $m;
 }
+
+// API base path — relative to app root (used in JS fetch calls)
+$apiBase = 'modules/menus/api/menus.php';
 ?>
 
 <style>
-/* ── Menu Builder Styles ──────────────────────────────────────── */
-
-/* ── Menu list tree ── */
 .nb-menu-list { display:flex; flex-direction:column; gap:4px; }
 
 .nb-menu-item {
@@ -78,19 +77,16 @@ foreach ($menus as $m) {
 .nb-menu-btn:hover { background:var(--bg-elevated); border-color:var(--color-primary); color:var(--color-primary); }
 .nb-menu-btn.del:hover { background:#fee; border-color:#e55; color:#c33; }
 
-/* drag-over indicator */
 .nb-menu-item.drag-over {
   border-color:var(--color-primary);
   background:color-mix(in oklch,var(--color-primary) 6%,var(--bg-surface));
 }
 
-/* ── Builder panel ── */
 #menuBuilderCard .nb-fp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
 #menuBuilderCard .nb-fp { display:flex; flex-direction:column; gap:4px; }
 #menuBuilderCard .nb-fp label { font-size:11px; font-weight:600; color:var(--text-secondary); }
 #menuBuilderCard .nb-fp-full { grid-column:1/-1; }
 
-/* Type selector cards */
 .nb-mtype-cards { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:0; }
 .nb-mtype-card {
   flex:1; min-width:90px; border:2px solid var(--border-color); border-radius:10px;
@@ -106,7 +102,6 @@ foreach ($menus as $m) {
 .nb-mtype-icon  { font-size:18px; margin-bottom:4px; }
 .nb-mtype-label { font-size:11px; font-weight:700; color:var(--text-primary); }
 
-/* Icon grid picker */
 .nb-icon-grid {
   display:grid; grid-template-columns:repeat(auto-fill,minmax(36px,1fr)); gap:4px;
   max-height:160px; overflow-y:auto; margin-top:6px;
@@ -122,14 +117,12 @@ foreach ($menus as $m) {
 .nb-icon-btn:hover { border-color:var(--color-primary); background:color-mix(in oklch,var(--color-primary) 8%,var(--bg-surface)); }
 .nb-icon-btn.selected { border-color:var(--color-primary); background:color-mix(in oklch,var(--color-primary) 14%,var(--bg-surface)); }
 
-/* Save bar */
 .nb-menu-save-bar {
   display:flex !important; justify-content:flex-end; align-items:center;
   gap:8px; margin-top:20px; padding-top:16px;
   border-top:1px solid var(--border-color);
 }
 
-/* Empty state */
 .nb-menu-empty {
   text-align:center; padding:56px 24px;
   color:var(--text-tertiary); font-size:13px;
@@ -149,25 +142,19 @@ foreach ($menus as $m) {
     </div>
 
     <div class="nu-card" style="padding:16px;">
-
-      <!-- Tree list -->
       <div class="nb-menu-list" id="menuTree">
 
         <?php if (empty($menus)): ?>
         <div class="nb-menu-empty">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>
-            <circle cx="20" cy="6" r="2" fill="currentColor" stroke="none"/>
-            <circle cx="20" cy="12" r="2" fill="currentColor" stroke="none"/>
-            <circle cx="20" cy="18" r="2" fill="currentColor" stroke="none"/>
           </svg>
-          <p style="margin-bottom:12px;">No menu items yet. Click &ldquo;New Item&rdquo; to build your navigation.</p>
+          <p style="margin-bottom:12px;">No menu items yet.</p>
           <button class="nu-btn nu-btn-primary" onclick="nuMenuBuilder.open()">+ New Item</button>
         </div>
         <?php else: ?>
 
         <?php
-        // ── Render top-level items, then their children inline ──
         $topItems = $menuMap[0] ?? [];
         foreach ($topItems as $m):
           $mid    = (int)$m['menu_id'];
@@ -178,7 +165,6 @@ foreach ($menus as $m) {
           $order  = (int)$m['menu_order'];
           $isDivider = $type === 'divider';
         ?>
-        <!-- Top-level item -->
         <div class="nb-menu-item<?= $isDivider ? ' is-divider' : '' ?>" data-id="<?= $mid ?>" draggable="true">
           <span class="nb-menu-drag-handle" title="Drag to reorder">☰</span>
           <div class="nb-menu-icon-preview"><?= $icon ?></div>
@@ -196,7 +182,6 @@ foreach ($menus as $m) {
         </div>
 
         <?php
-        // ── Children of this top-level item ──
         $children = $menuMap[$mid] ?? [];
         foreach ($children as $c):
           $cid    = (int)$c['menu_id'];
@@ -224,9 +209,9 @@ foreach ($menus as $m) {
         <?php endforeach; ?>
 
         <?php endif; ?>
-      </div><!-- /menuTree -->
-    </div><!-- /nu-card -->
-  </div><!-- /menuListSection -->
+      </div>
+    </div>
+  </div>
 
 
   <!-- ── Builder Panel ──────────────────────────────────────────── -->
@@ -240,44 +225,36 @@ foreach ($menus as $m) {
       <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nuMenuBuilder.close()">&#x2715; Cancel</button>
     </div>
 
-    <!-- Type selector -->
     <div style="margin-bottom:16px;">
       <label class="nu-label" style="margin-bottom:8px;display:block;">Item Type</label>
       <div class="nb-mtype-cards" id="nbMenuTypeCards">
         <label class="nb-mtype-card selected" onclick="nuMenuBuilder.selectType('form',this)">
           <input type="radio" name="menuItemType" value="form" checked>
-          <div class="nb-mtype-icon">⊞</div>
-          <div class="nb-mtype-label">Form</div>
+          <div class="nb-mtype-icon">⊞</div><div class="nb-mtype-label">Form</div>
         </label>
         <label class="nb-mtype-card" onclick="nuMenuBuilder.selectType('report',this)">
           <input type="radio" name="menuItemType" value="report">
-          <div class="nb-mtype-icon">📊</div>
-          <div class="nb-mtype-label">Report</div>
+          <div class="nb-mtype-icon">📊</div><div class="nb-mtype-label">Report</div>
         </label>
         <label class="nb-mtype-card" onclick="nuMenuBuilder.selectType('query',this)">
           <input type="radio" name="menuItemType" value="query">
-          <div class="nb-mtype-icon">🔍</div>
-          <div class="nb-mtype-label">Query</div>
+          <div class="nb-mtype-icon">🔍</div><div class="nb-mtype-label">Query</div>
         </label>
         <label class="nb-mtype-card" onclick="nuMenuBuilder.selectType('url',this)">
           <input type="radio" name="menuItemType" value="url">
-          <div class="nb-mtype-icon">🔗</div>
-          <div class="nb-mtype-label">URL</div>
+          <div class="nb-mtype-icon">🔗</div><div class="nb-mtype-label">URL</div>
         </label>
         <label class="nb-mtype-card" onclick="nuMenuBuilder.selectType('group',this)">
           <input type="radio" name="menuItemType" value="group">
-          <div class="nb-mtype-icon">📂</div>
-          <div class="nb-mtype-label">Group</div>
+          <div class="nb-mtype-icon">📂</div><div class="nb-mtype-label">Group</div>
         </label>
         <label class="nb-mtype-card" onclick="nuMenuBuilder.selectType('divider',this)">
           <input type="radio" name="menuItemType" value="divider">
-          <div class="nb-mtype-icon">―</div>
-          <div class="nb-mtype-label">Divider</div>
+          <div class="nb-mtype-icon">―</div><div class="nb-mtype-label">Divider</div>
         </label>
       </div>
     </div>
 
-    <!-- Fields grid -->
     <div class="nb-fp-grid">
 
       <div class="nb-fp">
@@ -285,47 +262,44 @@ foreach ($menus as $m) {
         <input type="text" id="menuLabel" class="nu-input" placeholder="e.g. Customers">
       </div>
 
-      <!-- Target — changes based on type -->
       <div class="nb-fp" id="menuTargetWrap">
-        <label id="menuTargetLabel">Form Code</label>
-        <!-- Form/Report select -->
+        <label id="menuTargetLabel">Form</label>
         <select id="menuTargetSelect" class="nu-input">
           <option value="">-- select --</option>
           <?php foreach ($forms as $f): ?>
           <option value="<?= htmlspecialchars($f['form_code'], ENT_QUOTES) ?>"
                   data-type="<?= htmlspecialchars($f['form_type'], ENT_QUOTES) ?>">
-            <?= htmlspecialchars($f['form_name']) ?>
-            (<?= htmlspecialchars($f['form_code']) ?>)
+            <?= htmlspecialchars($f['form_name']) ?> (<?= htmlspecialchars($f['form_code']) ?>)
           </option>
           <?php endforeach; ?>
         </select>
-        <!-- URL text input (hidden by default) -->
-        <input type="text" id="menuTargetUrl" class="nu-input" placeholder="https://" style="display:none;">
-        <!-- Free-text code input (for query) -->
-        <input type="text" id="menuTargetCode" class="nu-input" placeholder="query_code" style="display:none;">
+        <input type="text" id="menuTargetUrl"  class="nu-input" placeholder="https://"       style="display:none;">
+        <input type="text" id="menuTargetCode" class="nu-input" placeholder="query_code"     style="display:none;">
       </div>
 
       <div class="nb-fp">
         <label>Parent Item <span style="font-weight:400;color:var(--text-tertiary);">(0 = top level)</span></label>
         <select id="menuParent" class="nu-input">
           <option value="0">-- Top Level --</option>
-          <?php foreach ($menus as $pm): ?>
-          <?php if (($pm['menu_parent_id'] ?? 0) == 0 && ($pm['menu_type'] ?? '') !== 'divider'): ?>
+          <?php
+          // Only top-level non-divider items can be parents — use $menuMap[0] to avoid duplicates
+          foreach ($menuMap[0] ?? [] as $pm):
+            if (($pm['menu_type'] ?? '') === 'divider') continue;
+          ?>
           <option value="<?= (int)$pm['menu_id'] ?>">
             <?= htmlspecialchars($pm['menu_label']) ?>
           </option>
-          <?php endif; ?>
           <?php endforeach; ?>
         </select>
       </div>
 
       <div class="nb-fp">
-        <label>Order <span style="font-weight:400;color:var(--text-tertiary);">(lower = higher up)</span></label>
+        <label>Order</label>
         <input type="number" id="menuOrder" class="nu-input" value="0" min="0">
       </div>
 
       <div class="nb-fp">
-        <label>Role Visibility <span style="font-weight:400;color:var(--text-tertiary);">(blank = all roles)</span></label>
+        <label>Role Visibility <span style="font-weight:400;color:var(--text-tertiary);">(blank = all)</span></label>
         <input type="text" id="menuRoles" class="nu-input" placeholder="admin,manager">
       </div>
 
@@ -335,9 +309,8 @@ foreach ($menus as $m) {
         </label>
       </div>
 
-      <!-- Icon picker full-width -->
       <div class="nb-fp nb-fp-full">
-        <label>Icon <span style="font-weight:400;color:var(--text-tertiary);">(click to select · or type emoji/SVG in the input below)</span></label>
+        <label>Icon</label>
         <div class="nb-icon-grid" id="iconGrid">
           <?php
           $icons = [
@@ -363,68 +336,56 @@ foreach ($menus as $m) {
                oninput="nuMenuBuilder.setCustomIcon(this.value)">
       </div>
 
-    </div><!-- /nb-fp-grid -->
+    </div>
 
-    <!-- Save bar -->
     <div class="nb-menu-save-bar">
       <button type="button" class="nu-btn nu-btn-ghost" onclick="nuMenuBuilder.close()">Cancel</button>
       <button type="button" class="nu-btn nu-btn-primary" onclick="nuMenuBuilder.save()">💾 Save Item</button>
     </div>
-  </div><!-- /menuBuilderCard -->
+  </div>
 
-</div><!-- /nu-menus -->
+</div>
 
 <script>
-// ── Guard: only initialise once per page load ──────────────────
 if (!window._nbMenusModuleInit) {
   window._nbMenusModuleInit = true;
 
+  // API path — resolved relative to the app root by NuApp's fetch base
+  var NU_MENUS_API = 'modules/menus/api/menus.php';
+
   window.nuMenuBuilder = {
 
-    // ── Open builder for new item ──────────────────────────────────
     open: function(parentId, parentLabel) {
       document.getElementById('editMenuId').value       = '';
       document.getElementById('editMenuParentId').value = parentId || 0;
       document.getElementById('menuBuilderTitle').textContent =
-        parentId ? ('New Item under \u201c' + (parentLabel || '#'+parentId) + '\u201d') : 'New Menu Item';
-
-      // Reset fields
+        parentId ? ('New Item under \u201c' + (parentLabel || '#' + parentId) + '\u201d') : 'New Menu Item';
       document.getElementById('menuLabel').value    = '';
       document.getElementById('menuOrder').value    = 0;
       document.getElementById('menuRoles').value    = '';
       document.getElementById('menuActive').checked = true;
       document.getElementById('menuIconCustom').value = '';
-      document.getElementById('editMenuIcon').value = '☰';
-      document.getElementById('menuParent').value   = parentId || 0;
-
-      // Reset type to form
+      document.getElementById('editMenuIcon').value   = '\u2630';
+      document.getElementById('menuParent').value     = parentId || 0;
       this.selectType('form', document.querySelector('.nb-mtype-card'));
-
-      // Deselect all icon buttons
-      document.querySelectorAll('.nb-icon-btn').forEach(b => b.classList.remove('selected'));
-      var firstBtn = document.querySelector('.nb-icon-btn');
-      if (firstBtn) { firstBtn.classList.add('selected'); document.getElementById('editMenuIcon').value = firstBtn.dataset.icon; }
-
-      document.getElementById('menuListSection').style.display  = 'none';
-      document.getElementById('menuBuilderCard').style.display  = '';
+      document.querySelectorAll('.nb-icon-btn').forEach(function(b){ b.classList.remove('selected'); });
+      var fb = document.querySelector('.nb-icon-btn');
+      if (fb) { fb.classList.add('selected'); document.getElementById('editMenuIcon').value = fb.dataset.icon; }
+      document.getElementById('menuListSection').style.display = 'none';
+      document.getElementById('menuBuilderCard').style.display = '';
     },
 
-    // ── Open builder pre-filled for a child item ───────────────────
-    addChild: function(parentId, parentLabel) {
-      this.open(parentId, parentLabel);
-    },
+    addChild: function(parentId, parentLabel) { this.open(parentId, parentLabel); },
 
-    // ── Close builder, show list ────────────────────────────────────
     close: function() {
       document.getElementById('menuBuilderCard').style.display  = 'none';
       document.getElementById('menuListSection').style.display  = '';
     },
 
-    // ── Edit an existing item (load via API) ───────────────────────
     edit: function(id) {
       var self = this;
-      fetch('api/menus.php?action=get&id=' + id)
-        .then(function(r){ return r.json(); })
+      fetch(NU_MENUS_API + '?action=get&id=' + id)
+        .then(function(r) { return r.json(); })
         .then(function(d) {
           if (!d.success) { alert(d.message || 'Could not load item.'); return; }
           var m = d.menu;
@@ -433,55 +394,44 @@ if (!window._nbMenusModuleInit) {
           document.getElementById('menuBuilderTitle').textContent = 'Edit: ' + m.menu_label;
           document.getElementById('menuLabel').value    = m.menu_label  || '';
           document.getElementById('menuOrder').value    = m.menu_order  || 0;
-          document.getElementById('menuRoles').value    = m.menu_roles  || '';
+          document.getElementById('menuRoles').value    = m.menu_role_access || '';
           document.getElementById('menuActive').checked = (m.menu_active == 1);
           document.getElementById('menuParent').value   = m.menu_parent_id || 0;
-
-          // Type
-          var typeCard = document.querySelector('.nb-mtype-card[onclick*="\'' + m.menu_type + '\'"]');
-          self.selectType(m.menu_type, typeCard);
-
-          // Target
-          var type = m.menu_type;
+          self.selectType(m.menu_type || 'form',
+            document.querySelector('.nb-mtype-card[onclick*=\"\'' + (m.menu_type || 'form') + '\'\"]'));
+          var type = m.menu_type || 'form';
           if (type === 'url') {
-            document.getElementById('menuTargetUrl').value = m.menu_target || '';
+            document.getElementById('menuTargetUrl').value  = m.menu_target || '';
           } else if (type === 'query') {
             document.getElementById('menuTargetCode').value = m.menu_target || '';
           } else {
             document.getElementById('menuTargetSelect').value = m.menu_target || '';
           }
-
-          // Icon
-          var icon = m.menu_icon || '☰';
+          var icon = m.menu_icon || '\u2630';
           document.getElementById('editMenuIcon').value   = icon;
           document.getElementById('menuIconCustom').value = icon;
           document.querySelectorAll('.nb-icon-btn').forEach(function(b) {
             b.classList.toggle('selected', b.dataset.icon === icon);
           });
-
           document.getElementById('menuListSection').style.display = 'none';
           document.getElementById('menuBuilderCard').style.display = '';
         })
-        .catch(function(e){ console.error(e); alert('Network error.'); });
+        .catch(function(e) { console.error(e); alert('Network error loading menu item.'); });
     },
 
-    // ── Select item type ───────────────────────────────────────────
     selectType: function(type, card) {
-      document.querySelectorAll('.nb-mtype-card').forEach(c => c.classList.remove('selected'));
+      document.querySelectorAll('.nb-mtype-card').forEach(function(c){ c.classList.remove('selected'); });
       if (card) card.classList.add('selected');
       var radio = document.querySelector('input[name="menuItemType"][value="' + type + '"]');
       if (radio) radio.checked = true;
-
       var labelEl = document.getElementById('menuTargetLabel');
       var selEl   = document.getElementById('menuTargetSelect');
       var urlEl   = document.getElementById('menuTargetUrl');
       var codeEl  = document.getElementById('menuTargetCode');
       var wrapEl  = document.getElementById('menuTargetWrap');
-
-      selEl.style.display  = 'none';
-      urlEl.style.display  = 'none';
+      selEl.style.display = 'none';
+      urlEl.style.display = 'none';
       codeEl.style.display = 'none';
-
       if (type === 'form' || type === 'report') {
         wrapEl.style.display = '';
         labelEl.textContent  = (type === 'form') ? 'Form' : 'Report';
@@ -499,27 +449,24 @@ if (!window._nbMenusModuleInit) {
         labelEl.textContent  = 'URL';
         urlEl.style.display  = '';
       } else {
-        // group / divider — no target
         wrapEl.style.display = 'none';
       }
     },
 
-    // ── Icon selection ─────────────────────────────────────────────
     selectIcon: function(icon, btn) {
-      document.querySelectorAll('.nb-icon-btn').forEach(b => b.classList.remove('selected'));
+      document.querySelectorAll('.nb-icon-btn').forEach(function(b){ b.classList.remove('selected'); });
       if (btn) btn.classList.add('selected');
       document.getElementById('editMenuIcon').value   = icon;
       document.getElementById('menuIconCustom').value = icon;
     },
 
     setCustomIcon: function(val) {
-      document.getElementById('editMenuIcon').value = val || '☰';
-      document.querySelectorAll('.nb-icon-btn').forEach(b => {
+      document.getElementById('editMenuIcon').value = val || '\u2630';
+      document.querySelectorAll('.nb-icon-btn').forEach(function(b) {
         b.classList.toggle('selected', b.dataset.icon === val);
       });
     },
 
-    // ── Save (create or update) ────────────────────────────────────
     save: function() {
       var id     = document.getElementById('editMenuId').value.trim();
       var type   = (document.querySelector('input[name="menuItemType"]:checked') || {}).value || 'form';
@@ -528,26 +475,15 @@ if (!window._nbMenusModuleInit) {
       var parent = parseInt(document.getElementById('menuParent').value, 10) || 0;
       var roles  = document.getElementById('menuRoles').value.trim();
       var active = document.getElementById('menuActive').checked ? 1 : 0;
-      var icon   = document.getElementById('editMenuIcon').value || '☰';
-
+      var icon   = document.getElementById('editMenuIcon').value || '\u2630';
       var target = '';
-      if (type === 'url') {
-        target = document.getElementById('menuTargetUrl').value.trim();
-      } else if (type === 'query') {
-        target = document.getElementById('menuTargetCode').value.trim();
-      } else if (type === 'form' || type === 'report') {
-        target = document.getElementById('menuTargetSelect').value;
-      }
-
-      if (!label && type !== 'divider') {
-        document.getElementById('menuLabel').focus();
-        return;
-      }
-
+      if (type === 'url')         target = document.getElementById('menuTargetUrl').value.trim();
+      else if (type === 'query')  target = document.getElementById('menuTargetCode').value.trim();
+      else if (type === 'form' || type === 'report') target = document.getElementById('menuTargetSelect').value;
+      if (!label && type !== 'divider') { document.getElementById('menuLabel').focus(); return; }
       var payload = { id: id, type: type, label: label, target: target,
                       parent: parent, order: order, roles: roles, active: active, icon: icon };
-
-      fetch('api/menus.php?action=' + (id ? 'update' : 'create'), {
+      fetch(NU_MENUS_API + '?action=' + (id ? 'update' : 'create'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -555,8 +491,7 @@ if (!window._nbMenusModuleInit) {
       .then(function(r){ return r.json(); })
       .then(function(d) {
         if (d.success) {
-          if (window.NuApp) NuApp.loadModule('menus');
-          else location.reload();
+          if (window.NuApp) NuApp.loadModule('menus'); else location.reload();
         } else {
           alert(d.message || 'Save failed.');
         }
@@ -564,10 +499,9 @@ if (!window._nbMenusModuleInit) {
       .catch(function(e){ console.error(e); alert('Network error.'); });
     },
 
-    // ── Delete ─────────────────────────────────────────────────────
     del: function(id, label) {
       if (!confirm('Delete \u201c' + label + '\u201d? Its child items will also be removed.')) return;
-      fetch('api/menus.php?action=delete', {
+      fetch(NU_MENUS_API + '?action=delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: id })
@@ -575,27 +509,22 @@ if (!window._nbMenusModuleInit) {
       .then(function(r){ return r.json(); })
       .then(function(d) {
         if (d.success) {
-          if (window.NuApp) NuApp.loadModule('menus');
-          else location.reload();
+          if (window.NuApp) NuApp.loadModule('menus'); else location.reload();
         } else {
           alert(d.message || 'Delete failed.');
         }
       })
       .catch(function(e){ console.error(e); alert('Network error.'); });
     }
-
-  }; // end nuMenuBuilder
-
+  };
 
   // ── Drag-to-reorder ────────────────────────────────────────────
   (function() {
     var dragging = null;
-
     function bindDrag() {
       document.querySelectorAll('.nb-menu-item[draggable]').forEach(function(el) {
         el.addEventListener('dragstart', function(e) {
-          dragging = el;
-          el.style.opacity = '.4';
+          dragging = el; el.style.opacity = '.4';
           e.dataTransfer.effectAllowed = 'move';
         });
         el.addEventListener('dragend', function() {
@@ -603,29 +532,20 @@ if (!window._nbMenusModuleInit) {
           document.querySelectorAll('.nb-menu-item').forEach(function(r){ r.classList.remove('drag-over'); });
           dragging = null;
         });
-        el.addEventListener('dragover', function(e) {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          if (el !== dragging) el.classList.add('drag-over');
-        });
-        el.addEventListener('dragleave', function() {
-          el.classList.remove('drag-over');
-        });
+        el.addEventListener('dragover',  function(e) { e.preventDefault(); if (el !== dragging) el.classList.add('drag-over'); });
+        el.addEventListener('dragleave', function()  { el.classList.remove('drag-over'); });
         el.addEventListener('drop', function(e) {
-          e.preventDefault();
-          el.classList.remove('drag-over');
+          e.preventDefault(); el.classList.remove('drag-over');
           if (!dragging || dragging === el) return;
-          var tree = document.getElementById('menuTree');
+          var tree  = document.getElementById('menuTree');
           var nodes = Array.from(tree.children).filter(function(n){ return n.classList.contains('nb-menu-item'); });
-          var fromIdx = nodes.indexOf(dragging);
-          var toIdx   = nodes.indexOf(el);
-          if (fromIdx < 0 || toIdx < 0) return;
-          if (fromIdx < toIdx) { el.after(dragging); } else { el.before(dragging); }
-          // Persist new order via API
+          var fi = nodes.indexOf(dragging), ti = nodes.indexOf(el);
+          if (fi < 0 || ti < 0) return;
+          if (fi < ti) el.after(dragging); else el.before(dragging);
           var ordered = Array.from(tree.querySelectorAll('.nb-menu-item')).map(function(n, i){
             return { id: n.dataset.id, order: i };
           });
-          fetch('api/menus.php?action=reorder', {
+          fetch(NU_MENUS_API + '?action=reorder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ items: ordered })
@@ -633,7 +553,6 @@ if (!window._nbMenusModuleInit) {
         });
       });
     }
-
     bindDrag();
   })();
 
