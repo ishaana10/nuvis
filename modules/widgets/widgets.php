@@ -47,22 +47,37 @@ function wu_run_sql(NuDatabase $db, string $sql, int $userId): array {
     }
 }
 
+function wu_accent(string $color): string {
+    switch ($color) {
+        case 'success': return 'var(--color-success,#437a22)';
+        case 'warning': return 'var(--color-warning,#964219)';
+        case 'error':   return 'var(--color-error,#a12c7b)';
+        default:        return 'var(--color-primary,#01696f)';
+    }
+}
+
+function wu_chart_type(string $widgetType): string {
+    switch ($widgetType) {
+        case 'chart_pie':  return 'pie';
+        case 'chart_line': return 'line';
+        default:           return 'bar';
+    }
+}
+
 function wu_render(array $w, NuDatabase $db, int $userId): string {
     try {
-        $cfg   = json_decode($w['widget_config'] ?? '{}', true) ?: [];
-        $type  = $w['widget_type'] ?? 'custom';
-        $accent = match($cfg['color'] ?? 'primary') {
-            'success' => 'var(--color-success,#437a22)',
-            'warning' => 'var(--color-warning,#964219)',
-            'error'   => 'var(--color-error,#a12c7b)',
-            default   => 'var(--color-primary,#01696f)',
-        };
+        $cfg    = json_decode($w['widget_config'] ?? '{}', true) ?: [];
+        $type   = $w['widget_type'] ?? 'custom';
+        $accent = wu_accent($cfg['color'] ?? 'primary');
+
         switch ($type) {
             case 'stat':
                 $rows = wu_run_sql($db, $cfg['sql'] ?? 'SELECT 0 as value', $userId);
-                if (isset($rows[0]['_error'])) return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error</p>';
-                $val  = $rows[0]['value'] ?? (isset($rows[0]) ? reset($rows[0]) : 0);
-                $sub  = htmlspecialchars($cfg['subtitle'] ?? '');
+                if (isset($rows[0]['_error'])) {
+                    return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error</p>';
+                }
+                $val = isset($rows[0]['value']) ? $rows[0]['value'] : (isset($rows[0]) ? reset($rows[0]) : 0);
+                $sub = htmlspecialchars($cfg['subtitle'] ?? '');
                 return '<div style="display:flex;flex-direction:column;gap:4px;padding:4px 0;">'
                      . '<div style="font-size:2.5rem;font-weight:800;line-height:1;color:' . $accent . ';font-variant-numeric:tabular-nums;">'
                      . number_format((float)$val) . '</div>'
@@ -73,37 +88,44 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
             case 'chart_line':
             case 'chart_pie':
                 $rows   = wu_run_sql($db, $cfg['sql'] ?? '', $userId);
-                if (isset($rows[0]['_error'])) return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error</p>';
-                $labels = array_column($rows, 'label');
-                $values = array_column($rows, 'value');
-                $ctype  = match($type) { 'chart_pie' => 'pie', 'chart_line' => 'line', default => 'bar' };
-                $id     = 'wc_' . $w['widget_id'];
+                if (isset($rows[0]['_error'])) {
+                    return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error</p>';
+                }
+                $labels    = array_column($rows, 'label');
+                $values    = array_column($rows, 'value');
+                $ctype     = wu_chart_type($type);
+                $id        = 'wc_' . $w['widget_id'];
+                $bgColor   = ($ctype === 'pie')
+                    ? ['#01696f','#437a22','#006494','#7a39bb','#da7101','#a12c7b']
+                    : 'rgba(1,105,111,0.75)';
                 $chartJson = json_encode([
                     'type' => $ctype,
                     'data' => ['labels' => $labels, 'datasets' => [[
                         'label'           => htmlspecialchars($w['widget_title']),
                         'data'            => $values,
-                        'backgroundColor' => $ctype === 'pie'
-                            ? ['#01696f','#437a22','#006494','#7a39bb','#da7101','#a12c7b']
-                            : 'rgba(1,105,111,0.75)',
-                        'borderColor' => 'rgba(1,105,111,1)',
-                        'borderWidth' => 1,
-                        'tension'     => 0.4,
-                        'fill'        => $ctype === 'line',
+                        'backgroundColor' => $bgColor,
+                        'borderColor'     => 'rgba(1,105,111,1)',
+                        'borderWidth'     => 1,
+                        'tension'         => 0.4,
+                        'fill'            => ($ctype === 'line'),
                     ]]],
                     'options' => [
                         'responsive'          => true,
                         'maintainAspectRatio' => false,
-                        'plugins'             => ['legend' => ['display' => $ctype === 'pie']],
-                        'scales'              => $ctype === 'pie' ? (object)[] : ['y' => ['beginAtZero' => true]],
+                        'plugins'             => ['legend' => ['display' => ($ctype === 'pie')]],
+                        'scales'              => ($ctype === 'pie') ? (object)[] : ['y' => ['beginAtZero' => true]],
                     ],
                 ]);
                 return '<div style="height:220px;"><canvas id="' . $id . '" data-chartjs=\'' . htmlspecialchars($chartJson, ENT_QUOTES) . '\'></canvas></div>';
 
             case 'table':
                 $rows = wu_run_sql($db, $cfg['sql'] ?? '', $userId);
-                if (isset($rows[0]['_error'])) return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error: ' . htmlspecialchars($rows[0]['_error']) . '</p>';
-                if (empty($rows)) return '<p style="color:var(--color-text-muted,#888);padding:12px 0;">No data</p>';
+                if (isset($rows[0]['_error'])) {
+                    return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error: ' . htmlspecialchars($rows[0]['_error']) . '</p>';
+                }
+                if (empty($rows)) {
+                    return '<p style="color:var(--color-text-muted,#888);padding:12px 0;">No data</p>';
+                }
                 $cols = array_keys($rows[0]);
                 $html = '<div class="nu-table-wrap"><table class="nu-table"><thead><tr>';
                 foreach ($cols as $c) $html .= '<th>' . htmlspecialchars(ucfirst($c)) . '</th>';
@@ -116,32 +138,40 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
                 return $html . '</tbody></table></div>';
 
             case 'list':
-                $items = $cfg['items'] ?? [];
-                if (empty($items)) return '<p style="color:var(--color-text-muted);padding:12px 0;">No links configured</p>';
+                $items = isset($cfg['items']) ? $cfg['items'] : [];
+                if (empty($items)) {
+                    return '<p style="color:var(--color-text-muted);padding:12px 0;">No links configured</p>';
+                }
                 $html = '<div style="display:flex;flex-direction:column;gap:6px;">';
                 foreach ($items as $item) {
                     $label  = htmlspecialchars($item['label'] ?? '');
                     $module = htmlspecialchars($item['module'] ?? '');
                     $url    = htmlspecialchars($item['url'] ?? '');
-                    $click  = $module ? "NuApp.loadModule('" . $module . "')" : "window.open('" . $url . "','_blank')";
+                    $click  = $module
+                        ? "NuApp.loadModule('" . $module . "')"
+                        : "window.open('" . $url . "','_blank')";
                     $html  .= '<button class="nu-btn nu-btn-ghost" style="justify-content:flex-start;" onclick="' . $click . '">' . $label . '</button>';
                 }
                 return $html . '</div>';
 
             case 'progress':
-                $rows   = wu_run_sql($db, $cfg['sql'] ?? '', $userId);
-                if (isset($rows[0]['_error'])) return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error</p>';
-                $total  = (float)($rows[0]['total'] ?? 1);
-                $done   = (float)($rows[0]['done']  ?? 0);
-                $pct    = $total > 0 ? min(100, round($done / $total * 100)) : 0;
-                $label  = htmlspecialchars($cfg['label'] ?? "$done / $total");
+                $rows  = wu_run_sql($db, $cfg['sql'] ?? '', $userId);
+                if (isset($rows[0]['_error'])) {
+                    return '<p style="color:var(--color-error,#a12c7b);font-size:12px;">SQL error</p>';
+                }
+                $total = (float)(isset($rows[0]['total']) ? $rows[0]['total'] : 1);
+                $done  = (float)(isset($rows[0]['done'])  ? $rows[0]['done']  : 0);
+                $pct   = $total > 0 ? min(100, (int)round($done / $total * 100)) : 0;
+                $label = htmlspecialchars(isset($cfg['label']) ? $cfg['label'] : "$done / $total");
                 return '<div style="margin-top:4px;">'
-                     . '<div style="display:flex;justify-content:space-between;font-size:var(--text-xs,.75rem);color:var(--color-text-muted);margin-bottom:6px;"><span>' . $label . '</span><span>' . $pct . '%</span></div>'
+                     . '<div style="display:flex;justify-content:space-between;font-size:var(--text-xs,.75rem);color:var(--color-text-muted);margin-bottom:6px;">'
+                     . '<span>' . $label . '</span><span>' . $pct . '%</span></div>'
                      . '<div style="height:8px;border-radius:var(--radius-full,9999px);background:var(--color-surface-offset,#eee);overflow:hidden;">'
-                     . '<div style="width:' . $pct . '%;height:100%;background:' . $accent . ';border-radius:inherit;transition:width .6s ease;"></div></div></div>';
+                     . '<div style="width:' . $pct . '%;height:100%;background:' . $accent . ';border-radius:inherit;transition:width .6s ease;"></div>'
+                     . '</div></div>';
 
             case 'custom':
-                return $cfg['html'] ?? '<p style="color:var(--color-text-muted);">No content set.</p>';
+                return isset($cfg['html']) ? $cfg['html'] : '<p style="color:var(--color-text-muted);">No content set.</p>';
 
             default:
                 return '<p style="color:var(--color-text-muted);">Unknown widget type: ' . htmlspecialchars($type) . '</p>';
@@ -152,7 +182,7 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
     }
 }
 
-// ── Resolve widgets ────────────────────────────────────────────────────────
+// ── Resolve widgets ───────────────────────────────────────────────────────
 $widgets = wu_resolve_widgets($db, $userId, $role);
 
 try {
@@ -201,8 +231,8 @@ try {
     </div>
 <?php else: ?>
 <?php foreach ($widgets as $w):
-    $colSpan = max(1, min(4, (int)($w['widget_width'] ?? 2)));
-    $rowSpan = max(1, min(3, (int)($w['widget_height'] ?? 1)));
+    $colSpan = max(1, min(4, (int)(isset($w['widget_width'])  ? $w['widget_width']  : 2)));
+    $rowSpan = max(1, min(3, (int)(isset($w['widget_height']) ? $w['widget_height'] : 1)));
 ?>
     <div class="nu-widget-card nu-card" data-widget-id="<?= (int)$w['widget_id'] ?>"
          style="grid-column:span <?= $colSpan ?>;grid-row:span <?= $rowSpan ?>;position:relative;">
@@ -292,32 +322,32 @@ const API = 'modules/dashboard/widget_api.php';
 const chartInstances = {};
 
 function initCharts() {
-    document.querySelectorAll('[data-chartjs]').forEach(canvas => {
-        const id = canvas.id;
+    document.querySelectorAll('[data-chartjs]').forEach(function(canvas) {
+        var id = canvas.id;
         if (chartInstances[id]) { chartInstances[id].destroy(); }
         try {
-            const cfg = JSON.parse(canvas.dataset.chartjs);
+            var cfg = JSON.parse(canvas.dataset.chartjs);
             chartInstances[id] = new Chart(canvas, cfg);
         } catch(e) { console.warn('[nuDash chart]', e); }
     });
 }
 
-const TYPE_CONFIGS = {
-    stat: `<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">must return a <code>value</code> column</small></label><textarea class="nu-input" id="nuWSql" rows="3" placeholder="SELECT COUNT(*) as value FROM my_table WHERE status='pending'"></textarea></div><div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">Subtitle (optional)</label><input class="nu-input" id="nuWSubtitle" placeholder="Pending tasks"></div><div class="nu-field"><label class="nu-label">Accent colour</label><select class="nu-input" id="nuWColor"><option value="primary">Teal</option><option value="success">Green</option><option value="warning">Orange</option><option value="error">Red</option></select></div>`,
-    chart_bar: `<div class="nu-field"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">must return <code>label</code> and <code>value</code> columns</small></label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT status AS label, COUNT(*) AS value FROM my_table GROUP BY status"></textarea></div>`,
-    chart_line: `<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT DATE(created_at) AS label, COUNT(*) AS value FROM my_table GROUP BY DATE(created_at) ORDER BY label"></textarea></div>`,
-    chart_pie: `<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT category AS label, COUNT(*) AS value FROM my_table GROUP BY category"></textarea></div>`,
-    table: `<div class="nu-field"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">column names become headers; use <code>{{user_id}}</code> to filter by current user</small></label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT title AS Task, status AS Status FROM my_tasks WHERE assigned_to={{user_id}} LIMIT 10"></textarea></div>`,
-    list: `<div class="nu-field"><label class="nu-label">Links (one per line: <code>Label|module_name</code> or <code>Label|https://url</code>)</label><textarea class="nu-input" id="nuWLinks" rows="5" placeholder="Open Forms|forms&#10;My Reports|reports&#10;Google|https://google.com"></textarea></div>`,
-    progress: `<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">must return <code>done</code> and <code>total</code> columns</small></label><textarea class="nu-input" id="nuWSql" rows="3" placeholder="SELECT SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done, COUNT(*) AS total FROM my_tasks"></textarea></div><div class="nu-field"><label class="nu-label">Label</label><input class="nu-input" id="nuWSubtitle" placeholder="Tasks completed"></div>`,
-    custom: `<div class="nu-field"><label class="nu-label">HTML Content</label><textarea class="nu-input" id="nuWHtml" rows="6" placeholder="<p>Any HTML here...</p>"></textarea></div>`,
+var TYPE_CONFIGS = {
+    stat: '<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">must return a <code>value</code> column</small></label><textarea class="nu-input" id="nuWSql" rows="3" placeholder="SELECT COUNT(*) as value FROM my_table"></textarea></div><div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">Subtitle (optional)</label><input class="nu-input" id="nuWSubtitle" placeholder="Pending tasks"></div><div class="nu-field"><label class="nu-label">Accent colour</label><select class="nu-input" id="nuWColor"><option value="primary">Teal</option><option value="success">Green</option><option value="warning">Orange</option><option value="error">Red</option></select></div>',
+    chart_bar: '<div class="nu-field"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">columns: <code>label</code>, <code>value</code></small></label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT status AS label, COUNT(*) AS value FROM my_table GROUP BY status"></textarea></div>',
+    chart_line: '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT DATE(created_at) AS label, COUNT(*) AS value FROM my_table GROUP BY DATE(created_at) ORDER BY label"></textarea></div>',
+    chart_pie: '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT category AS label, COUNT(*) AS value FROM my_table GROUP BY category"></textarea></div>',
+    table: '<div class="nu-field"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">use <code>{{user_id}}</code> to filter by current user</small></label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT title AS Task, status AS Status FROM my_tasks LIMIT 10"></textarea></div>',
+    list: '<div class="nu-field"><label class="nu-label">Links (one per line: <code>Label|module_name</code> or <code>Label|https://url</code>)</label><textarea class="nu-input" id="nuWLinks" rows="5" placeholder="Open Forms|forms\nMy Reports|reports"></textarea></div>',
+    progress: '<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">must return <code>done</code> and <code>total</code> columns</small></label><textarea class="nu-input" id="nuWSql" rows="3"></textarea></div><div class="nu-field"><label class="nu-label">Label</label><input class="nu-input" id="nuWSubtitle" placeholder="Tasks completed"></div>',
+    custom: '<div class="nu-field"><label class="nu-label">HTML Content</label><textarea class="nu-input" id="nuWHtml" rows="6" placeholder="<p>Any HTML here...</p>"></textarea></div>'
 };
 
 window.nuDash = {
     editMode: false,
     editingId: null,
 
-    openBuilder(id) {
+    openBuilder: function(id) {
         this.editingId = id || null;
         document.getElementById('nuWid').value = id || '';
         if (!id) {
@@ -325,148 +355,187 @@ window.nuDash = {
             document.getElementById('nuWTitle').value  = '';
             document.getElementById('nuWWidth').value  = '2';
             document.getElementById('nuWHeight').value = '1';
-            const rEl = document.getElementById('nuWTargetRole');
+            var rEl = document.getElementById('nuWTargetRole');
             if (rEl) rEl.value = '';
         }
         this.onTypeChange();
         document.getElementById('nuBuilderModal').style.display = 'block';
     },
 
-    closeBuilder() {
+    closeBuilder: function() {
         document.getElementById('nuBuilderModal').style.display = 'none';
         document.getElementById('nuWPreviewWrap').style.display = 'none';
     },
 
-    onTypeChange() {
-        const type = document.getElementById('nuWType').value;
+    onTypeChange: function() {
+        var type = document.getElementById('nuWType').value;
         document.getElementById('nuWConfigArea').innerHTML = TYPE_CONFIGS[type] || '';
     },
 
-    buildConfig() {
-        const type = document.getElementById('nuWType').value;
-        const sql  = document.getElementById('nuWSql')?.value?.trim();
+    buildConfig: function() {
+        var type = document.getElementById('nuWType').value;
+        var sqlEl = document.getElementById('nuWSql');
+        var sql = sqlEl ? sqlEl.value.trim() : '';
         switch(type) {
-            case 'stat':      return { sql, subtitle: document.getElementById('nuWSubtitle')?.value, color: document.getElementById('nuWColor')?.value };
+            case 'stat':
+                return {
+                    sql: sql,
+                    subtitle: (document.getElementById('nuWSubtitle') || {}).value,
+                    color: (document.getElementById('nuWColor') || {}).value
+                };
             case 'chart_bar':
             case 'chart_line':
-            case 'chart_pie': return { sql };
-            case 'table':     return { sql };
-            case 'progress':  return { sql, label: document.getElementById('nuWSubtitle')?.value };
-            case 'list': {
-                const lines = (document.getElementById('nuWLinks')?.value || '').split('\n').filter(Boolean);
-                return { items: lines.map(l => {
-                    const [label, target] = l.split('|');
-                    return (target||'').trim().startsWith('http')
-                        ? { label: label.trim(), url: target.trim() }
-                        : { label: label.trim(), module: (target||'').trim() };
+            case 'chart_pie':
+            case 'table':
+                return { sql: sql };
+            case 'progress':
+                return { sql: sql, label: (document.getElementById('nuWSubtitle') || {}).value };
+            case 'list':
+                var lines = ((document.getElementById('nuWLinks') || {}).value || '').split('\n').filter(Boolean);
+                return { items: lines.map(function(l) {
+                    var parts  = l.split('|');
+                    var label  = parts[0] ? parts[0].trim() : '';
+                    var target = parts[1] ? parts[1].trim() : '';
+                    return target.indexOf('http') === 0
+                        ? { label: label, url: target }
+                        : { label: label, module: target };
                 })};
-            }
-            case 'custom': return { html: document.getElementById('nuWHtml')?.value };
-            default: return {};
+            case 'custom':
+                return { html: (document.getElementById('nuWHtml') || {}).value };
+            default:
+                return {};
         }
     },
 
-    async runPreview() {
-        const config = this.buildConfig();
-        const wrap   = document.getElementById('nuWPreviewWrap');
-        const prev   = document.getElementById('nuWPreview');
+    runPreview: function() {
+        var self   = this;
+        var config = this.buildConfig();
+        var wrap   = document.getElementById('nuWPreviewWrap');
+        var prev   = document.getElementById('nuWPreview');
         wrap.style.display = 'block';
         prev.innerHTML = '<span style="color:var(--color-text-muted)">Loading...</span>';
         if (config.sql) {
-            try {
-                const r = await fetch(API + '?action=run_sql', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({sql:config.sql}) });
-                const d = await r.json();
-                if (d.error) { prev.innerHTML = '<span style="color:var(--color-error)">' + d.error + '</span>'; return; }
-                prev.innerHTML = '<pre style="font-size:12px;white-space:pre-wrap;">' + JSON.stringify(d.rows?.slice(0,3), null, 2) + '</pre>';
-            } catch(e) { prev.innerHTML = '<span style="color:var(--color-error)">Request failed</span>'; }
+            fetch(API + '?action=run_sql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql: config.sql })
+            }).then(function(r) {
+                return r.json();
+            }).then(function(d) {
+                if (d.error) {
+                    prev.innerHTML = '<span style="color:var(--color-error)">' + d.error + '</span>';
+                } else {
+                    prev.innerHTML = '<pre style="font-size:12px;white-space:pre-wrap;">' + JSON.stringify((d.rows || []).slice(0, 3), null, 2) + '</pre>';
+                }
+            }).catch(function() {
+                prev.innerHTML = '<span style="color:var(--color-error)">Request failed</span>';
+            });
         } else {
             prev.innerHTML = '<em>No SQL to preview for this widget type.</em>';
         }
     },
 
-    async saveWidget() {
-        const id     = document.getElementById('nuWid').value;
-        const type   = document.getElementById('nuWType').value;
-        const title  = (document.getElementById('nuWTitle').value.trim()) || 'Widget';
-        const width  = parseInt(document.getElementById('nuWWidth').value);
-        const height = parseInt(document.getElementById('nuWHeight').value);
-        const config = this.buildConfig();
-        const roleEl = document.getElementById('nuWTargetRole');
-        const targetRole = roleEl?.value || null;
-        const payload = { type, title, width, height, config };
+    saveWidget: function() {
+        var self     = this;
+        var id       = document.getElementById('nuWid').value;
+        var type     = document.getElementById('nuWType').value;
+        var titleEl  = document.getElementById('nuWTitle');
+        var title    = (titleEl && titleEl.value.trim()) ? titleEl.value.trim() : 'Widget';
+        var width    = parseInt(document.getElementById('nuWWidth').value)  || 2;
+        var height   = parseInt(document.getElementById('nuWHeight').value) || 1;
+        var config   = this.buildConfig();
+        var roleEl   = document.getElementById('nuWTargetRole');
+        var targetRole = roleEl ? roleEl.value : null;
+        var payload  = { type: type, title: title, width: width, height: height, config: config };
         if (targetRole) payload.target_role = targetRole;
         if (id) payload.id = id;
-        const action = id ? 'update' : 'add';
-        try {
-            const r = await fetch(API + '?action=' + action, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-            const d = await r.json();
-            if (d.ok) { this.closeBuilder(); location.reload(); }
+        var action = id ? 'update' : 'add';
+        fetch(API + '?action=' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(r) {
+            return r.json();
+        }).then(function(d) {
+            if (d.ok) { self.closeBuilder(); location.reload(); }
             else alert('Error: ' + (d.error || 'Unknown'));
-        } catch(e) { alert('Request failed: ' + e.message); }
+        }).catch(function(e) { alert('Request failed: ' + e.message); });
     },
 
-    async removeWidget(id) {
+    removeWidget: function(id) {
         if (!confirm('Remove this widget from your dashboard?')) return;
-        try {
-            const r = await fetch(API + '?action=remove', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
-            const d = await r.json();
+        fetch(API + '?action=remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        }).then(function(r) {
+            return r.json();
+        }).then(function(d) {
             if (d.ok) location.reload();
-            else alert('Error: ' + (d.error||''));
-        } catch(e) { alert('Request failed'); }
+            else alert('Error: ' + (d.error || ''));
+        }).catch(function() { alert('Request failed'); });
     },
 
-    editWidget(id) { this.openBuilder(id); },
+    editWidget: function(id) { this.openBuilder(id); },
 
-    toggleEditMode() {
+    toggleEditMode: function() {
         this.editMode = !this.editMode;
-        const btn = document.getElementById('nuDashEditBtn');
-        document.querySelectorAll('.nu-widget-controls').forEach(el => el.style.display = this.editMode ? 'flex' : 'none');
-        document.querySelectorAll('.nu-widget-card').forEach(el => {
+        var btn = document.getElementById('nuDashEditBtn');
+        document.querySelectorAll('.nu-widget-controls').forEach(function(el) {
+            el.style.display = this.editMode ? 'flex' : 'none';
+        }.bind(this));
+        document.querySelectorAll('.nu-widget-card').forEach(function(el) {
             el.style.outline = this.editMode ? '2px dashed var(--color-primary,#01696f)' : '';
             el.draggable = this.editMode;
-        });
-        btn.textContent = this.editMode ? '\u2705 Done Editing' : '\u270F\uFE0F Edit Layout';
+        }.bind(this));
+        if (btn) btn.textContent = this.editMode ? '\u2705 Done Editing' : '\u270F\uFE0F Edit Layout';
         if (this.editMode) this.initDrag();
     },
 
-    initDrag() {
-        const grid = document.getElementById('nuWidgetGrid');
-        let dragSrc = null;
-        grid.querySelectorAll('.nu-widget-card').forEach(card => {
-            card.addEventListener('dragstart', () => { dragSrc = card; card.style.opacity = '.4'; });
-            card.addEventListener('dragend',   () => { card.style.opacity = ''; });
-            card.addEventListener('dragover',  e  => e.preventDefault());
-            card.addEventListener('drop', e => {
+    initDrag: function() {
+        var self = this;
+        var grid = document.getElementById('nuWidgetGrid');
+        var dragSrc = null;
+        grid.querySelectorAll('.nu-widget-card').forEach(function(card) {
+            card.addEventListener('dragstart', function() { dragSrc = card; card.style.opacity = '.4'; });
+            card.addEventListener('dragend',   function() { card.style.opacity = ''; });
+            card.addEventListener('dragover',  function(e) { e.preventDefault(); });
+            card.addEventListener('drop', function(e) {
                 e.preventDefault();
                 if (dragSrc && dragSrc !== card) {
-                    const cards = [...grid.querySelectorAll('.nu-widget-card')];
+                    var cards = Array.prototype.slice.call(grid.querySelectorAll('.nu-widget-card'));
                     if (cards.indexOf(dragSrc) < cards.indexOf(card)) card.after(dragSrc);
                     else card.before(dragSrc);
-                    this.persistOrder();
+                    self.persistOrder();
                 }
             });
         });
     },
 
-    async persistOrder() {
-        const order = [...document.querySelectorAll('.nu-widget-card')].map((c,i) => ({ id: parseInt(c.dataset.widgetId), position: (i+1)*10 }));
-        await fetch(API + '?action=reorder', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({order}) });
+    persistOrder: function() {
+        var order = Array.prototype.slice.call(document.querySelectorAll('.nu-widget-card')).map(function(c, i) {
+            return { id: parseInt(c.dataset.widgetId), position: (i + 1) * 10 };
+        });
+        fetch(API + '?action=reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order: order })
+        });
     },
 
-    async resetLayout() {
+    resetLayout: function() {
         if (!confirm('Reset to role default layout? Your personal widgets will be removed.')) return;
-        try {
-            const r = await fetch(API + '?action=reset', { method:'POST' });
-            const d = await r.json();
-            if (d.ok) location.reload();
-        } catch(e) { alert('Request failed'); }
+        fetch(API + '?action=reset', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { if (d.ok) location.reload(); })
+            .catch(function() { alert('Request failed'); });
     },
 
-    openRoleDesigner() {
-        const rEl = document.getElementById('nuWTargetRole');
+    openRoleDesigner: function() {
+        var rEl = document.getElementById('nuWTargetRole');
         if (rEl) rEl.value = 'user';
         this.openBuilder();
-    },
+    }
 };
 
 document.addEventListener('DOMContentLoaded', initCharts);
