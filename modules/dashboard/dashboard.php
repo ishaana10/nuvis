@@ -2,14 +2,19 @@
 declare(strict_types=1);
 /**
  * modules/dashboard/dashboard.php
- * ADMIN DASHBOARD — globeadmin and admin only.
+ * ADMIN DASHBOARD — globeadmin / admin only.
+ *
+ * NOT an entry point. Always included by index.php (which already
+ * called module_bootstrap.php). Do NOT add require_once bootstrap here.
  */
-require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
+// Safety: if somehow hit directly, bootstrap once.
+if (!defined('NU_BOOTSTRAP_DONE')) {
+    require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
+}
 
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-// Guard
 $_dashRole = strtolower((string)($_SESSION['nu_role'] ?? ''));
 if ($_dashRole !== 'globeadmin' && $_dashRole !== 'admin') {
     require __DIR__ . '/dashboard_user.php';
@@ -21,7 +26,7 @@ $db = NuDatabase::getInstance();
 
 function nu_safe_count(NuDatabase $db, string $sql): int {
     try { $r = $db->fetchOne($sql); return (int)($r['total'] ?? 0); }
-    catch (Throwable $e) { return 0; }
+    catch (Throwable $e) { error_log('[dashboard] ' . $e->getMessage()); return 0; }
 }
 
 $userCount   = nu_safe_count($db, "SELECT COUNT(*) as total FROM nu_users");
@@ -36,14 +41,13 @@ try {
 
 <div class="nu-dashboard">
 
-    <!-- Role badge -->
     <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px;">
         <span style="font-size:var(--text-sm,.875rem);font-weight:600;color:var(--color-text-muted,#888);">
             <?= $isGlobeAdmin ? '🛡️ Globe Admin Dashboard' : '📊 Admin Dashboard' ?>
         </span>
     </div>
 
-    <!-- System KPI row (admin-only, always visible) -->
+    <!-- System KPI row -->
     <div class="nu-grid" style="margin-bottom:24px;">
         <div class="nu-kpi"><span class="nu-kpi-label">Total Users</span><span class="nu-kpi-value"><?= $userCount ?></span><span class="nu-kpi-change up">Registered</span></div>
         <div class="nu-kpi"><span class="nu-kpi-label">Forms Built</span><span class="nu-kpi-value"><?= $formCount ?></span><span class="nu-kpi-change up">Active</span></div>
@@ -54,7 +58,7 @@ try {
     <!-- Customisable widget section -->
     <?php require __DIR__ . '/../widgets/widgets.php'; ?>
 
-    <!-- Recent Activity & Quick Actions (fixed, always visible for admins) -->
+    <!-- Recent Activity -->
     <div style="margin-top:24px;">
         <div class="nu-card">
             <div class="nu-card-header">

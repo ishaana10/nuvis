@@ -1,12 +1,14 @@
 <?php
+declare(strict_types=1);
 /**
  * modules/dashboard/index.php
- * Role-based dashboard router.
+ * ENTRY POINT — bootstraps once, then routes by role.
  *
- * globeadmin / admin  → dashboard.php  (full platform admin view)
- * everyone else       → dashboard_user.php (user welcome view)
+ * globeadmin / admin  → dashboard.php
+ * everyone else       → dashboard_user.php
  */
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
+// $auth, session, DB all ready after this single bootstrap call.
 
 $_dRole = strtolower((string)($_SESSION['nu_role'] ?? ''));
 
