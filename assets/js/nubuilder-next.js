@@ -5,6 +5,18 @@ window.NuApp = {
   init() {
     this.bindEvents();
     this.loadTheme();
+    this.initNavGroups();
+  },
+
+  // ── Collapse all nav groups on load, then expand the active one ────────────
+  initNavGroups() {
+    document.querySelectorAll('.nu-nav-children').forEach((ul) => {
+      ul.classList.add('nu-nav-children--collapsed');
+      const btn = ul.previousElementSibling;
+      if (btn && btn.classList.contains('nu-nav-group-label')) {
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
   },
 
   bindEvents() {
@@ -24,10 +36,7 @@ window.NuApp = {
     });
 
     // ── Collapsible nav groups ──────────────────────────────────────────────
-    // Uses event delegation on .nu-nav so it works after dynamic re-renders.
-    // Clicks on .nu-nav-group-label toggle aria-expanded + the --collapsed
-    // class on the sibling .nu-nav-children list.
-    // CSS handles chevron rotation and max-height animation automatically.
+    // Event delegation on .nu-nav — works after dynamic re-renders.
     const nav = document.querySelector('.nu-nav');
     if (nav) {
       nav.addEventListener('click', (e) => {
@@ -311,12 +320,10 @@ window.NuApp = {
       box.appendChild(formWrap);
 
       overlay.appendChild(box);
-      // ✔ Append to DOM FIRST so Select2 can measure element dimensions
       document.body.appendChild(overlay);
       applySize(currentSize);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      // ✔ Dispatch AFTER overlay is in the live DOM
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
@@ -336,7 +343,6 @@ window.NuApp = {
     if (mode === 'inline')   return this._openFormInline(code, browseLabel, id, false);
     if (mode === 'fullpage') return this._openFormFullPage(code, browseLabel, id, false);
 
-    // ── modal (default) ──────────────────────────────────────────────────────
     try {
       const json = await this.apiJson(
         'api/form.php?action=render&code=' + encodeURIComponent(code) + '&id=' + encodeURIComponent(id),
@@ -377,11 +383,9 @@ window.NuApp = {
       box.appendChild(formWrap);
 
       overlay.appendChild(box);
-      // ✔ Append to DOM FIRST so Select2 can measure element dimensions
       document.body.appendChild(overlay);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      // ✔ Dispatch AFTER overlay is in the live DOM
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = overlay.querySelector('.nu-generated-form');
@@ -409,7 +413,6 @@ window.NuApp = {
     }
   },
 
-  // ─── Shared: fetch browse data ───────────────────────────────────────────
   async _fetchBrowseData(code, page, query) {
     page  = page  || 1;
     query = query || '';
@@ -423,7 +426,6 @@ window.NuApp = {
     return json;
   },
 
-  // ─── Shared: build browse table DOM ────────────────────────────────────
   _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit) {
     const data              = json.data || {};
     const layout            = Array.isArray(data.layout)  ? data.layout  : [];
@@ -554,7 +556,6 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 1: INLINE ───────────────────────────────────────────────────────
   async _browseInline(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -605,7 +606,6 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 2: MODAL ─────────────────────────────────────────────────────────
   async _browseModal(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -670,7 +670,6 @@ window.NuApp = {
     }
   },
 
-  // ─── MODE 3: FULL PAGE ─────────────────────────────────────────────────────────
   async _browseFullPage(code, page, query, formLabel) {
     try {
       const json  = await this._fetchBrowseData(code, page, query);
@@ -719,7 +718,6 @@ window.NuApp = {
     }
   },
 
-  // ─── OPEN FORM INLINE — renders preview or edit form in #contentArea ────────
   async _openFormInline(code, formLabel, id, isPreview) {
     try {
       const url = 'api/form.php?action=render&code=' + encodeURIComponent(code)
@@ -743,7 +741,6 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       container.appendChild(formWrap);
 
-      // ✔ Dispatch AFTER content is in the live DOM
       this._dispatchFormOpened(container);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = container.querySelector('.nu-generated-form');
@@ -755,7 +752,6 @@ window.NuApp = {
     }
   },
 
-  // ─── OPEN FORM FULL PAGE — renders preview or edit form fullscreen ───────────
   async _openFormFullPage(code, formLabel, id, isPreview) {
     try {
       const url = 'api/form.php?action=render&code=' + encodeURIComponent(code)
@@ -789,7 +785,6 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       container.appendChild(formWrap);
 
-      // ✔ Dispatch AFTER content is in the live DOM
       this._dispatchFormOpened(container);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         const formEl = container.querySelector('.nu-generated-form');
@@ -803,9 +798,12 @@ window.NuApp = {
   }
 };
 
-document.addEventListener('DOMContentLoaded', function () {
+// ── Safe init: works whether DOMContentLoaded has already fired or not ────────
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function () { NuApp.init(); });
+} else {
   NuApp.init();
-});
+}
 
 window.closeNuForm = function (btn) {
   const overlay = btn ? btn.closest('.nu-form-overlay') : null;
