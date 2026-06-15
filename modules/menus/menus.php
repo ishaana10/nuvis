@@ -84,33 +84,12 @@ $builtinIcons = [
 .nb-mtype-icon  { font-size:18px; margin-bottom:4px; }
 .nb-mtype-label { font-size:11px; font-weight:700; color:var(--text-primary); }
 
-/* ── Open Mode picker ── */
+/* ── Open Mode dropdowns ── */
 .nb-open-mode-row {
   grid-column:1/-1;
-  display:flex; flex-direction:column; gap:6px;
+  display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;
 }
-.nb-open-mode-row > label { font-size:11px; font-weight:600; color:var(--text-secondary); }
-.nb-open-mode-cards {
-  display:grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap:8px;
-}
-.nb-omode-card {
-  border:2px solid var(--border-color);
-  border-radius:10px; padding:10px 8px;
-  cursor:pointer; background:var(--bg-surface);
-  transition:all .15s; text-align:center;
-  display:flex; flex-direction:column; align-items:center; gap:4px;
-}
-.nb-omode-card:hover { border-color:var(--color-primary); background:var(--bg-elevated); }
-.nb-omode-card.selected {
-  border-color:var(--color-primary);
-  background:color-mix(in oklch,var(--color-primary) 8%,var(--bg-surface));
-}
-.nb-omode-card input[type=radio] { display:none; }
-.nb-omode-icon { font-size:20px; line-height:1; }
-.nb-omode-label { font-size:11px; font-weight:700; color:var(--text-primary); }
-.nb-omode-desc  { font-size:10px; color:var(--text-tertiary); line-height:1.3; }
+.nb-open-mode-row .nb-fp { flex:1; min-width:140px; }
 
 /* Icon picker tabs */
 .nb-icon-tabs { display:flex; gap:0; border:1px solid var(--border-color); border-radius:8px; overflow:hidden; margin-bottom:8px; }
@@ -200,7 +179,7 @@ $builtinIcons = [
           $target = htmlspecialchars($m['menu_target'] ?? '', ENT_QUOTES);
           $icon   = htmlspecialchars($m['menu_icon']   ?? 'default', ENT_QUOTES);
           $order  = (int)$m['menu_order'];
-          $omode  = htmlspecialchars($m['menu_open_mode'] ?? 'inline', ENT_QUOTES);
+          $omode  = htmlspecialchars($m['menu_open_mode'] ?? 'inline|browse', ENT_QUOTES);
           $isDivider = $type === 'divider';
         ?>
         <div class="nb-menu-item<?= $isDivider ? ' is-divider' : '' ?>" data-id="<?= $mid ?>" draggable="true">
@@ -235,7 +214,7 @@ $builtinIcons = [
           $ctarget= htmlspecialchars($c['menu_target'] ?? '', ENT_QUOTES);
           $cicon  = htmlspecialchars($c['menu_icon']   ?? 'default', ENT_QUOTES);
           $corder = (int)$c['menu_order'];
-          $comode = htmlspecialchars($c['menu_open_mode'] ?? 'inline', ENT_QUOTES);
+          $comode = htmlspecialchars($c['menu_open_mode'] ?? 'inline|browse', ENT_QUOTES);
         ?>
         <div class="nb-menu-item is-child" data-id="<?= $cid ?>" data-parent="<?= $mid ?>" draggable="true">
           <span class="nb-menu-drag-handle" title="Drag to reorder">&#9776;</span>
@@ -271,7 +250,7 @@ $builtinIcons = [
     <input type="hidden" id="editMenuId" value="">
     <input type="hidden" id="editMenuParentId" value="0">
     <input type="hidden" id="editMenuIcon" value="default">
-    <input type="hidden" id="editOpenMode" value="inline">
+    <input type="hidden" id="editOpenMode" value="inline|browse">
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h3 class="nu-card-title" id="menuBuilderTitle">New Menu Item</h3>
@@ -285,7 +264,7 @@ $builtinIcons = [
       </div>
       <span class="nb-menu-preview-label" id="nbPreviewLabel">Label</span>
       <span class="nb-menu-preview-badge" id="nbPreviewBadge" style="background:color-mix(in oklch,var(--color-primary) 12%,transparent);color:var(--color-primary);">Form</span>
-      <span class="nb-preview-mode-tag" id="nbPreviewModeTag" style="display:none;">inline</span>
+      <span class="nb-preview-mode-tag" id="nbPreviewModeTag" style="display:none;">inline &bull; browse</span>
       <span style="font-size:11px;color:var(--text-tertiary);margin-left:4px;">&#x2190; live preview</span>
     </div>
 
@@ -380,39 +359,21 @@ $builtinIcons = [
         </label>
       </div>
 
-      <!-- ── Open Mode Picker (form / report / query only) ── -->
+      <!-- ── Open Mode dropdowns (form / report / query only) ── -->
       <div class="nb-open-mode-row" id="nbOpenModeRow">
-        <label>Open Mode <span style="font-weight:400;color:var(--text-tertiary);">— how this item opens when clicked</span></label>
-        <div class="nb-open-mode-cards">
-
-          <label class="nb-omode-card selected" data-mode="inline" onclick="nuMenuBuilder.selectOpenMode('inline',this)">
-            <input type="radio" name="menuOpenMode" value="inline" checked>
-            <div class="nb-omode-icon">&#x1F4F0;</div>
-            <div class="nb-omode-label">Inline</div>
-            <div class="nb-omode-desc">Opens inside the main content area (default)</div>
-          </label>
-
-          <label class="nb-omode-card" data-mode="popup" onclick="nuMenuBuilder.selectOpenMode('popup',this)">
-            <input type="radio" name="menuOpenMode" value="popup">
-            <div class="nb-omode-icon">&#x1F5D4;&#xFE0F;</div>
-            <div class="nb-omode-label">Popup</div>
-            <div class="nb-omode-desc">Opens in a modal dialog overlay</div>
-          </label>
-
-          <label class="nb-omode-card" data-mode="preview" onclick="nuMenuBuilder.selectOpenMode('preview',this)">
-            <input type="radio" name="menuOpenMode" value="preview">
-            <div class="nb-omode-icon">&#x1F441;&#xFE0F;</div>
-            <div class="nb-omode-label">Preview</div>
-            <div class="nb-omode-desc">Read-only preview panel (no editing)</div>
-          </label>
-
-          <label class="nb-omode-card" data-mode="browse" onclick="nuMenuBuilder.selectOpenMode('browse',this)">
-            <input type="radio" name="menuOpenMode" value="browse">
-            <div class="nb-omode-icon">&#x1F5C2;&#xFE0F;</div>
-            <div class="nb-omode-label">Browse</div>
-            <div class="nb-omode-desc">List / browse view of all records</div>
-          </label>
-
+        <div class="nb-fp">
+          <label>Display Mode</label>
+          <select id="menuDisplayMode" class="nu-input" onchange="nuMenuBuilder.onModeChange()">
+            <option value="inline">&#x1F4F0; Inline &mdash; opens in main area</option>
+            <option value="popup">&#x1F5D4; Popup &mdash; modal dialog</option>
+          </select>
+        </div>
+        <div class="nb-fp">
+          <label>View Mode</label>
+          <select id="menuViewMode" class="nu-input" onchange="nuMenuBuilder.onModeChange()">
+            <option value="browse">&#x1F5C2; Browse &mdash; list / record view</option>
+            <option value="preview">&#x1F441; Preview &mdash; read-only panel</option>
+          </select>
         </div>
       </div>
 
@@ -556,6 +517,25 @@ if (!window._nbMenusModuleInit) {
 
     _currentIconMode: 'builtin',
 
+    // Called whenever either dropdown changes
+    onModeChange: function() {
+      var disp = document.getElementById('menuDisplayMode').value || 'inline';
+      var view = document.getElementById('menuViewMode').value || 'browse';
+      document.getElementById('editOpenMode').value = disp + '|' + view;
+      this.updatePreview();
+    },
+
+    // Restore both dropdowns from a combined 'disp|view' string
+    _restoreOpenMode: function(combined) {
+      var parts = (combined || 'inline|browse').split('|');
+      var disp  = parts[0] || 'inline';
+      var view  = parts[1] || 'browse';
+      document.getElementById('menuDisplayMode').value = disp;
+      document.getElementById('menuViewMode').value    = view;
+      document.getElementById('editOpenMode').value    = disp + '|' + view;
+      this.updatePreview();
+    },
+
     open: function(parentId, parentLabel) {
       document.getElementById('editMenuId').value       = '';
       document.getElementById('editMenuParentId').value = parentId || 0;
@@ -574,7 +554,7 @@ if (!window._nbMenusModuleInit) {
       document.getElementById('menuTargetCode').value   = '';
       this.switchIconTab('builtin');
       this.selectType('form', document.querySelector('.nb-mtype-card[data-type="form"]'));
-      this.selectOpenMode('inline', document.querySelector('.nb-omode-card[data-mode="inline"]'));
+      this._restoreOpenMode('inline|browse');
       document.querySelectorAll('.nb-icon-btn').forEach(function(b){ b.classList.remove('selected'); });
       var defBtn = document.querySelector('.nb-icon-btn[data-icon="default"]');
       if (defBtn) defBtn.classList.add('selected');
@@ -599,7 +579,7 @@ if (!window._nbMenusModuleInit) {
           var m    = d.menu;
           var type = m.menu_type || 'form';
           var icon = m.menu_icon || 'default';
-          var omode = m.menu_open_mode || 'inline';
+          var omode = m.menu_open_mode || 'inline|browse';
 
           document.getElementById('editMenuId').value       = m.menu_id;
           document.getElementById('editMenuParentId').value = m.menu_parent_id || 0;
@@ -618,9 +598,7 @@ if (!window._nbMenusModuleInit) {
           else if (type === 'query') document.getElementById('menuTargetCode').value = target;
           else                       document.getElementById('menuTargetSelect').value = target;
 
-          // Restore open mode
-          var omodeCard = document.querySelector('.nb-omode-card[data-mode="' + omode + '"]');
-          self.selectOpenMode(omode, omodeCard);
+          self._restoreOpenMode(omode);
 
           document.getElementById('editMenuIcon').value = icon;
           var isExternal = icon.indexOf('http://') === 0 || icon.indexOf('https://') === 0;
@@ -644,15 +622,6 @@ if (!window._nbMenusModuleInit) {
           self.updatePreview();
         })
         .catch(function(e) { console.error(e); alert('Network error loading menu item.'); });
-    },
-
-    selectOpenMode: function(mode, card) {
-      document.getElementById('editOpenMode').value = mode || 'inline';
-      document.querySelectorAll('.nb-omode-card').forEach(function(c){ c.classList.remove('selected'); });
-      if (card) card.classList.add('selected');
-      var radio = document.querySelector('input[name="menuOpenMode"][value="' + mode + '"]');
-      if (radio) radio.checked = true;
-      this.updatePreview();
     },
 
     switchIconTab: function(mode) {
@@ -687,7 +656,7 @@ if (!window._nbMenusModuleInit) {
       codeEl.style.display = 'none';
       noticeEl.style.display = 'none';
 
-      // Show open-mode picker only for types that support it
+      // Show open-mode dropdowns only for types that support it
       omodeRow.style.display = (NB_OPEN_MODE_TYPES.indexOf(type) !== -1) ? '' : 'none';
 
       if (type === 'form' || type === 'report') {
@@ -739,7 +708,7 @@ if (!window._nbMenusModuleInit) {
       var label = document.getElementById('menuLabel').value || 'Label';
       var radio = document.querySelector('input[name="menuItemType"]:checked');
       var type  = radio ? radio.value : 'form';
-      var omode = document.getElementById('editOpenMode').value || 'inline';
+      var omode = document.getElementById('editOpenMode').value || 'inline|browse';
 
       var iconEl    = document.getElementById('nbPreviewIcon');
       var labelEl   = document.getElementById('nbPreviewLabel');
@@ -751,10 +720,10 @@ if (!window._nbMenusModuleInit) {
       badgeEl.style.background = NB_TYPE_BG[type]    || NB_TYPE_BG.form;
       badgeEl.style.color      = NB_TYPE_COLORS[type] || NB_TYPE_COLORS.form;
 
-      // Show mode tag in preview for supported types
       if (NB_OPEN_MODE_TYPES.indexOf(type) !== -1) {
+        var parts = omode.split('|');
         modeTagEl.style.display = '';
-        modeTagEl.textContent   = omode;
+        modeTagEl.textContent   = (parts[0] || 'inline') + ' \u2022 ' + (parts[1] || 'browse');
       } else {
         modeTagEl.style.display = 'none';
       }
@@ -779,7 +748,7 @@ if (!window._nbMenusModuleInit) {
       var roles  = document.getElementById('menuRoles').value.trim();
       var active = document.getElementById('menuActive').checked ? 1 : 0;
       var icon   = document.getElementById('editMenuIcon').value || 'default';
-      var omode  = document.getElementById('editOpenMode').value || 'inline';
+      var omode  = document.getElementById('editOpenMode').value || 'inline|browse';
 
       var target = '';
       if (type === 'url')        target = document.getElementById('menuTargetUrl').value.trim();
