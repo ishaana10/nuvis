@@ -446,22 +446,10 @@ if ($isLoggedIn && $currentUser) {
         }
     } catch (e) {}
 
-    // ── Collapsible group children (dynamic nav only) ──────────────────────
-    document.querySelectorAll('.nu-nav-item--has-children').forEach(function (el) {
-        el.addEventListener('click', function (e) {
-            e.preventDefault();
-            var expanded = this.getAttribute('aria-expanded') === 'true';
-            this.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-            var ul = this.nextElementSibling;
-            if (ul && ul.classList.contains('nu-nav-children')) {
-                ul.style.display = expanded ? 'none' : 'block';
-            }
-        });
-    });
-    // Hide all child lists on load
-    document.querySelectorAll('.nu-nav-children').forEach(function (ul) {
-        ul.style.display = 'none';
-    });
+    // NOTE: Nav group toggle is handled entirely by NuApp.bindEvents()
+    // in nubuilder-next.js via event delegation on .nu-nav.
+    // Do NOT set display:none on .nu-nav-children here — the CSS
+    // max-height transition controls visibility instead.
 
     function _boot() {
         if (!window.NuApp) return;
