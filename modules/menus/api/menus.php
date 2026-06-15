@@ -9,7 +9,6 @@ declare(strict_types=1);
  * POST action=update      — update an existing menu item
  * POST action=delete      — soft-delete (set menu_active=0) or hard-delete
  * POST action=reorder     — bulk update menu_order after drag-drop
- * POST action=migrate     — add menu_open_mode column if missing
  */
 require_once dirname(__DIR__, 3) . '/core/module_bootstrap.php';
 
@@ -31,8 +30,25 @@ function mu_json(array $data): void {
     exit;
 }
 
-// Valid open modes
-$validOpenModes = ['inline', 'popup', 'preview', 'browse'];
+/**
+ * Validate and sanitise the open_mode value.
+ * Accepts the combined "display|view" format produced by the two dropdowns
+ * e.g. "inline|browse", "popup|preview", "inline|preview", "popup|browse".
+ * Falls back to "inline|browse" for any unrecognised value.
+ */
+function mu_sanitise_open_mode(string $raw): string {
+    $validDisplay = ['inline', 'popup'];
+    $validView    = ['browse', 'preview'];
+
+    $parts = explode('|', $raw, 2);
+    $disp  = strtolower(trim($parts[0] ?? 'inline'));
+    $view  = strtolower(trim($parts[1] ?? 'browse'));
+
+    if (!in_array($disp, $validDisplay, true)) $disp = 'inline';
+    if (!in_array($view, $validView,    true)) $view = 'browse';
+
+    return $disp . '|' . $view;
+}
 
 // Read POST body
 $body = [];
@@ -42,41 +58,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($body)) $body = $_POST;
 }
 
-// ── AUTO-MIGRATE: ensure menu_open_mode column exists ─────────────────────
+// ── AUTO-MIGRATE: ensure menu_open_mode column exists with correct default ──
 try {
-    $db->query("ALTER TABLE nu_menus ADD COLUMN menu_open_mode VARCHAR(20) NOT NULL DEFAULT 'inline'");
+    $db->query("ALTER TABLE nu_menus ADD COLUMN menu_open_mode VARCHAR(30) NOT NULL DEFAULT 'inline|browse'");
 } catch (Throwable $ignored) {
     // Column already exists — ignore
 }
 
-// ── GET single item ────────────────────────────────────────────
+// ── GET single item ─────────────────────────────────────────────────────────
 if ($action === 'get') {
     $id  = (int)($_GET['id'] ?? 0);
     $row = $db->fetchOne("SELECT * FROM nu_menus WHERE menu_id = ?", [$id]);
     if (!$row) mu_json(['success' => false, 'message' => 'Not found']);
-    // Ensure open_mode has a default if column did not exist before
-    $row['menu_open_mode'] = $row['menu_open_mode'] ?? 'inline';
+    // Backfill legacy single-word values (e.g. old 'inline' → 'inline|browse')
+    $raw = $row['menu_open_mode'] ?? 'inline|browse';
+    if (strpos($raw, '|') === false) {
+        $raw = in_array($raw, ['preview']) ? 'inline|preview' : 'inline|browse';
+    }
+    $row['menu_open_mode'] = $raw;
     mu_json(['success' => true, 'menu' => $row]);
 }
 
-// ── CREATE ─────────────────────────────────────────────────────
+// ── CREATE ──────────────────────────────────────────────────────────────────
 if ($action === 'create') {
-    $label    = substr(trim((string)($body['label']     ?? '')), 0, 120);
-    $type     = preg_replace('/[^a-z_]/', '', (string)($body['type']      ?? 'form'));
-    $target   = substr(trim((string)($body['target']   ?? '')), 0, 200);
-    $icon     = substr(trim((string)($body['icon']     ?? '☰')), 0, 60);
-    $parent   = (int)($body['parent']   ?? 0);
-    $order    = (int)($body['order']    ?? 0);
-    $roles    = substr(trim((string)($body['roles']    ?? '')), 0, 255);
+    $label    = substr(trim((string)($body['label']   ?? '')), 0, 120);
+    $type     = preg_replace('/[^a-z_]/', '', (string)($body['type']    ?? 'form'));
+    $target   = substr(trim((string)($body['target'] ?? '')), 0, 200);
+    $icon     = substr(trim((string)($body['icon']   ?? '☰')), 0, 60);
+    $parent   = (int)($body['parent'] ?? 0);
+    $order    = (int)($body['order']  ?? 0);
+    $roles    = substr(trim((string)($body['roles']  ?? '')), 0, 255);
     $active   = isset($body['active']) ? (int)$body['active'] : 1;
-    $rawMode  = trim((string)($body['open_mode'] ?? 'inline'));
-    $openMode = in_array($rawMode, $GLOBALS['validOpenModes'] ?? ['inline','popup','preview','browse'], true) ? $rawMode : 'inline';
+    $openMode = mu_sanitise_open_mode(trim((string)($body['open_mode'] ?? 'inline|browse')));
 
     if (!$label && $type !== 'divider') {
         mu_json(['success' => false, 'message' => 'Label is required']);
     }
 
-    // Auto-generate menu_code from label
     $code = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $label));
     $code = trim($code, '_');
 
@@ -96,19 +114,18 @@ if ($action === 'create') {
     }
 }
 
-// ── UPDATE ─────────────────────────────────────────────────────
+// ── UPDATE ──────────────────────────────────────────────────────────────────
 if ($action === 'update') {
-    $id       = (int)($body['id']        ?? 0);
-    $label    = substr(trim((string)($body['label']     ?? '')), 0, 120);
-    $type     = preg_replace('/[^a-z_]/', '', (string)($body['type']      ?? 'form'));
-    $target   = substr(trim((string)($body['target']   ?? '')), 0, 200);
-    $icon     = substr(trim((string)($body['icon']     ?? '☰')), 0, 60);
-    $parent   = (int)($body['parent']   ?? 0);
-    $order    = (int)($body['order']    ?? 0);
-    $roles    = substr(trim((string)($body['roles']    ?? '')), 0, 255);
+    $id       = (int)($body['id']      ?? 0);
+    $label    = substr(trim((string)($body['label']   ?? '')), 0, 120);
+    $type     = preg_replace('/[^a-z_]/', '', (string)($body['type']    ?? 'form'));
+    $target   = substr(trim((string)($body['target'] ?? '')), 0, 200);
+    $icon     = substr(trim((string)($body['icon']   ?? '☰')), 0, 60);
+    $parent   = (int)($body['parent'] ?? 0);
+    $order    = (int)($body['order']  ?? 0);
+    $roles    = substr(trim((string)($body['roles']  ?? '')), 0, 255);
     $active   = isset($body['active']) ? (int)$body['active'] : 1;
-    $rawMode  = trim((string)($body['open_mode'] ?? 'inline'));
-    $openMode = in_array($rawMode, ['inline','popup','preview','browse'], true) ? $rawMode : 'inline';
+    $openMode = mu_sanitise_open_mode(trim((string)($body['open_mode'] ?? 'inline|browse')));
 
     if (!$id) mu_json(['success' => false, 'message' => 'Invalid ID']);
 
@@ -134,7 +151,7 @@ if ($action === 'update') {
     }
 }
 
-// ── DELETE ─────────────────────────────────────────────────────
+// ── DELETE ──────────────────────────────────────────────────────────────────
 if ($action === 'delete') {
     $id = (int)($body['id'] ?? 0);
     if (!$id) mu_json(['success' => false, 'message' => 'Invalid ID']);
@@ -147,7 +164,7 @@ if ($action === 'delete') {
     }
 }
 
-// ── REORDER ────────────────────────────────────────────────────
+// ── REORDER ─────────────────────────────────────────────────────────────────
 if ($action === 'reorder') {
     $items = (array)($body['items'] ?? []);
     try {
