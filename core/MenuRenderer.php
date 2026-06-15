@@ -37,8 +37,10 @@ class NuMenuRenderer
         'default'    => '<circle cx="12" cy="12" r="9"/>',
     ];
 
-    // Types that support open-mode
-    private static array $openModeTypes = ['form', 'report', 'query'];
+    // Types that render the form-action sub-buttons instead of loadModule
+    private static array $formTypes = ['form'];
+    // Types that use browseForm but no preview/edit sub-buttons (future: report, query)
+    private static array $browseTypes = ['form', 'report', 'query'];
 
     public static function render(?array $currentUser): string
     {
@@ -156,22 +158,60 @@ class NuMenuRenderer
             return $out;
         }
 
-        // ── Standard leaf item ────────────────────────────────────────────────
-        $module = $rawTarget !== '' ? $rawTarget : $rawCode;
+        // ── Resolve the code/target ───────────────────────────────────────────
+        $module = $rawCode !== '' ? $rawCode : $rawTarget;
         if ($module === '') {
             return "<!-- nu_menus id={$item['menu_id']} skipped: no target or code -->\n";
         }
         $moduleSafe = htmlspecialchars($module, ENT_QUOTES, 'UTF-8');
 
-        // For types that support open-mode, pass it as a data attribute
-        // NuApp.loadModule() reads data-open-mode to decide inline/popup/preview/browse
-        $openModeAttr = in_array($type, self::$openModeTypes, true)
-            ? " data-open-mode=\"{$openMode}\""
-            : '';
+        // ── Form type: render inline label + action dropdown ─────────────────
+        // Calls browseForm/previewForm directly — never loadModule — so a
+        // non-existent module path can't redirect to dashboard.
+        if (in_array($type, self::$formTypes, true)) {
+            // Determine the primary browse mode from open_mode
+            // Supported: inline | popup (alias: modal) | fullpage
+            $browseMode = $openMode;
+            if ($browseMode === 'popup') $browseMode = 'modal';
 
-        // Use javascript:void(0) as href so no hashchange event fires
-        $out  = "<a href=\"javascript:void(0)\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"{$openModeAttr}\n";
-        $out .= "   onclick=\"NuApp.loadModule('{$moduleSafe}', '{$openMode}'); return false;\">\n";
+            $jsLabel    = json_encode($label,    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $jsCode     = json_encode($moduleSafe, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $jsBrowse   = json_encode($browseMode, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+            $out  = "<div class=\"nu-nav-form-item\" data-module=\"{$moduleSafe}\">\n";
+            // Primary label button (opens browse in configured mode)
+            $out .= "  <button type=\"button\" class=\"nu-nav-item nu-nav-form-primary\"\n";
+            $out .= "          onclick=\"NuApp.browseForm({$jsCode},1,'',{$jsLabel},{$jsBrowse}); return false;\">\n";
+            $out .= self::svgIcon($svgBody);
+            $out .= "    <span>{$label}</span>\n";
+            $out .= "  </button>\n";
+            // Chevron button toggles the sub-action dropdown
+            $out .= "  <button type=\"button\" class=\"nu-nav-form-chevron\" aria-label=\"Open form actions\"\n";
+            $out .= "          onclick=\"event.stopPropagation(); this.closest('.nu-nav-form-item').querySelector('.nu-nav-form-dropdown').classList.toggle('open');\">\n";
+            $out .= "    <svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"6 9 12 15 18 9\"/></svg>\n";
+            $out .= "  </button>\n";
+            // Dropdown with three action options
+            $out .= "  <div class=\"nu-nav-form-dropdown\">\n";
+            $out .= "    <button type=\"button\" class=\"nu-nav-form-action\"\n";
+            $out .= "            onclick=\"NuApp.browseForm({$jsCode},1,'',{$jsLabel},'inline'); this.closest('.nu-nav-form-dropdown').classList.remove('open');\">\n";
+            $out .= "      &#8862; Browse Inline\n";
+            $out .= "    </button>\n";
+            $out .= "    <button type=\"button\" class=\"nu-nav-form-action\"\n";
+            $out .= "            onclick=\"NuApp.browseForm({$jsCode},1,'',{$jsLabel},'modal'); this.closest('.nu-nav-form-dropdown').classList.remove('open');\">\n";
+            $out .= "      &#9634; Browse Popup\n";
+            $out .= "    </button>\n";
+            $out .= "    <button type=\"button\" class=\"nu-nav-form-action\"\n";
+            $out .= "            onclick=\"NuApp.previewForm({$jsCode},{$jsLabel}); this.closest('.nu-nav-form-dropdown').classList.remove('open');\">\n";
+            $out .= "      &#9654; Preview Form\n";
+            $out .= "    </button>\n";
+            $out .= "  </div>\n";
+            $out .= "</div>\n";
+            return $out;
+        }
+
+        // ── Standard leaf item (module, link, etc.) ───────────────────────────
+        $out  = "<a href=\"javascript:void(0)\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
+        $out .= "   onclick=\"NuApp.loadModule('{$moduleSafe}'); return false;\">\n";
         $out .= self::svgIcon($svgBody);
         $out .= "  <span>{$label}</span>\n";
         $out .= "</a>\n";
