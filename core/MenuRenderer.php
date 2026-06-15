@@ -4,15 +4,13 @@ declare(strict_types=1);
  * NuMenuRenderer
  * Renders the sidebar <nav> from nu_menus, filtered by the current user's role.
  *
- * menu_open_mode format (stored in DB, configured per item in menus.php editor):
- *   "<display>|<view>"  e.g.  "inline|browse"  "popup|preview"  "inline|preview"
- *
+ * menu_open_mode stored as "<display>|<view>", e.g. "inline|browse", "popup|preview"
  *   display : inline | popup
  *   view    : browse | preview
  *
- * IMPORTANT – all onclick attributes use SINGLE quotes as delimiters so that the
- * double-quoted strings produced by json_encode are safe inside the attribute
- * without any \u0022 / JSON_HEX_QUOT mangling that breaks the HTML parser.
+ * All onclick attributes use SINGLE-QUOTE delimiters so that the double-quoted
+ * strings from json_encode are safe — no JSON_HEX_QUOT mangling that would
+ * truncate the attribute and cause "Unexpected end of input" JS errors.
  */
 class NuMenuRenderer
 {
@@ -47,12 +45,13 @@ class NuMenuRenderer
         'default'    => '<circle cx="12" cy="12" r="9"/>',
     ];
 
-    // Types that open a form action (vs loadModule)
+    /** Types that open a form action (vs loadModule) */
     private static array $formTypes = ['form'];
 
     /**
      * JSON-encode a value safe for embedding inside a SINGLE-QUOTED HTML attribute.
-     * Only apostrophes need escaping; double-quotes are fine inside onclick='...'.
+     * json_encode produces double-quoted strings which are fine inside onclick='...'.
+     * Only apostrophes need escaping (JSON_HEX_APOS -> \u0027).
      */
     private static function jsValue(mixed $value): string
     {
@@ -152,10 +151,8 @@ class NuMenuRenderer
         // ── Group: collapsible section ────────────────────────────────────────
         if (!empty($kids)) {
             $groupId = 'nu-group-' . (int)$item['menu_id'];
-
             $out  = "<div class=\"nu-nav-group\">\n";
-            $out .= "  <button class=\"nu-nav-group-label\" type=\"button\"";
-            $out .= " aria-expanded=\"false\" aria-controls=\"{$groupId}\">\n";
+            $out .= "  <button class=\"nu-nav-group-label\" type=\"button\" aria-expanded=\"false\" aria-controls=\"{$groupId}\">\n";
             $out .= self::svgIcon($svgBody);
             $out .= "  <span>{$label}</span>\n";
             $out .= "  <svg class=\"nu-nav-chevron\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"6 9 12 15 18 9\"/></svg>\n";
@@ -197,9 +194,11 @@ class NuMenuRenderer
             if ($view === 'preview') {
                 $onclick = "NuApp.previewForm({$jsCode},{$jsLabel}); return false;";
             } else {
+                // browse (default)
                 $onclick = "NuApp.browseForm({$jsCode},1,'',{$jsLabel},{$jsDisplay}); return false;";
             }
 
+            // onclick uses SINGLE quotes as the HTML attribute delimiter
             $out  = "<button type=\"button\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
             $out .= "        onclick='{$onclick}'>\n";
             $out .= self::svgIcon($svgBody);
@@ -208,7 +207,7 @@ class NuMenuRenderer
             return $out;
         }
 
-        // ── Standard leaf item (module, report, query, etc.) ──────────────────
+        // ── Standard leaf item (module, report, query, etc.) ─────────────────
         $out  = "<a href=\"javascript:void(0)\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
         $out .= "   onclick='NuApp.loadModule({$jsCode}); return false;'>\n";
         $out .= self::svgIcon($svgBody);
