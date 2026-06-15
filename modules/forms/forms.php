@@ -264,34 +264,6 @@ foreach ($forms as $f) {
   margin-top:auto;
 }
 
-/* ── Form card action groups ── */
-.nu-form-actions {
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  margin-top:auto;
-}
-.nu-form-action-group {
-  display:flex;
-  align-items:center;
-  gap:5px;
-  flex-wrap:wrap;
-}
-.nu-form-action-label {
-  font-size:9px;
-  font-weight:700;
-  letter-spacing:.06em;
-  text-transform:uppercase;
-  color:var(--text-tertiary);
-  width:34px;
-  flex-shrink:0;
-}
-.nu-form-action-divider {
-  height:1px;
-  background:var(--border-color);
-  margin:0;
-}
-
 /* Drag ghost */
 .nb-drag-ghost {
   position:fixed; pointer-events:none; z-index:9999;
@@ -545,42 +517,13 @@ foreach ($forms as $f) {
           <?php endif; ?>
         </div>
 
-        <!-- ── Action groups ── -->
-        <div class="nu-form-actions">
-
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <?php if ($isMain): ?>
-          <!-- Group 1: Open — how to launch the form -->
-          <div class="nu-form-action-group">
-            <span class="nu-form-action-label">Open</span>
-            <button class="nu-btn nu-btn-primary nu-btn-sm"
-                    onclick="window.browseForm && browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','inline')">▤ Inline</button>
-            <button class="nu-btn nu-btn-primary nu-btn-sm"
-                    onclick="window.browseForm && browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','modal')">▣ Popup</button>
-          </div>
-
-          <div class="nu-form-action-divider"></div>
-
-          <!-- Group 2: Data — browse/preview -->
-          <div class="nu-form-action-group">
-            <span class="nu-form-action-label">View</span>
-            <button class="nu-btn nu-btn-ghost nu-btn-sm"
-                    onclick="window.previewForm && previewForm('<?= $formCode ?>','<?= $formLabel ?>')">⊞ Preview</button>
-            <button class="nu-btn nu-btn-ghost nu-btn-sm"
-                    onclick="window.browseForm && browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','<?= htmlspecialchars($browseMode,ENT_QUOTES) ?>')">⊟ Browse</button>
-          </div>
-
-          <div class="nu-form-action-divider"></div>
+          <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="window.previewForm && previewForm('<?= $formCode ?>','<?= $formLabel ?>')">⊞ Preview</button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm"   onclick="window.browseForm  && browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','<?= htmlspecialchars($browseMode,ENT_QUOTES) ?>')">⊟ Browse</button>
           <?php endif; ?>
-
-          <!-- Group 3: Manage — edit / delete -->
-          <div class="nu-form-action-group">
-            <span class="nu-form-action-label">Mgmt</span>
-            <button class="nu-btn nu-btn-ghost nu-btn-sm"
-                    onclick="nbFormBuilder.edit(<?= (int)$f['form_id'] ?>)">✎ Edit</button>
-            <button class="nu-btn nu-btn-danger nu-btn-sm"
-                    onclick="window.deleteForm && deleteForm(<?= (int)$f['form_id'] ?>,'<?= $formLabel ?>')">Delete</button>
-          </div>
-
+          <button class="nu-btn nu-btn-ghost nu-btn-sm"   onclick="nbFormBuilder.edit(<?= (int)$f['form_id'] ?>)">✎ Edit</button>
+          <button class="nu-btn nu-btn-danger nu-btn-sm"  onclick="window.deleteForm && deleteForm(<?= (int)$f['form_id'] ?>,'<?= $formLabel ?>')">Delete</button>
         </div>
       </div>
       <?php endforeach; ?>
