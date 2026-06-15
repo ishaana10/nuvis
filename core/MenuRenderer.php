@@ -3,14 +3,6 @@ declare(strict_types=1);
 /**
  * NuMenuRenderer
  * Renders the sidebar <nav> from nu_menus, filtered by the current user's role.
- *
- * menu_open_mode stored as "<display>|<view>", e.g. "inline|browse", "popup|preview"
- *   display : inline | popup
- *   view    : browse | preview
- *
- * All onclick attributes use SINGLE-QUOTE delimiters so that the double-quoted
- * strings from json_encode are safe — no JSON_HEX_QUOT mangling that would
- * truncate the attribute and cause "Unexpected end of input" JS errors.
  */
 class NuMenuRenderer
 {
@@ -45,18 +37,8 @@ class NuMenuRenderer
         'default'    => '<circle cx="12" cy="12" r="9"/>',
     ];
 
-    /** Types that open a form action (vs loadModule) */
-    private static array $formTypes = ['form'];
-
-    /**
-     * JSON-encode a value safe for embedding inside a SINGLE-QUOTED HTML attribute.
-     * json_encode produces double-quoted strings which are fine inside onclick='...'.
-     * Only apostrophes need escaping (JSON_HEX_APOS -> \u0027).
-     */
-    private static function jsValue(mixed $value): string
-    {
-        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS);
-    }
+    // Types that support open-mode
+    private static array $openModeTypes = ['form', 'report', 'query'];
 
     public static function render(?array $currentUser): string
     {
@@ -71,22 +53,22 @@ class NuMenuRenderer
                         COALESCE(menu_code,   '') AS menu_code,
                         menu_parent_id, menu_order, menu_roles,
                         menu_active, menu_icon,
-                        COALESCE(menu_open_mode, 'inline|browse') AS menu_open_mode
+                        COALESCE(menu_open_mode, 'inline') AS menu_open_mode
                  FROM   nu_menus
                  WHERE  menu_active = 1
                  ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
             );
         } catch (Throwable $e) {
-            // Fallback: menu_open_mode column may not exist yet
+            // Fallback without menu_open_mode (column may not exist yet)
             try {
                 $db   = NuDatabase::getInstance();
                 $rows = $db->fetchAll(
                     "SELECT menu_id, menu_label, menu_type,
                             COALESCE(menu_target, '') AS menu_target,
-                            COALESCE(menu_code,   '') AS menu_code,
+                            '' AS menu_code,
                             menu_parent_id, menu_order, menu_roles,
                             menu_active, menu_icon,
-                            'inline|browse' AS menu_open_mode
+                            'inline' AS menu_open_mode
                      FROM   nu_menus
                      WHERE  menu_active = 1
                      ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
@@ -130,16 +112,11 @@ class NuMenuRenderer
 
     private static function renderItem(array $item, array $kids): string
     {
-        $type    = $item['menu_type'];
-        $label   = htmlspecialchars((string)$item['menu_label'], ENT_QUOTES, 'UTF-8');
-        $iconKey = strtolower(trim($item['menu_icon'] ?? 'default'));
-        $svgBody = self::$icons[$iconKey] ?? self::$icons['default'];
-
-        // Parse saved open_mode: "<display>|<view>"  e.g. "inline|browse"
-        $rawMode   = trim($item['menu_open_mode'] ?? 'inline|browse');
-        $modeParts = explode('|', $rawMode);
-        $display   = ($modeParts[0] ?? '') !== '' ? $modeParts[0] : 'inline';
-        $view      = ($modeParts[1] ?? '') !== '' ? $modeParts[1] : 'browse';
+        $type     = $item['menu_type'];
+        $label    = htmlspecialchars((string)$item['menu_label'], ENT_QUOTES, 'UTF-8');
+        $iconKey  = strtolower(trim($item['menu_icon'] ?? 'default'));
+        $svgBody  = self::$icons[$iconKey] ?? self::$icons['default'];
+        $openMode = htmlspecialchars(trim($item['menu_open_mode'] ?? 'inline'), ENT_QUOTES, 'UTF-8');
 
         if ($type === 'divider') {
             return "<hr class=\"nu-nav-divider\">\n";
@@ -148,11 +125,14 @@ class NuMenuRenderer
         $rawTarget = trim($item['menu_target'] ?? '');
         $rawCode   = trim($item['menu_code']   ?? '');
 
-        // ── Group: collapsible section ────────────────────────────────────────
+        // ── Group: collapsible, toggle-only ──────────────────────────────────
         if (!empty($kids)) {
             $groupId = 'nu-group-' . (int)$item['menu_id'];
+
             $out  = "<div class=\"nu-nav-group\">\n";
-            $out .= "  <button class=\"nu-nav-group-label\" type=\"button\" aria-expanded=\"false\" aria-controls=\"{$groupId}\">\n";
+            $out .= "  <button class=\"nu-nav-group-label\" type=\"button\"";
+            $out .= " aria-expanded=\"true\" aria-controls=\"{$groupId}\"";
+            $out .= ">\n";
             $out .= self::svgIcon($svgBody);
             $out .= "  <span>{$label}</span>\n";
             $out .= "  <svg class=\"nu-nav-chevron\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"6 9 12 15 18 9\"/></svg>\n";
@@ -176,40 +156,22 @@ class NuMenuRenderer
             return $out;
         }
 
-        // ── Resolve the module code ───────────────────────────────────────────
-        $module = $rawCode !== '' ? $rawCode : $rawTarget;
+        // ── Standard leaf item ────────────────────────────────────────────────
+        $module = $rawTarget !== '' ? $rawTarget : $rawCode;
         if ($module === '') {
             return "<!-- nu_menus id={$item['menu_id']} skipped: no target or code -->\n";
         }
-
-        // Encoded for SINGLE-QUOTED onclick attrs — double quotes inside are fine.
-        $jsCode     = self::jsValue($module);
-        $jsLabel    = self::jsValue((string)$item['menu_label']);
         $moduleSafe = htmlspecialchars($module, ENT_QUOTES, 'UTF-8');
 
-        // ── Form type: opens using the saved display/view mode ────────────────
-        if (in_array($type, self::$formTypes, true)) {
-            $jsDisplay = self::jsValue($display);
+        // For types that support open-mode, pass it as a data attribute
+        // NuApp.loadModule() reads data-open-mode to decide inline/popup/preview/browse
+        $openModeAttr = in_array($type, self::$openModeTypes, true)
+            ? " data-open-mode=\"{$openMode}\""
+            : '';
 
-            if ($view === 'preview') {
-                $onclick = "NuApp.previewForm({$jsCode},{$jsLabel}); return false;";
-            } else {
-                // browse (default)
-                $onclick = "NuApp.browseForm({$jsCode},1,'',{$jsLabel},{$jsDisplay}); return false;";
-            }
-
-            // onclick uses SINGLE quotes as the HTML attribute delimiter
-            $out  = "<button type=\"button\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
-            $out .= "        onclick='{$onclick}'>\n";
-            $out .= self::svgIcon($svgBody);
-            $out .= "  <span>{$label}</span>\n";
-            $out .= "</button>\n";
-            return $out;
-        }
-
-        // ── Standard leaf item (module, report, query, etc.) ─────────────────
-        $out  = "<a href=\"javascript:void(0)\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
-        $out .= "   onclick='NuApp.loadModule({$jsCode}); return false;'>\n";
+        // Use javascript:void(0) as href so no hashchange event fires
+        $out  = "<a href=\"javascript:void(0)\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"{$openModeAttr}\n";
+        $out .= "   onclick=\"NuApp.loadModule('{$moduleSafe}', '{$openMode}'); return false;\">\n";
         $out .= self::svgIcon($svgBody);
         $out .= "  <span>{$label}</span>\n";
         $out .= "</a>\n";
