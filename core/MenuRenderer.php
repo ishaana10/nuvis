@@ -15,8 +15,6 @@ declare(strict_types=1);
 class NuMenuRenderer
 {
     // ── SVG icon library ──────────────────────────────────────────────────────
-    // Keyed by menu_icon value stored in nu_menus.
-    // Extend as needed; unknown icons fall back to a generic circle.
     private static array $icons = [
         'dashboard' => '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
         'forms'     => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
@@ -25,7 +23,7 @@ class NuMenuRenderer
         'menus'     => '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
         'users'     => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
         'roles'     => '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
-        'audit'     => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/><circle cx="17" cy="17" r="3"/><line x1="21" y1="21" x2="19.1" y2="19.1"/>',
+        'audit'     => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><circle cx="17" cy="17" r="3"/><line x1="21" y1="21" x2="19.1" y2="19.1"/>',
         'files'     => '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
         'workflow'  => '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
         'calendar'  => '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
@@ -107,9 +105,9 @@ class NuMenuRenderer
     // ── Render a single top-level item (with optional children) ───────────────
     private static function renderItem(array $item, array $kids): string
     {
-        $type   = $item['menu_type'];
-        $label  = htmlspecialchars((string)$item['menu_label'], ENT_QUOTES, 'UTF-8');
-        $target = htmlspecialchars((string)$item['menu_target'], ENT_QUOTES, 'UTF-8');
+        $type    = $item['menu_type'];
+        $label   = htmlspecialchars((string)$item['menu_label'],  ENT_QUOTES, 'UTF-8');
+        $target  = htmlspecialchars((string)$item['menu_target'], ENT_QUOTES, 'UTF-8');
         $iconKey = strtolower(trim($item['menu_icon'] ?? 'default'));
         $svgBody = self::$icons[$iconKey] ?? self::$icons['default'];
 
@@ -141,15 +139,18 @@ class NuMenuRenderer
         }
 
         // ── Standard module items (form / report / query) ─────────────────────
-        $module = htmlspecialchars($type,   ENT_QUOTES, 'UTF-8');
-        $code   = htmlspecialchars($target, ENT_QUOTES, 'UTF-8');
+        // IMPORTANT: menu_target holds the module slug (e.g. 'menus', 'errorlog',
+        // 'dashboard'). We pass the TARGET — not the type — to NuApp.loadModule()
+        // so the correct module file (modules/{target}/{target}.php) is fetched.
+        // Using menu_type here caused every item to load modules/form/form.php → 403.
+        $module = $target; // slug used by loadModule() and data-module for active highlight
 
-        $hasKids    = !empty($kids);
-        $itemClass  = 'nu-nav-item' . ($hasKids ? ' nu-nav-item--has-children' : '');
-        $ariaExp    = $hasKids ? ' aria-expanded="false"' : '';
+        $hasKids   = !empty($kids);
+        $itemClass = 'nu-nav-item' . ($hasKids ? ' nu-nav-item--has-children' : '');
+        $ariaExp   = $hasKids ? ' aria-expanded="false"' : '';
 
-        $out  = "<a href=\"#{$code}\" class=\"{$itemClass}\" data-module=\"{$module}\" data-target=\"{$code}\"\n";
-        $out .= "   onclick=\"NuApp.loadModule('{$module}','{$code}'); return false;\"{$ariaExp}>\n";
+        $out  = "<a href=\"#{$module}\" class=\"{$itemClass}\" data-module=\"{$module}\"\n";
+        $out .= "   onclick=\"NuApp.loadModule('{$module}'); return false;\"{$ariaExp}>\n";
         $out .= self::svgIcon($svgBody);
         $out .= "  <span>{$label}</span>\n";
         if ($hasKids) {
