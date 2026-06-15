@@ -3,6 +3,16 @@ declare(strict_types=1);
 /**
  * NuMenuRenderer
  * Renders the sidebar <nav> from nu_menus, filtered by the current user's role.
+ *
+ * menu_open_mode format (stored in DB, configured per item in menus.php editor):
+ *   "<display>|<view>"  e.g.  "inline|browse"  "popup|preview"  "inline|preview"
+ *
+ *   display : inline | popup
+ *   view    : browse | preview
+ *
+ * The sidebar just renders a single <button> or <a> per item using the saved
+ * mode — no dropdown, no extra action buttons.  All mode selection happens in
+ * the menu editor (menus.php) at setup time, not at runtime in the sidebar.
  */
 class NuMenuRenderer
 {
@@ -37,7 +47,7 @@ class NuMenuRenderer
         'default'    => '<circle cx="12" cy="12" r="9"/>',
     ];
 
-    // Types that render the form-action sub-buttons instead of loadModule
+    // Types that open a form action (vs loadModule)
     private static array $formTypes = ['form'];
 
     public static function render(?array $currentUser): string
@@ -53,7 +63,7 @@ class NuMenuRenderer
                         COALESCE(menu_code,   '') AS menu_code,
                         menu_parent_id, menu_order, menu_roles,
                         menu_active, menu_icon,
-                        COALESCE(menu_open_mode, 'inline') AS menu_open_mode
+                        COALESCE(menu_open_mode, 'inline|browse') AS menu_open_mode
                  FROM   nu_menus
                  WHERE  menu_active = 1
                  ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
@@ -68,7 +78,7 @@ class NuMenuRenderer
                             COALESCE(menu_code,   '') AS menu_code,
                             menu_parent_id, menu_order, menu_roles,
                             menu_active, menu_icon,
-                            'inline' AS menu_open_mode
+                            'inline|browse' AS menu_open_mode
                      FROM   nu_menus
                      WHERE  menu_active = 1
                      ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
@@ -116,7 +126,12 @@ class NuMenuRenderer
         $label    = htmlspecialchars((string)$item['menu_label'], ENT_QUOTES, 'UTF-8');
         $iconKey  = strtolower(trim($item['menu_icon'] ?? 'default'));
         $svgBody  = self::$icons[$iconKey] ?? self::$icons['default'];
-        $openMode = trim($item['menu_open_mode'] ?? 'inline');
+
+        // Parse saved open_mode: "<display>|<view>"  e.g. "inline|browse"
+        $rawMode  = trim($item['menu_open_mode'] ?? 'inline|browse');
+        $modeParts = explode('|', $rawMode);
+        $display  = isset($modeParts[0]) && $modeParts[0] !== '' ? $modeParts[0] : 'inline';
+        $view     = isset($modeParts[1]) && $modeParts[1] !== '' ? $modeParts[1] : 'browse';
 
         if ($type === 'divider') {
             return "<hr class=\"nu-nav-divider\">\n";
@@ -125,7 +140,7 @@ class NuMenuRenderer
         $rawTarget = trim($item['menu_target'] ?? '');
         $rawCode   = trim($item['menu_code']   ?? '');
 
-        // ── Group: collapsible, toggle-only ──────────────────────────────────
+        // ── Group: collapsible section, toggle-only ───────────────────────────
         if (!empty($kids)) {
             $groupId = 'nu-group-' . (int)$item['menu_id'];
 
@@ -156,72 +171,43 @@ class NuMenuRenderer
             return $out;
         }
 
-        // ── Resolve the code/target ───────────────────────────────────────────
+        // ── Resolve the module code ───────────────────────────────────────────
         $module = $rawCode !== '' ? $rawCode : $rawTarget;
         if ($module === '') {
             return "<!-- nu_menus id={$item['menu_id']} skipped: no target or code -->\n";
         }
 
-        // JS-safe string literals for inline onclick handlers
-        // Using JSON encoding so any quote/special chars in code or label are
-        // automatically escaped for safe embedding inside a double-quoted HTML attribute.
+        // JS-safe string literals
         $jsCode  = json_encode($module, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
         $jsLabel = json_encode((string)$item['menu_label'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
-
-        // HTML-safe value for data attributes
         $moduleSafe = htmlspecialchars($module, ENT_QUOTES, 'UTF-8');
 
-        // ── Form type: inline label + action dropdown ─────────────────────────
-        // Uses the SAME global function signatures as the working buttons:
-        //   browseForm(code, mode, filter, label, display)  — mode=1 means browse
-        //   previewForm(code, label)
-        // display arg: 'inline' | 'popup'  (nubuilder native terminology)
+        // ── Form type: single button, opens using the saved mode ──────────────
+        //
+        // The mode was configured in the menu editor (menus.php):
+        //   display = inline | popup
+        //   view    = browse | preview
+        //
+        // browse  → browseForm(code, 1, '', label, display)
+        // preview → previewForm(code, label)   [always opens in its own panel]
+        //
+        // NO dropdown, NO extra action buttons here.
+        // All mode selection is done at setup time in menus.php, not at runtime.
         if (in_array($type, self::$formTypes, true)) {
+            $jsDisplay = json_encode($display, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
 
-            // Map menu_open_mode to nubuilder browseForm display arg
-            $primaryDisplay = ($openMode === 'popup' || $openMode === 'modal') ? 'popup' : 'inline';
-            $jsPrimaryDisplay = json_encode($primaryDisplay, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+            if ($view === 'preview') {
+                $onclick = "window.previewForm && previewForm({$jsCode},{$jsLabel}); return false;";
+            } else {
+                // browse (default)
+                $onclick = "window.browseForm && browseForm({$jsCode},1,'',{$jsLabel},{$jsDisplay}); return false;";
+            }
 
-            $closeDropdown = "this.closest('.nu-nav-form-dropdown').classList.remove('open');";
-
-            $out  = "<div class=\"nu-nav-form-item\" data-module=\"{$moduleSafe}\">\n";
-
-            // Primary label button — opens in the configured default mode
-            $out .= "  <button type=\"button\" class=\"nu-nav-item nu-nav-form-primary\"\n";
-            $out .= "          onclick=\"window.browseForm && browseForm({$jsCode},1,'',{$jsLabel},{$jsPrimaryDisplay}); return false;\">\n";
+            $out  = "<button type=\"button\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
+            $out .= "        onclick=\"{$onclick}\">\n";
             $out .= self::svgIcon($svgBody);
-            $out .= "    <span>{$label}</span>\n";
-            $out .= "  </button>\n";
-
-            // Chevron — toggles the dropdown
-            $out .= "  <button type=\"button\" class=\"nu-nav-form-chevron\" aria-label=\"Open form actions\"\n";
-            $out .= "          onclick=\"event.stopPropagation(); this.closest('.nu-nav-form-item').querySelector('.nu-nav-form-dropdown').classList.toggle('open');\">\n";
-            $out .= "    <svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"6 9 12 15 18 9\"/></svg>\n";
-            $out .= "  </button>\n";
-
-            // Dropdown
-            $out .= "  <div class=\"nu-nav-form-dropdown\">\n";
-
-            // Browse Inline — browseForm(code, 1, '', label, 'inline')
-            $out .= "    <button type=\"button\" class=\"nu-nav-form-action\"\n";
-            $out .= "            onclick=\"window.browseForm && browseForm({$jsCode},1,'',{$jsLabel},'inline'); {$closeDropdown}\">\n";
-            $out .= "      &#8862;&nbsp;Browse Inline\n";
-            $out .= "    </button>\n";
-
-            // Browse Popup — browseForm(code, 1, '', label, 'popup')
-            $out .= "    <button type=\"button\" class=\"nu-nav-form-action\"\n";
-            $out .= "            onclick=\"window.browseForm && browseForm({$jsCode},1,'',{$jsLabel},'popup'); {$closeDropdown}\">\n";
-            $out .= "      &#9634;&nbsp;Browse Popup\n";
-            $out .= "    </button>\n";
-
-            // Preview Form — previewForm(code, label)
-            $out .= "    <button type=\"button\" class=\"nu-nav-form-action\"\n";
-            $out .= "            onclick=\"window.previewForm && previewForm({$jsCode},{$jsLabel}); {$closeDropdown}\">\n";
-            $out .= "      &#9654;&nbsp;Preview Form\n";
-            $out .= "    </button>\n";
-
-            $out .= "  </div>\n";
-            $out .= "</div>\n";
+            $out .= "  <span>{$label}</span>\n";
+            $out .= "</button>\n";
             return $out;
         }
 
