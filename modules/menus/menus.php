@@ -14,9 +14,6 @@ foreach ($menus as $m) {
     $pid = (int)($m['menu_parent_id'] ?? 0);
     $menuMap[$pid][] = $m;
 }
-
-// API base path — relative to app root (used in JS fetch calls)
-$apiBase = 'modules/menus/api/menus.php';
 ?>
 
 <style>
@@ -264,17 +261,18 @@ $apiBase = 'modules/menus/api/menus.php';
 
       <div class="nb-fp" id="menuTargetWrap">
         <label id="menuTargetLabel">Form</label>
+        <!-- All forms/reports in one select — filtering by type is done in JS but options are NEVER hidden -->
         <select id="menuTargetSelect" class="nu-input">
           <option value="">-- select --</option>
           <?php foreach ($forms as $f): ?>
           <option value="<?= htmlspecialchars($f['form_code'], ENT_QUOTES) ?>"
-                  data-type="<?= htmlspecialchars($f['form_type'], ENT_QUOTES) ?>">
+                  data-type="<?= htmlspecialchars($f['form_type'] ?? 'form', ENT_QUOTES) ?>">
             <?= htmlspecialchars($f['form_name']) ?> (<?= htmlspecialchars($f['form_code']) ?>)
           </option>
           <?php endforeach; ?>
         </select>
-        <input type="text" id="menuTargetUrl"  class="nu-input" placeholder="https://"       style="display:none;">
-        <input type="text" id="menuTargetCode" class="nu-input" placeholder="query_code"     style="display:none;">
+        <input type="text" id="menuTargetUrl"  class="nu-input" placeholder="https://"    style="display:none;">
+        <input type="text" id="menuTargetCode" class="nu-input" placeholder="query_code"  style="display:none;">
       </div>
 
       <div class="nb-fp">
@@ -282,7 +280,6 @@ $apiBase = 'modules/menus/api/menus.php';
         <select id="menuParent" class="nu-input">
           <option value="0">-- Top Level --</option>
           <?php
-          // Only top-level non-divider items can be parents — use $menuMap[0] to avoid duplicates
           foreach ($menuMap[0] ?? [] as $pm):
             if (($pm['menu_type'] ?? '') === 'divider') continue;
           ?>
@@ -350,7 +347,6 @@ $apiBase = 'modules/menus/api/menus.php';
 if (!window._nbMenusModuleInit) {
   window._nbMenusModuleInit = true;
 
-  // API path — resolved relative to the app root by NuApp's fetch base
   var NU_MENUS_API = 'modules/menus/api/menus.php';
 
   window.nuMenuBuilder = {
@@ -367,6 +363,9 @@ if (!window._nbMenusModuleInit) {
       document.getElementById('menuIconCustom').value = '';
       document.getElementById('editMenuIcon').value   = '\u2630';
       document.getElementById('menuParent').value     = parentId || 0;
+      document.getElementById('menuTargetSelect').value = '';
+      document.getElementById('menuTargetUrl').value    = '';
+      document.getElementById('menuTargetCode').value   = '';
       this.selectType('form', document.querySelector('.nb-mtype-card'));
       document.querySelectorAll('.nb-icon-btn').forEach(function(b){ b.classList.remove('selected'); });
       var fb = document.querySelector('.nb-icon-btn');
@@ -388,7 +387,9 @@ if (!window._nbMenusModuleInit) {
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (!d.success) { alert(d.message || 'Could not load item.'); return; }
-          var m = d.menu;
+          var m    = d.menu;
+          var type = m.menu_type || 'form';
+
           document.getElementById('editMenuId').value       = m.menu_id;
           document.getElementById('editMenuParentId').value = m.menu_parent_id || 0;
           document.getElementById('menuBuilderTitle').textContent = 'Edit: ' + m.menu_label;
@@ -397,48 +398,64 @@ if (!window._nbMenusModuleInit) {
           document.getElementById('menuRoles').value    = m.menu_role_access || '';
           document.getElementById('menuActive').checked = (m.menu_active == 1);
           document.getElementById('menuParent').value   = m.menu_parent_id || 0;
-          self.selectType(m.menu_type || 'form',
-            document.querySelector('.nb-mtype-card[onclick*=\"\'' + (m.menu_type || 'form') + '\'\"]'));
-          var type = m.menu_type || 'form';
+
+          // ── KEY FIX: call selectType FIRST to show the right input,
+          //             then set the value AFTER so it is never overwritten
+          var typeCard = document.querySelector('.nb-mtype-card[onclick*="\'' + type + '\'"]');
+          self.selectType(type, typeCard);
+
+          // Now set target value into whichever input is visible
+          var target = m.menu_target || '';
           if (type === 'url') {
-            document.getElementById('menuTargetUrl').value  = m.menu_target || '';
+            document.getElementById('menuTargetUrl').value  = target;
           } else if (type === 'query') {
-            document.getElementById('menuTargetCode').value = m.menu_target || '';
+            document.getElementById('menuTargetCode').value = target;
           } else {
-            document.getElementById('menuTargetSelect').value = m.menu_target || '';
+            // form or report — set select value AFTER selectType() has run
+            // All options remain visible (no display:none filtering) so .value always works
+            document.getElementById('menuTargetSelect').value = target;
           }
+
           var icon = m.menu_icon || '\u2630';
           document.getElementById('editMenuIcon').value   = icon;
           document.getElementById('menuIconCustom').value = icon;
           document.querySelectorAll('.nb-icon-btn').forEach(function(b) {
             b.classList.toggle('selected', b.dataset.icon === icon);
           });
+
           document.getElementById('menuListSection').style.display = 'none';
           document.getElementById('menuBuilderCard').style.display = '';
         })
         .catch(function(e) { console.error(e); alert('Network error loading menu item.'); });
     },
 
+    // ── selectType: show the correct target input.
+    //    Options in menuTargetSelect are NEVER hidden — hiding them
+    //    causes .value assignment to silently fail in all browsers.
     selectType: function(type, card) {
       document.querySelectorAll('.nb-mtype-card').forEach(function(c){ c.classList.remove('selected'); });
       if (card) card.classList.add('selected');
       var radio = document.querySelector('input[name="menuItemType"][value="' + type + '"]');
       if (radio) radio.checked = true;
+
       var labelEl = document.getElementById('menuTargetLabel');
       var selEl   = document.getElementById('menuTargetSelect');
       var urlEl   = document.getElementById('menuTargetUrl');
       var codeEl  = document.getElementById('menuTargetCode');
       var wrapEl  = document.getElementById('menuTargetWrap');
-      selEl.style.display = 'none';
-      urlEl.style.display = 'none';
+
+      // Always reset all inputs first
+      selEl.style.display  = 'none';
+      urlEl.style.display  = 'none';
       codeEl.style.display = 'none';
+
       if (type === 'form' || type === 'report') {
         wrapEl.style.display = '';
         labelEl.textContent  = (type === 'form') ? 'Form' : 'Report';
         selEl.style.display  = '';
+        // Show ALL options — do NOT hide any. Browser .value = x only works on visible options.
         Array.from(selEl.options).forEach(function(opt) {
-          if (!opt.value) return;
-          opt.style.display = (opt.dataset.type === type) ? '' : 'none';
+          opt.style.display = '';
         });
       } else if (type === 'query') {
         wrapEl.style.display = '';
@@ -449,6 +466,7 @@ if (!window._nbMenusModuleInit) {
         labelEl.textContent  = 'URL';
         urlEl.style.display  = '';
       } else {
+        // group / divider — no target needed
         wrapEl.style.display = 'none';
       }
     },
@@ -477,8 +495,8 @@ if (!window._nbMenusModuleInit) {
       var active = document.getElementById('menuActive').checked ? 1 : 0;
       var icon   = document.getElementById('editMenuIcon').value || '\u2630';
       var target = '';
-      if (type === 'url')         target = document.getElementById('menuTargetUrl').value.trim();
-      else if (type === 'query')  target = document.getElementById('menuTargetCode').value.trim();
+      if (type === 'url')                          target = document.getElementById('menuTargetUrl').value.trim();
+      else if (type === 'query')                   target = document.getElementById('menuTargetCode').value.trim();
       else if (type === 'form' || type === 'report') target = document.getElementById('menuTargetSelect').value;
       if (!label && type !== 'divider') { document.getElementById('menuLabel').focus(); return; }
       var payload = { id: id, type: type, label: label, target: target,
@@ -521,39 +539,36 @@ if (!window._nbMenusModuleInit) {
   // ── Drag-to-reorder ────────────────────────────────────────────
   (function() {
     var dragging = null;
-    function bindDrag() {
-      document.querySelectorAll('.nb-menu-item[draggable]').forEach(function(el) {
-        el.addEventListener('dragstart', function(e) {
-          dragging = el; el.style.opacity = '.4';
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        el.addEventListener('dragend', function() {
-          el.style.opacity = '';
-          document.querySelectorAll('.nb-menu-item').forEach(function(r){ r.classList.remove('drag-over'); });
-          dragging = null;
-        });
-        el.addEventListener('dragover',  function(e) { e.preventDefault(); if (el !== dragging) el.classList.add('drag-over'); });
-        el.addEventListener('dragleave', function()  { el.classList.remove('drag-over'); });
-        el.addEventListener('drop', function(e) {
-          e.preventDefault(); el.classList.remove('drag-over');
-          if (!dragging || dragging === el) return;
-          var tree  = document.getElementById('menuTree');
-          var nodes = Array.from(tree.children).filter(function(n){ return n.classList.contains('nb-menu-item'); });
-          var fi = nodes.indexOf(dragging), ti = nodes.indexOf(el);
-          if (fi < 0 || ti < 0) return;
-          if (fi < ti) el.after(dragging); else el.before(dragging);
-          var ordered = Array.from(tree.querySelectorAll('.nb-menu-item')).map(function(n, i){
-            return { id: n.dataset.id, order: i };
-          });
-          fetch(NU_MENUS_API + '?action=reorder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: ordered })
-          }).catch(function(err){ console.warn('reorder:', err); });
-        });
+    document.querySelectorAll('.nb-menu-item[draggable]').forEach(function(el) {
+      el.addEventListener('dragstart', function(e) {
+        dragging = el; el.style.opacity = '.4';
+        e.dataTransfer.effectAllowed = 'move';
       });
-    }
-    bindDrag();
+      el.addEventListener('dragend', function() {
+        el.style.opacity = '';
+        document.querySelectorAll('.nb-menu-item').forEach(function(r){ r.classList.remove('drag-over'); });
+        dragging = null;
+      });
+      el.addEventListener('dragover',  function(e) { e.preventDefault(); if (el !== dragging) el.classList.add('drag-over'); });
+      el.addEventListener('dragleave', function()  { el.classList.remove('drag-over'); });
+      el.addEventListener('drop', function(e) {
+        e.preventDefault(); el.classList.remove('drag-over');
+        if (!dragging || dragging === el) return;
+        var tree  = document.getElementById('menuTree');
+        var nodes = Array.from(tree.children).filter(function(n){ return n.classList.contains('nb-menu-item'); });
+        var fi = nodes.indexOf(dragging), ti = nodes.indexOf(el);
+        if (fi < 0 || ti < 0) return;
+        if (fi < ti) el.after(dragging); else el.before(dragging);
+        var ordered = Array.from(tree.querySelectorAll('.nb-menu-item')).map(function(n, i){
+          return { id: n.dataset.id, order: i };
+        });
+        fetch(NU_MENUS_API + '?action=reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: ordered })
+        }).catch(function(err){ console.warn('reorder:', err); });
+      });
+    });
   })();
 
 }
