@@ -6,7 +6,6 @@ declare(strict_types=1);
  */
 class NuMenuRenderer
 {
-    // ── SVG icon library ──────────────────────────────────────────────────────
     private static array $icons = [
         'dashboard'  => '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
         'forms'      => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
@@ -112,7 +111,6 @@ class NuMenuRenderer
         $iconKey = strtolower(trim($item['menu_icon'] ?? 'default'));
         $svgBody = self::$icons[$iconKey] ?? self::$icons['default'];
 
-        // ── Divider ───────────────────────────────────────────────────────────
         if ($type === 'divider') {
             return "<hr class=\"nu-nav-divider\">\n";
         }
@@ -120,17 +118,33 @@ class NuMenuRenderer
         $rawTarget = trim($item['menu_target'] ?? '');
         $rawCode   = trim($item['menu_code']   ?? '');
 
-        // ── Pure group (collapsible section header — no loadModule) ───────────
         $isGroup = ($type === 'group') || ($rawTarget === '' && $rawCode === '' && !empty($kids));
 
-        if ($isGroup) {
-            $groupId = 'nu-group-' . (int)$item['menu_id'];
+        // ── Any item with children (pure group OR module-with-kids) uses identical
+        //    nu-nav-group structure so the same toggle JS handles both. ───────────
+        if ($isGroup || !empty($kids)) {
+            $groupId    = 'nu-group-' . (int)$item['menu_id'];
+            $moduleSafe = '';
+            if (!$isGroup) {
+                $module = $rawTarget !== '' ? $rawTarget : $rawCode;
+                if ($module !== '') {
+                    $moduleSafe = htmlspecialchars($module, ENT_QUOTES, 'UTF-8');
+                }
+            }
+
             $out  = "<div class=\"nu-nav-group\">\n";
-            $out .= "  <button class=\"nu-nav-group-label\" ";
-            $out .= "type=\"button\" aria-expanded=\"true\" aria-controls=\"{$groupId}\">";
+            // Single button — handles both toggle AND optional loadModule.
+            // data-module attribute lets the JS (or active-state logic) identify it.
+            $out .= "  <button class=\"nu-nav-group-label\" type=\"button\"";
+            $out .= " aria-expanded=\"true\" aria-controls=\"{$groupId}\"";
+            if ($moduleSafe !== '') {
+                $out .= " data-module=\"{$moduleSafe}\"";
+                $out .= " onclick=\"NuApp.loadModule('{$moduleSafe}')\"";
+            }
+            $out .= ">\n";
             $out .= self::svgIcon($svgBody);
-            $out .= "  <span>{$label}</span>";
-            $out .= "  <svg class=\"nu-nav-chevron\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"6 9 12 15 18 9\"/></svg>";
+            $out .= "  <span>{$label}</span>\n";
+            $out .= "  <svg class=\"nu-nav-chevron\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"6 9 12 15 18 9\"/></svg>\n";
             $out .= "</button>\n";
             $out .= "  <ul class=\"nu-nav-children\" id=\"{$groupId}\">\n";
             foreach ($kids as $child) {
@@ -141,7 +155,7 @@ class NuMenuRenderer
             return $out;
         }
 
-        // ── URL item (external link) ──────────────────────────────────────────
+        // ── URL item ─────────────────────────────────────────────────────────────
         if ($type === 'url') {
             $href = htmlspecialchars($rawTarget ?: $rawCode ?: '#', ENT_QUOTES, 'UTF-8');
             $out  = "<a href=\"{$href}\" class=\"nu-nav-item\" target=\"_blank\" rel=\"noopener noreferrer\">\n";
@@ -151,49 +165,18 @@ class NuMenuRenderer
             return $out;
         }
 
-        // ── Standard module item (form / report / query) ──────────────────────
+        // ── Standard leaf item ──────────────────────────────────────────────────
         $module = $rawTarget !== '' ? $rawTarget : $rawCode;
-
         if ($module === '') {
             return "<!-- nu_menus id={$item['menu_id']} skipped: no target or code -->\n";
         }
-
         $moduleSafe = htmlspecialchars($module, ENT_QUOTES, 'UTF-8');
-        $hasKids    = !empty($kids);
 
-        // ── Standard item WITHOUT children — plain <a> ────────────────────────
-        if (!$hasKids) {
-            $out  = "<a href=\"#{$moduleSafe}\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
-            $out .= "   onclick=\"NuApp.loadModule('{$moduleSafe}'); return false;\">\n";
-            $out .= self::svgIcon($svgBody);
-            $out .= "  <span>{$label}</span>\n";
-            $out .= "</a>\n";
-            return $out;
-        }
-
-        // ── Standard item WITH children — wrap in nu-nav-group so toggle works ─
-        // The parent link row uses a <button> for the toggle chevron, plus a
-        // separate <a> for the actual module navigation, keeping both behaviours.
-        $groupId = 'nu-group-' . (int)$item['menu_id'];
-        $out  = "<div class=\"nu-nav-group\">\n";
-        // Top row: icon + label navigates to module; chevron button toggles children
-        $out .= "  <div class=\"nu-nav-item nu-nav-item--has-children\" data-module=\"{$moduleSafe}\">\n";
-        $out .= "    <a href=\"#{$moduleSafe}\" class=\"nu-nav-item-link\"\n";
-        $out .= "       onclick=\"NuApp.loadModule('{$moduleSafe}'); return false;\">\n";
+        $out  = "<a href=\"#{$moduleSafe}\" class=\"nu-nav-item\" data-module=\"{$moduleSafe}\"\n";
+        $out .= "   onclick=\"NuApp.loadModule('{$moduleSafe}'); return false;\">\n";
         $out .= self::svgIcon($svgBody);
-        $out .= "      <span>{$label}</span>\n";
-        $out .= "    </a>\n";
-        $out .= "    <button class=\"nu-nav-chevron-btn\" type=\"button\"\n";
-        $out .= "            aria-expanded=\"true\" aria-controls=\"{$groupId}\">\n";
-        $out .= "      <svg class=\"nu-nav-chevron\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"6 9 12 15 18 9\"/></svg>\n";
-        $out .= "    </button>\n";
-        $out .= "  </div>\n";
-        $out .= "  <ul class=\"nu-nav-children\" id=\"{$groupId}\">\n";
-        foreach ($kids as $child) {
-            $out .= "    <li>" . self::renderItem($child, []) . "</li>\n";
-        }
-        $out .= "  </ul>\n";
-        $out .= "</div>\n";
+        $out .= "  <span>{$label}</span>\n";
+        $out .= "</a>\n";
         return $out;
     }
 
