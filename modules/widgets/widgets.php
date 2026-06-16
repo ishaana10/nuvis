@@ -74,11 +74,15 @@ function wu_type_accent(string $type): string {
 }
 
 /**
- * Golden-angle HSL color — unique hue for each index, works for any number of roles.
+ * Golden-angle HSL — unique, well-distributed hue for each index.
+ * Works for any number of roles (2, 6, 20, 100…).
+ * Returns both a base and a slightly-darker shade for a subtle gradient.
  */
-function wu_role_color(int $index): string {
-    $hue = fmod($index * 137.508, 360);
-    return 'hsl(' . round($hue) . ',52%,34%)';
+function wu_role_color(int $index): array {
+    $hue     = fmod($index * 137.508, 360);
+    $base    = 'hsl(' . round($hue) . ',52%,34%)';
+    $darker  = 'hsl(' . round($hue) . ',52%,26%)';
+    return ['base' => $base, 'darker' => $darker];
 }
 
 function wu_empty_hint(int $wid): string {
@@ -243,21 +247,39 @@ $roleGroups     = [];
 $roleNames      = [];
 
 if ($showRoleGroups) {
-    // 1. Fetch ALL roles → seed every role as an empty bucket
+    // 1. Fetch ALL roles → seed every role as an empty bucket.
+    //    Try common column name variants so it works across different schema versions.
     try {
-        $rRows = $db->fetchAll('SELECT role_code, role_name FROM nu_roles ORDER BY role_name');
-        foreach ($rRows as $r) {
-            if (strtolower($r['role_code']) !== 'globeadmin') {
-                $roleNames[$r['role_code']]  = $r['role_name'];
-                $roleGroups[$r['role_code']] = [];
+        $rRows = [];
+        foreach (['SELECT role_code, role_name FROM nu_roles ORDER BY role_name',
+                  'SELECT code AS role_code, name AS role_name FROM nu_roles ORDER BY name',
+                  'SELECT role_code, role_name FROM nu_roles ORDER BY role_code'] as $q) {
+            try {
+                $rRows = $db->fetchAll($q);
+                if (!empty($rRows) && isset($rRows[0]['role_code'])) break;
+            } catch (Throwable $inner) {
+                $rRows = [];
             }
         }
-    } catch (Throwable $e) {}
+        foreach ($rRows as $r) {
+            $code = $r['role_code'] ?? '';
+            $name = $r['role_name'] ?? ucfirst($code);
+            if ($code === '' || strtolower($code) === 'globeadmin') continue;
+            $roleNames[$code]  = $name;
+            $roleGroups[$code] = [];
+        }
+    } catch (Throwable $e) {
+        error_log('[widgets] roles fetch: ' . $e->getMessage());
+    }
 
     // 2. Fill buckets with actual widgets
     foreach ($widgets as $w) {
         $isRoleWgt = ($w['widget_user_id'] === null || $w['widget_user_id'] === '');
         $key = $isRoleWgt ? ($w['widget_role'] ?? 'unassigned') : '__personal__';
+        if (!isset($roleGroups[$key])) {
+            $roleGroups[$key] = [];
+            if (!isset($roleNames[$key])) $roleNames[$key] = ucfirst($key);
+        }
         $roleGroups[$key][] = $w;
     }
 
@@ -530,7 +552,9 @@ $groupIdx = 0;
 
 <?php foreach ($roleGroups as $groupKey => $groupWidgets):
     $isNamedGroup = ($showRoleGroups && $groupKey !== '__personal__');
-    $accentCss    = wu_role_color($groupIdx++);
+    $colors       = wu_role_color($groupIdx++);
+    $accentBase   = $colors['base'];
+    $accentDarker = $colors['darker'];
     $displayRole  = htmlspecialchars($roleNames[$groupKey] ?? ucfirst($groupKey));
     $roleCode     = htmlspecialchars($groupKey);
     $widgetCount  = count($groupWidgets);
@@ -542,7 +566,7 @@ $groupIdx = 0;
     <div
         class="nu-role-group-header"
         onclick="nuDash.toggleGroup('<?= $groupBodyId ?>', '<?= $roleCode ?>')"
-        style="background:<?= $accentCss ?>;">
+        style="background:linear-gradient(135deg,<?= $accentBase ?> 0%,<?= $accentDarker ?> 100%);">
         <svg id="<?= $groupBodyId ?>_chevron" class="nu-group-chevron" width="16" height="16"
              viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5">
             <polyline points="6 9 12 15 18 9"/>
@@ -693,16 +717,16 @@ $groupIdx = 0;
             <input class="nu-input" id="nuWTitle" placeholder="e.g. Pending Tasks" oninput="nuDash.updateIconPreview()">
         </div>
         <div class="nu-field" style="min-width:0;">
-            <label class="nu-label">Icon</label>
+            <label class="nu-label">Icon <small style="color:#888;font-weight:400;">(FA or emoji)</small></label>
             <div style="display:flex;gap:6px;align-items:center;">
-                <input class="nu-input" id="nuWIcon" placeholder="fa-clock or emoji"
-                       style="width:130px;font-size:.875rem;"
-                       oninput="nuDash.updateIconPreview()" readonly
-                       title="Click Pick to choose a Font Awesome icon">
+                <input class="nu-input" id="nuWIcon" placeholder="fa-clock or 📋"
+                       style="width:140px;font-size:.875rem;"
+                       oninput="nuDash.updateIconPreview()"
+                       title="Type an emoji, or use Pick to choose a Font Awesome icon">
                 <button class="nu-btn nu-btn-ghost nu-btn-sm" type="button" onclick="nuDash.openFaPicker()" title="Browse Font Awesome icons">
                     <i class="fas fa-icons"></i> Pick
                 </button>
-                <button class="nu-btn nu-btn-ghost nu-btn-sm" type="button" onclick="nuDash.clearIcon()" title="Clear icon">&times;</button>
+                <button class="nu-btn nu-btn-ghost nu-btn-sm" type="button" onclick="nuDash.clearIcon()" title="Clear icon" style="color:#a12c7b;">&times;</button>
             </div>
         </div>
     </div>

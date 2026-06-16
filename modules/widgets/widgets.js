@@ -9,7 +9,6 @@
   var WIDGET_DATA = window.NUDASH_WIDGET_DATA || {};
 
   // ── Font Awesome icon list (solid set — common icons) ─────────────────────
-  // Format: ['class-without-fa-prefix', 'label']
   var FA_ICONS = [
     ['fa-house','home'],['fa-user','user'],['fa-users','users'],['fa-gear','settings'],
     ['fa-bell','bell'],['fa-bookmark','bookmark'],['fa-calendar','calendar'],
@@ -68,7 +67,6 @@
   ];
 
   var _faFilterVal = '';
-  var _faCallback  = null;
 
   function initCharts() {
     document.querySelectorAll('[data-chartjs]').forEach(function (canvas) {
@@ -198,7 +196,7 @@
       var current = (document.getElementById('nuWIcon') || {}).value || '';
       var html = '';
       FA_ICONS.forEach(function (item) {
-        var cls   = item[0]; // e.g. 'fa-clock'
+        var cls   = item[0];
         var label = item[1];
         if (filter && cls.indexOf(filter) === -1 && label.indexOf(filter) === -1) return;
         var isSelected = (current === cls) ? ' nu-selected' : '';
@@ -211,12 +209,11 @@
       grid.innerHTML = html;
     },
 
+    // Picking an FA icon writes the class into the field and closes the picker.
+    // The field itself is now editable so users can also type an emoji directly.
     selectFaIcon: function (cls) {
       var iconEl = document.getElementById('nuWIcon');
-      if (iconEl) {
-        iconEl.value = cls;
-        iconEl.readOnly = false; // allow clear
-      }
+      if (iconEl) iconEl.value = cls;
       this.closeFaPicker();
       this.updateIconPreview();
     },
@@ -238,14 +235,13 @@
       badge.style.background = accent;
       var iconHtml = '';
       if (iconVal) {
-        // FA class (starts with fa-) or emoji
         var isFa = iconVal.indexOf('fa-') !== -1;
         iconHtml = isFa
           ? '<i class="fas ' + iconVal + '" style="font-size:.9rem;"></i>'
           : '<span style="font-size:1rem;">' + iconVal + '</span>';
       }
       badge.innerHTML = (iconHtml ? iconHtml + ' ' : '') + title;
-      wrap.style.display = iconVal || title ? 'block' : 'none';
+      wrap.style.display = (iconVal || title) ? 'block' : 'none';
     },
 
     // ── Group toggle ───────────────────────────────────────────────────────
@@ -265,7 +261,7 @@
         });
       } else {
         body.style.maxHeight = body.scrollHeight + 'px';
-        body.offsetHeight; // force reflow
+        body.offsetHeight;
         body.classList.add('nu-group-collapsed');
         if (chevron) chevron.classList.add('nu-group-collapsed');
         setGroupCollapsed(roleCode, true);
@@ -290,7 +286,8 @@
         document.getElementById('nuWWidth').value  = String(w.widget_width  || 2);
         document.getElementById('nuWHeight').value = String(w.widget_height || 1);
         var iconEl = document.getElementById('nuWIcon');
-        if (iconEl) iconEl.value = w.widget_icon || '';
+        // widget_icon may be stored under different key names depending on API version
+        if (iconEl) iconEl.value = w.widget_icon || w.icon || '';
         this.onTypeChange();
         var sqlEl = document.getElementById('nuWSql');
         var subEl = document.getElementById('nuWSubtitle');
@@ -406,7 +403,8 @@
       var id         = document.getElementById('nuWid').value;
       var type       = document.getElementById('nuWType').value;
       var title      = (document.getElementById('nuWTitle').value||'').trim();
-      var icon       = ((document.getElementById('nuWIcon')||{}).value||'').trim();
+      var iconEl     = document.getElementById('nuWIcon');
+      var icon       = iconEl ? iconEl.value.trim() : '';
       var width      = parseInt(document.getElementById('nuWWidth').value,  10) || 2;
       var height     = parseInt(document.getElementById('nuWHeight').value, 10) || 1;
       var cfg        = this.buildConfig();
