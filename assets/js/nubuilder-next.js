@@ -199,7 +199,7 @@ window.NuApp = {
 
     // ── Form / report / query module → open-mode routing ───────────────────
     //
-    //  defaultView === 'preview'  → open the read-only form directly
+    //  defaultView === 'preview'  → open the blank new-entry form directly
     //    previewMode === 'popup'  → modal overlay
     //    previewMode === 'inline' → inside the content area
     //
@@ -209,10 +209,8 @@ window.NuApp = {
     //
     if (defaultView === 'preview') {
       if (previewMode === 'popup') {
-        // Read-only form in a modal — reuses existing previewForm modal path
         return this.previewForm(module, module, 'modal');
       } else {
-        // Read-only form inline in the content area
         return this._openFormInline(module, module, null, true);
       }
     } else {
@@ -394,6 +392,11 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       box.appendChild(formWrap);
 
+      // ── Stamp display-mode on the generated form so submitNuForm knows
+      //    to open a modal browse after save, not an inline one.
+      const formEl = box.querySelector('.nu-generated-form');
+      if (formEl) formEl.dataset.displayMode = 'modal';
+
       overlay.appendChild(box);
       document.body.appendChild(overlay);
       applySize(currentSize);
@@ -401,7 +404,6 @@ window.NuApp = {
 
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
-        const formEl = overlay.querySelector('.nu-generated-form');
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, true);
       }
     } catch (err) {
@@ -457,13 +459,16 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       box.appendChild(formWrap);
 
+      // ── Stamp display-mode so submitNuForm routes back correctly
+      const formEl = box.querySelector('.nu-generated-form');
+      if (formEl) formEl.dataset.displayMode = 'modal';
+
       overlay.appendChild(box);
       document.body.appendChild(overlay);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
-        const formEl = overlay.querySelector('.nu-generated-form');
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, false);
       }
     } catch (err) {
@@ -816,9 +821,12 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       container.appendChild(formWrap);
 
+      // ── Stamp display-mode so submitNuForm routes back to inline browse
+      const formEl = container.querySelector('.nu-generated-form');
+      if (formEl) formEl.dataset.displayMode = 'inline';
+
       this._dispatchFormOpened(container);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
-        const formEl = container.querySelector('.nu-generated-form');
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
       }
     } catch (err) {
@@ -860,9 +868,12 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       container.appendChild(formWrap);
 
+      // ── Stamp display-mode so submitNuForm routes back to fullpage browse
+      const formEl = container.querySelector('.nu-generated-form');
+      if (formEl) formEl.dataset.displayMode = 'fullpage';
+
       this._dispatchFormOpened(container);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
-        const formEl = container.querySelector('.nu-generated-form');
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
       }
     } catch (err) {
@@ -890,7 +901,7 @@ window.submitNuForm = async function (formElement) {
   if (!formElement) { NuApp.toast('Form element not found', 'error'); return; }
   const formCode    = formElement.dataset.formCode;
   const recordId    = formElement.dataset.recordId;
-  const displayMode = formElement.dataset.displayMode || 'modal';
+  const displayMode = formElement.dataset.displayMode || 'inline';
   const url = 'api/form.php?action=save&code=' + encodeURIComponent(formCode) +
     (recordId ? '&id=' + encodeURIComponent(recordId) : '');
   const formData = new FormData(formElement);
