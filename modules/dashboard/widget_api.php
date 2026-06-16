@@ -14,8 +14,7 @@ $role    = strtolower((string)($_SESSION['nu_role'] ?? ''));
 $isAdmin      = in_array($role, ['globeadmin', 'admin'], true);
 $isGlobeAdmin = ($role === 'globeadmin');
 
-// ── Auto-migrate: ensure widget_icon column exists ────────────────────────────
-// Runs a lightweight INFORMATION_SCHEMA check; actual ALTER only fires once ever.
+// ── Auto-migrate: ensure widget_icon column exists ────────────────────────
 try {
     $iconColExists = (bool)$db->fetchOne(
         "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
@@ -30,7 +29,6 @@ try {
                AFTER widget_title"
         );
     } else {
-        // Widen silently in case it was created as VARCHAR(60)
         $db->query(
             "ALTER TABLE nu_dashboard_widgets
                MODIFY COLUMN widget_icon VARCHAR(120) DEFAULT NULL"
@@ -49,7 +47,31 @@ function wu_safe_sql(string $sql, int $userId): string {
     return str_replace('{{user_id}}', (string)$userId, $sql);
 }
 
-// ── GET: list ─────────────────────────────────────────────────────────────────
+/**
+ * Build a WHERE clause that matches:
+ *  - personal widgets owned by $userId, OR
+ *  - role-level widgets (widget_user_id IS NULL) when $isAdmin is true
+ *
+ * This is the ROOT CAUSE fix: the old code used `widget_user_id=?` which
+ * never matches NULL rows, so updates/removes silently did nothing for
+ * role-level (seeded) widgets.
+ *
+ * Returns: [ 'sql' => string, 'params' => array ]
+ */
+function wu_ownership_clause(int $widgetId, int $userId, bool $isAdmin): array {
+    if ($isAdmin) {
+        return [
+            'sql'    => 'widget_id = ? AND (widget_user_id = ? OR widget_user_id IS NULL)',
+            'params' => [$widgetId, $userId],
+        ];
+    }
+    return [
+        'sql'    => 'widget_id = ? AND widget_user_id = ?',
+        'params' => [$widgetId, $userId],
+    ];
+}
+
+// ── GET: list ───────────────────────────────────────────────────────────
 if ($action === 'list') {
     $personal = $db->fetchAll(
         "SELECT * FROM nu_dashboard_widgets WHERE widget_user_id=? AND widget_active=1 ORDER BY widget_position",
@@ -63,7 +85,7 @@ if ($action === 'list') {
     wu_json(['widgets' => $roleWidgets ?: [], 'source' => 'role']);
 }
 
-// ── GET: list_roles ───────────────────────────────────────────────────────────
+// ── GET: list_roles ─────────────────────────────────────────────────────
 if ($action === 'list_roles') {
     if (!$isGlobeAdmin) wu_json(['error' => 'Forbidden']);
     try {
@@ -80,7 +102,7 @@ if ($action === 'list_roles') {
     }
 }
 
-// ── GET: list_tables ──────────────────────────────────────────────────────────
+// ── GET: list_tables ────────────────────────────────────────────────────
 if ($action === 'list_tables') {
     if (!$isAdmin) wu_json(['error' => 'Forbidden']);
     try {
@@ -90,7 +112,7 @@ if ($action === 'list_tables') {
     } catch (Throwable $e) { wu_json(['error' => $e->getMessage()]); }
 }
 
-// ── POST ──────────────────────────────────────────────────────────────────────
+// ── POST ──────────────────────────────────────────────────────────────────
 $body = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $body = json_decode(file_get_contents('php://input'), true) ?? $_POST;
@@ -134,9 +156,10 @@ if ($action === 'add') {
 
 if ($action === 'remove') {
     $id = (int)($body['id'] ?? 0);
+    $oc = wu_ownership_clause($id, $userId, $isAdmin);
     $db->query(
-        "UPDATE nu_dashboard_widgets SET widget_active=0 WHERE widget_id=? AND (widget_user_id=? OR ?=1)",
-        [$id, $userId, (int)$isAdmin]
+        "UPDATE nu_dashboard_widgets SET widget_active=0 WHERE " . $oc['sql'],
+        $oc['params']
     );
     wu_json(['ok' => true]);
 }
@@ -146,9 +169,10 @@ if ($action === 'reorder') {
         $id  = (int)($item['id']       ?? 0);
         $pos = (int)($item['position'] ?? 0);
         if (!$id) continue;
+        $oc = wu_ownership_clause($id, $userId, $isAdmin);
         $db->query(
-            "UPDATE nu_dashboard_widgets SET widget_position=? WHERE widget_id=? AND (widget_user_id=? OR ?=1)",
-            [$pos, $id, $userId, (int)$isAdmin]
+            "UPDATE nu_dashboard_widgets SET widget_position=? WHERE " . $oc['sql'],
+            array_merge([$pos], $oc['params'])
         );
     }
     wu_json(['ok' => true]);
@@ -162,11 +186,15 @@ if ($action === 'update') {
     $existing = $db->fetchOne("SELECT widget_width, widget_height FROM nu_dashboard_widgets WHERE widget_id=?", [$id]);
     $width    = max(1, min(4, (int)($body['width']  ?? $existing['widget_width']  ?? 2)));
     $height   = max(1, min(3, (int)($body['height'] ?? $existing['widget_height'] ?? 1)));
+
+    // KEY FIX: use wu_ownership_clause so NULL user_id rows (role-level widgets)
+    // are matched by admin users. Old code: widget_user_id=? never matched NULL.
+    $oc = wu_ownership_clause($id, $userId, $isAdmin);
     $db->query(
         "UPDATE nu_dashboard_widgets
             SET widget_title=?, widget_icon=?, widget_config=?, widget_width=?, widget_height=?
-          WHERE widget_id=? AND (widget_user_id=? OR ?=1)",
-        [$title, $icon !== '' ? $icon : null, $config, $width, $height, $id, $userId, (int)$isAdmin]
+          WHERE " . $oc['sql'],
+        array_merge([$title, $icon !== '' ? $icon : null, $config, $width, $height], $oc['params'])
     );
     wu_json(['ok' => true]);
 }
