@@ -186,6 +186,47 @@ class NuAuth {
         ];
     }
 
+    // -------------------------------------------------------------------------
+    // --- Global user meta: ##key## hash replacement in SQL ------------------
+    // -------------------------------------------------------------------------
+
+    /**
+     * Replace ##key## placeholders in a SQL string with the current user's
+     * global meta values stored in $_SESSION['nu_user_meta'].
+     *
+     * Only keys defined as 'global' => true in config.user_fields.php are
+     * available. Values are escaped for safe embedding.
+     *
+     * Example:
+     *   Input:  "SELECT * FROM sales WHERE station = '##station##'"
+     *   Output: "SELECT * FROM sales WHERE station = 'North'"
+     *
+     * If a key has no value in session, the placeholder is replaced with empty string.
+     */
+    public function resolveHashes(string $sql): string {
+        $meta = $_SESSION['nu_user_meta'] ?? [];
+        if (empty($meta)) return $sql;
+
+        foreach ($meta as $key => $value) {
+            // Sanitise key to prevent regex injection
+            $safeKey = preg_quote($key, '/');
+            // Escape value for safe SQL embedding (PDO not available at this point)
+            $safeVal = addslashes((string)$value);
+            $sql = preg_replace('/##' . $safeKey . '##/', $safeVal, $sql);
+        }
+        return $sql;
+    }
+
+    /**
+     * Get the current user's global meta as a key=>value array.
+     * Useful for JS injection or debug.
+     */
+    public function getGlobalMeta(): array {
+        return $_SESSION['nu_user_meta'] ?? [];
+    }
+
+    // -------------------------------------------------------------------------
+
     public function requireAuth() {
         if (!$this->checkAuth()) {
             if ($this->isApiRequest()) {
@@ -231,6 +272,45 @@ class NuAuth {
         $_SESSION['nu_role']          = $user['usr_role'];
         $_SESSION['nu_last_activity'] = time();
         $_SESSION['nu_csrf']          = bin2hex(random_bytes(32));
+
+        // Inject global user meta into session for ##key## hash replacement.
+        // Only fields marked 'global' => true in config.user_fields.php are loaded.
+        $_SESSION['nu_user_meta'] = $this->loadGlobalMeta((int)$user['usr_id']);
+    }
+
+    /**
+     * Load all 'global' meta values for a user from nu_user_meta.
+     * Returns an associative array: ['station' => 'North', ...]
+     */
+    private function loadGlobalMeta(int $userId): array {
+        $configFile = NU_ROOT . '/config.user_fields.php';
+        if (!file_exists($configFile)) return [];
+
+        $fieldDefs = include $configFile;
+        if (!is_array($fieldDefs)) return [];
+
+        // Collect the keys that are flagged as global
+        $globalKeys = [];
+        foreach ($fieldDefs as $def) {
+            if (!empty($def['global']) && !empty($def['key'])) {
+                $globalKeys[] = $def['key'];
+            }
+        }
+        if (empty($globalKeys)) return [];
+
+        // Fetch from DB
+        $rows = $this->db->fetchAll(
+            "SELECT umeta_key, umeta_value FROM nu_user_meta WHERE umeta_user_id = :id",
+            [':id' => $userId]
+        );
+
+        $meta = [];
+        foreach ($rows as $row) {
+            if (in_array($row['umeta_key'], $globalKeys, true)) {
+                $meta[$row['umeta_key']] = $row['umeta_value'];
+            }
+        }
+        return $meta;
     }
 
     private function incrementAttempts($userId) {
