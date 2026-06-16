@@ -59,7 +59,6 @@ function wu_chart_type(string $t): string {
     return 'bar';
 }
 
-/** Returns hex accent color for a widget type */
 function wu_type_accent(string $type): string {
     switch ($type) {
         case 'stat':       return '#01696f';
@@ -76,7 +75,7 @@ function wu_type_accent(string $type): string {
 
 /**
  * Golden-angle HSL — unique, well-distributed hue for each index.
- * Works for ANY number of roles (2, 6, 20, 100+) — no hardcoded limit.
+ * Works for ANY number of roles — no hardcoded limit.
  */
 function wu_role_color(int $index): array {
     $hue    = fmod($index * 137.508, 360);
@@ -230,7 +229,7 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
     }
 }
 
-// ── Resolve & prepare
+// ── Resolve & prepare ─────────────────────────────────────────────────────────
 $widgets = wu_resolve_widgets($db, $userId, $role, $isGlobeAdmin);
 
 try {
@@ -246,6 +245,21 @@ $showRoleGroups = ($isGlobeAdmin && !$hasPersonal);
 $roleGroups     = [];
 
 if ($showRoleGroups) {
+    // ── KEY FIX: seed ALL roles as empty buckets first ─────────────────────
+    // This ensures every role shows up as a group even if it has 0 widgets.
+    // Without this, only roles that already have widgets are displayed.
+    try {
+        $allRoles = $db->fetchAll('SELECT role_code FROM nu_roles ORDER BY role_name');
+        foreach ($allRoles as $r) {
+            $rc = $r['role_code'];
+            if (strtolower($rc) === 'globeadmin') continue; // skip self
+            if (!isset($roleGroups[$rc])) $roleGroups[$rc] = [];
+        }
+    } catch (Throwable $e) {
+        // If nu_roles query fails, fall through — widgets will still populate below
+    }
+
+    // Fill in actual widgets into their role buckets
     foreach ($widgets as $w) {
         $isRoleWgt = ($w['widget_user_id'] === null || $w['widget_user_id'] === '');
         $key = $isRoleWgt ? ($w['widget_role'] ?? 'unassigned') : '__personal__';
@@ -502,7 +516,17 @@ $groupIdx = 0;
 
 <div id="nuWidgetGrid"<?= $showRoleGroups ? ' style="display:block;"' : '' ?>>
 
-<?php if (empty($widgets)): ?>
+<?php if ($showRoleGroups && empty(array_filter($roleGroups, fn($g) => !empty($g))) && empty($widgets)): ?>
+    <div class="nu-widget-empty-state">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="color:#ccc;">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+        <p style="margin:0;font-size:1rem;font-weight:600;">No widgets yet</p>
+        <p style="margin:0;font-size:.875rem;color:#888;">Add your first widget to start building the dashboard.</p>
+        <button class="nu-btn nu-btn-primary" onclick="nuDash.openBuilder()">&#xff0b;&nbsp;Add Widget</button>
+    </div>
+<?php elseif (!$showRoleGroups && empty($widgets)): ?>
     <div class="nu-widget-empty-state">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="color:#ccc;">
             <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
@@ -517,7 +541,6 @@ $groupIdx = 0;
             <p style="margin:0;font-size:.875rem;color:#888;">No widgets have been set up for your role yet.</p>
         <?php endif; ?>
     </div>
-
 <?php else: ?>
 
 <?php foreach ($roleGroups as $groupKey => $groupWidgets):
@@ -554,16 +577,21 @@ $groupIdx = 0;
         >&#xff0b;&nbsp;Add</button>
     </div>
     <div id="<?= $groupBodyId ?>" class="nu-role-group-body" style="margin-top:0;">
-<?php else: ?>
 <?php endif; ?>
 
+<?php if (empty($groupWidgets) && $isNamedGroup): ?>
+    <div style="grid-column:1/-1;padding:20px;text-align:center;color:#aaa;font-size:.8rem;
+                border:2px dashed var(--color-border,#e5e7eb);border-radius:.5rem;">
+        No widgets for this role yet &mdash;
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" style="font-size:.8rem;" onclick="nuDash.openBuilderForRole('<?= $roleCode ?>')">Add one</button>
+    </div>
+<?php else: ?>
 <?php foreach ($groupWidgets as $w):
     $ww      = max(1, min(4, (int)($w['widget_width']  ?? 2)));
     $colSpan = $ww * 3;
     $rowSpan = max(1, min(3, (int)($w['widget_height'] ?? 1)));
     $typeAccent = wu_type_accent($w['widget_type'] ?? 'custom');
     $icon    = trim($w['widget_icon'] ?? '');
-    // Detect FA class string vs emoji/text
     $isFaIcon = ($icon !== '' && preg_match('/^(fas?|far|fab|fa)\s+fa-|^fa-/', $icon));
 ?>
     <div class="nu-widget-card nu-card" data-widget-id="<?= (int)$w['widget_id'] ?>"
@@ -592,6 +620,7 @@ $groupIdx = 0;
         <div class="nu-widget-body"><?= wu_render($w, $db, $userId) ?></div>
     </div>
 <?php endforeach; ?>
+<?php endif; ?>
 
 <?php if ($isNamedGroup): ?>
     </div><!-- /.nu-role-group-body -->

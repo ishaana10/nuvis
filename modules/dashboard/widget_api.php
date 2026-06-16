@@ -14,6 +14,32 @@ $role    = strtolower((string)($_SESSION['nu_role'] ?? ''));
 $isAdmin      = in_array($role, ['globeadmin', 'admin'], true);
 $isGlobeAdmin = ($role === 'globeadmin');
 
+// ── Auto-migrate: ensure widget_icon column exists ────────────────────────────
+// Runs a lightweight INFORMATION_SCHEMA check; actual ALTER only fires once ever.
+try {
+    $iconColExists = (bool)$db->fetchOne(
+        "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME   = 'nu_dashboard_widgets'
+            AND COLUMN_NAME  = 'widget_icon'"
+    );
+    if (!$iconColExists) {
+        $db->query(
+            "ALTER TABLE nu_dashboard_widgets
+               ADD COLUMN widget_icon VARCHAR(120) DEFAULT NULL
+               AFTER widget_title"
+        );
+    } else {
+        // Widen silently in case it was created as VARCHAR(60)
+        $db->query(
+            "ALTER TABLE nu_dashboard_widgets
+               MODIFY COLUMN widget_icon VARCHAR(120) DEFAULT NULL"
+        );
+    }
+} catch (Throwable $e) {
+    error_log('[widget_api] icon col migration: ' . $e->getMessage());
+}
+
 function wu_json(array $data): never {
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
@@ -98,8 +124,10 @@ if ($action === 'add') {
     }
 
     $db->query(
-        "INSERT INTO nu_dashboard_widgets (widget_user_id, widget_role, widget_type, widget_title, widget_icon, widget_config, widget_width, widget_height, widget_position) VALUES (?,?,?,?,?,?,?,?,?)",
-        [$targetUser, $targetRole, $type, $title, $icon ?: null, json_encode($config), $width, $height, $maxPos + 10]
+        "INSERT INTO nu_dashboard_widgets
+            (widget_user_id, widget_role, widget_type, widget_title, widget_icon, widget_config, widget_width, widget_height, widget_position)
+         VALUES (?,?,?,?,?,?,?,?,?)",
+        [$targetUser, $targetRole, $type, $title, $icon !== '' ? $icon : null, json_encode($config), $width, $height, $maxPos + 10]
     );
     wu_json(['ok' => true, 'id' => $db->lastInsertId()]);
 }
@@ -135,8 +163,10 @@ if ($action === 'update') {
     $width    = max(1, min(4, (int)($body['width']  ?? $existing['widget_width']  ?? 2)));
     $height   = max(1, min(3, (int)($body['height'] ?? $existing['widget_height'] ?? 1)));
     $db->query(
-        "UPDATE nu_dashboard_widgets SET widget_title=?, widget_icon=?, widget_config=?, widget_width=?, widget_height=? WHERE widget_id=? AND (widget_user_id=? OR ?=1)",
-        [$title, $icon ?: null, $config, $width, $height, $id, $userId, (int)$isAdmin]
+        "UPDATE nu_dashboard_widgets
+            SET widget_title=?, widget_icon=?, widget_config=?, widget_width=?, widget_height=?
+          WHERE widget_id=? AND (widget_user_id=? OR ?=1)",
+        [$title, $icon !== '' ? $icon : null, $config, $width, $height, $id, $userId, (int)$isAdmin]
     );
     wu_json(['ok' => true]);
 }
