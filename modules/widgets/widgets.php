@@ -2,6 +2,12 @@
 declare(strict_types=1);
 /**
  * modules/widgets/widgets.php
+ *
+ * The <script> block that was previously inline has been moved to widgets.js.
+ * nubuilder-next.js injects this file via innerHTML / replaceChild which
+ * HTML-decodes entities inside <script> tags before the JS engine sees them,
+ * causing SyntaxError. An external <script src> is fetched separately and
+ * never decoded that way.
  */
 if (!defined('NU_BOOTSTRAP_DONE')) {
     require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
@@ -16,24 +22,20 @@ $isGlobeAdmin = ($role === 'globeadmin');
 // ── helpers ───────────────────────────────────────────────────────────────────
 function wu_resolve_widgets(NuDatabase $db, int $userId, string $role, bool $isGlobeAdmin): array {
     try {
-        // Always check personal widgets first for everyone including globeadmin
         $personal = $db->fetchAll(
-            "SELECT * FROM nu_dashboard_widgets WHERE widget_user_id=? AND widget_active=1 ORDER BY widget_position",
+            'SELECT * FROM nu_dashboard_widgets WHERE widget_user_id=? AND widget_active=1 ORDER BY widget_position',
             [$userId]
         );
         if (!empty($personal)) return $personal;
 
         if ($isGlobeAdmin) {
-            // globeadmin sees ALL role-default widgets across every role so they
-            // can review and manage what each role sees. Ordered by role then position.
             return $db->fetchAll(
-                "SELECT * FROM nu_dashboard_widgets WHERE widget_user_id IS NULL AND widget_active=1 ORDER BY widget_role, widget_position"
+                'SELECT * FROM nu_dashboard_widgets WHERE widget_user_id IS NULL AND widget_active=1 ORDER BY widget_role, widget_position'
             ) ?: [];
         }
 
-        // Normal users: fall back to their role defaults
         return $db->fetchAll(
-            "SELECT * FROM nu_dashboard_widgets WHERE widget_user_id IS NULL AND widget_role=? AND widget_active=1 ORDER BY widget_position",
+            'SELECT * FROM nu_dashboard_widgets WHERE widget_user_id IS NULL AND widget_role=? AND widget_active=1 ORDER BY widget_position',
             [$role]
         ) ?: [];
     } catch (Throwable $e) {
@@ -70,9 +72,11 @@ function wu_chart_type(string $t): string {
 
 function wu_empty_hint(int $wid): string {
     return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 12px;color:var(--color-text-muted,#888);text-align:center;gap:8px;">'
-         . '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/>'
-         . '<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
-         . '<span style="font-size:var(--text-xs,.75rem);">Not configured — click <strong>⚙</strong> to set up.</span></div>';
+         . '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
+         . '<circle cx="12" cy="12" r="3"/>'
+         . '<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>'
+         . '</svg>'
+         . '<span style="font-size:var(--text-xs,.75rem);">Not configured - click the gear icon to set up.</span></div>';
 }
 
 function wu_render(array $w, NuDatabase $db, int $userId): string {
@@ -100,10 +104,30 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
                 if ($sql === '') return wu_empty_hint((int)$w['widget_id']);
                 $rows = wu_run_sql($db, $sql, $userId);
                 if (isset($rows[0]['_error'])) return '<p style="color:var(--color-error);font-size:12px;">SQL error: ' . htmlspecialchars($rows[0]['_error']) . '</p>';
-                $ctype    = wu_chart_type($type);
-                $id       = 'wc_' . $w['widget_id'];
-                $bgColor  = ($ctype === 'pie') ? ['#01696f','#437a22','#006494','#7a39bb','#da7101','#a12c7b'] : 'rgba(1,105,111,0.75)';
-                $chartJson = json_encode(['type' => $ctype, 'data' => ['labels' => array_column($rows,'label'), 'datasets' => [['label' => htmlspecialchars($w['widget_title']), 'data' => array_column($rows,'value'), 'backgroundColor' => $bgColor, 'borderColor' => 'rgba(1,105,111,1)', 'borderWidth' => 1, 'tension' => 0.4, 'fill' => ($ctype === 'line')]]], 'options' => ['responsive' => true, 'maintainAspectRatio' => false, 'plugins' => ['legend' => ['display' => ($ctype === 'pie')]], 'scales' => ($ctype === 'pie') ? (object)[] : ['y' => ['beginAtZero' => true]]]]);
+                $ctype     = wu_chart_type($type);
+                $id        = 'wc_' . $w['widget_id'];
+                $bgColor   = ($ctype === 'pie') ? ['#01696f','#437a22','#006494','#7a39bb','#da7101','#a12c7b'] : 'rgba(1,105,111,0.75)';
+                $chartJson = json_encode([
+                    'type' => $ctype,
+                    'data' => [
+                        'labels'   => array_column($rows, 'label'),
+                        'datasets' => [[
+                            'label'           => $w['widget_title'],
+                            'data'            => array_column($rows, 'value'),
+                            'backgroundColor' => $bgColor,
+                            'borderColor'     => 'rgba(1,105,111,1)',
+                            'borderWidth'     => 1,
+                            'tension'         => 0.4,
+                            'fill'            => ($ctype === 'line'),
+                        ]],
+                    ],
+                    'options' => [
+                        'responsive'          => true,
+                        'maintainAspectRatio' => false,
+                        'plugins' => ['legend' => ['display' => ($ctype === 'pie')]],
+                        'scales'  => ($ctype === 'pie') ? (object)[] : ['y' => ['beginAtZero' => true]],
+                    ],
+                ]);
                 return '<div style="height:220px;"><canvas id="' . $id . '" data-chartjs=\'' . htmlspecialchars($chartJson, ENT_QUOTES) . '\'></canvas></div>';
 
             case 'table':
@@ -116,7 +140,11 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
                 $html = '<div class="nu-table-wrap"><table class="nu-table"><thead><tr>';
                 foreach ($cols as $c) $html .= '<th>' . htmlspecialchars(ucfirst($c)) . '</th>';
                 $html .= '</tr></thead><tbody>';
-                foreach ($rows as $row) { $html .= '<tr>'; foreach ($row as $v) $html .= '<td>' . htmlspecialchars((string)$v) . '</td>'; $html .= '</tr>'; }
+                foreach ($rows as $row) {
+                    $html .= '<tr>';
+                    foreach ($row as $v) $html .= '<td>' . htmlspecialchars((string)$v) . '</td>';
+                    $html .= '</tr>';
+                }
                 return $html . '</tbody></table></div>';
 
             case 'list':
@@ -126,7 +154,7 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
                 foreach ($items as $item) {
                     $lbl   = htmlspecialchars($item['label'] ?? '');
                     $mod   = htmlspecialchars($item['module'] ?? '');
-                    $url   = htmlspecialchars($item['url'] ?? '');
+                    $url   = htmlspecialchars($item['url']    ?? '');
                     $click = $mod ? "NuApp.loadModule('$mod')" : "window.open('$url','_blank')";
                     $html .= "<button class=\"nu-btn nu-btn-ghost\" style=\"justify-content:flex-start;\" onclick=\"$click\">$lbl</button>";
                 }
@@ -141,7 +169,11 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
                 $done  = (float)($rows[0]['done']  ?? 0);
                 $pct   = $total > 0 ? min(100, (int)round($done / $total * 100)) : 0;
                 $lbl   = htmlspecialchars($cfg['label'] ?? "$done / $total");
-                return '<div style="margin-top:4px;"><div style="display:flex;justify-content:space-between;font-size:var(--text-xs,.75rem);color:var(--color-text-muted);margin-bottom:6px;"><span>' . $lbl . '</span><span>' . $pct . '%</span></div><div style="height:8px;border-radius:var(--radius-full,9999px);background:var(--color-surface-offset,#eee);overflow:hidden;"><div style="width:' . $pct . '%;height:100%;background:' . $accent . ';border-radius:inherit;transition:width .6s ease;"></div></div></div>';
+                return '<div style="margin-top:4px;">'
+                     . '<div style="display:flex;justify-content:space-between;font-size:var(--text-xs,.75rem);color:var(--color-text-muted);margin-bottom:6px;"><span>' . $lbl . '</span><span>' . $pct . '%</span></div>'
+                     . '<div style="height:8px;border-radius:var(--radius-full,9999px);background:var(--color-surface-offset,#eee);overflow:hidden;">'
+                     . '<div style="width:' . $pct . '%;height:100%;background:' . $accent . ';border-radius:inherit;transition:width .6s ease;"></div>'
+                     . '</div></div>';
 
             case 'custom':
                 $html = $cfg['html'] ?? '';
@@ -161,19 +193,20 @@ $widgets = wu_resolve_widgets($db, $userId, $role, $isGlobeAdmin);
 
 try {
     $hasPersonal = !empty($db->fetchAll(
-        "SELECT widget_id FROM nu_dashboard_widgets WHERE widget_user_id=? AND widget_active=1 LIMIT 1",
+        'SELECT widget_id FROM nu_dashboard_widgets WHERE widget_user_id=? AND widget_active=1 LIMIT 1',
         [$userId]
     ));
 } catch (Throwable $e) {
     $hasPersonal = false;
 }
 
-// Key by string widget_id so JS WIDGET_DATA[String(id)] always hits
+// Key by string widget_id
 $widgetsForJs = [];
 foreach ($widgets as $w) {
     $widgetsForJs[(string)$w['widget_id']] = $w;
 }
-$widgetsJson = htmlspecialchars(json_encode($widgetsForJs), ENT_QUOTES);
+// JSON is safe to embed here because it goes into a JS string, not innerHTML
+$widgetsJson = json_encode($widgetsForJs, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
 ?>
 
 <!-- Toolbar -->
@@ -184,13 +217,13 @@ $widgetsJson = htmlspecialchars(json_encode($widgetsForJs), ENT_QUOTES);
         </span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="nuDash.openBuilder()">&#xFF0B; Add Widget</button>
-        <button class="nu-btn nu-btn-ghost nu-btn-sm" id="nuDashEditBtn" onclick="nuDash.toggleEditMode()">&#x270F;&#xFE0F; Edit Layout</button>
+        <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="nuDash.openBuilder()">+ Add Widget</button>
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" id="nuDashEditBtn" onclick="nuDash.toggleEditMode()">Edit Layout</button>
         <?php if ($hasPersonal): ?>
-        <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error,#a12c7b);" onclick="nuDash.resetLayout()">&#x21A9; Reset to Default</button>
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error,#a12c7b);" onclick="nuDash.resetLayout()">Reset to Default</button>
         <?php endif; ?>
         <?php if ($isGlobeAdmin): ?>
-        <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-warning,#964219);" onclick="nuDash.openRoleDesigner()">&#x1F6E1;&#xFE0F; Design Role Layout</button>
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-warning,#964219);" onclick="nuDash.openRoleDesigner()">Design Role Layout</button>
         <?php endif; ?>
     </div>
 </div>
@@ -204,25 +237,23 @@ $widgetsJson = htmlspecialchars(json_encode($widgetsForJs), ENT_QUOTES);
                 <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
                 <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
             </svg>
-            <p style="margin:0 0 16px;color:var(--color-text-muted);">No widgets yet &mdash; add your first one.</p>
-            <button class="nu-btn nu-btn-primary" onclick="nuDash.openBuilder()">&#xFF0B; Add Widget</button>
+            <p style="margin:0 0 16px;color:var(--color-text-muted);">No widgets yet - add your first one.</p>
+            <button class="nu-btn nu-btn-primary" onclick="nuDash.openBuilder()">+ Add Widget</button>
         </div>
     </div>
 <?php else: ?>
 <?php
-// For globeadmin viewing role defaults: group by role for clarity
 $prevRole = null;
 foreach ($widgets as $w):
-    $colSpan  = max(1, min(4, (int)($w['widget_width']  ?? 2)));
-    $rowSpan  = max(1, min(3, (int)($w['widget_height'] ?? 1)));
-    $wRole    = $w['widget_role'] ?? null;
+    $colSpan   = max(1, min(4, (int)($w['widget_width']  ?? 2)));
+    $rowSpan   = max(1, min(3, (int)($w['widget_height'] ?? 1)));
+    $wRole     = $w['widget_role'] ?? null;
     $isRoleWgt = ($w['widget_user_id'] === null || $w['widget_user_id'] === '');
-    // Show role header divider for globeadmin viewing role widgets
     if ($isGlobeAdmin && !$hasPersonal && $isRoleWgt && $wRole !== $prevRole):
         $prevRole = $wRole;
 ?>
     <div style="grid-column:1/-1;padding:8px 4px 0;border-top:1px solid var(--color-border,#e5e7eb);margin-top:4px;">
-        <span style="font-size:var(--text-xs,.75rem);font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-muted,#888);">&#x1F4CB; Role: <?= htmlspecialchars($wRole ?? 'unassigned') ?></span>
+        <span style="font-size:var(--text-xs,.75rem);font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-muted,#888);">Role: <?= htmlspecialchars($wRole ?? 'unassigned') ?></span>
     </div>
 <?php endif; ?>
     <div class="nu-widget-card nu-card" data-widget-id="<?= (int)$w['widget_id'] ?>"
@@ -233,7 +264,7 @@ foreach ($widgets as $w):
                 <?= htmlspecialchars($w['widget_title']) ?>
             </h3>
             <div class="nu-widget-controls" style="display:flex;gap:4px;">
-                <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nuDash.editWidget(<?= (int)$w['widget_id'] ?>)" title="Configure">&#x2699;&#xFE0F;</button>
+                <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nuDash.editWidget(<?= (int)$w['widget_id'] ?>)" title="Configure">&#9881;</button>
                 <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error);" onclick="nuDash.removeWidget(<?= (int)$w['widget_id'] ?>)" title="Remove">&times;</button>
             </div>
         </div>
@@ -254,14 +285,14 @@ foreach ($widgets as $w):
     <div class="nu-field" style="margin-bottom:14px;">
         <label class="nu-label">Widget Type</label>
         <select class="nu-input" id="nuWType" onchange="nuDash.onTypeChange()">
-            <option value="stat">&#x1F4CA; Stat / KPI</option>
-            <option value="chart_bar">&#x1F4CA; Bar Chart</option>
-            <option value="chart_line">&#x1F4C8; Line Chart</option>
-            <option value="chart_pie">&#x1F967; Pie Chart</option>
-            <option value="table">&#x1F4CB; Data Table</option>
-            <option value="list">&#x1F517; Quick Links</option>
-            <option value="progress">&#x2B1B; Progress Bar</option>
-            <option value="custom">&#x1F9E9; Custom HTML</option>
+            <option value="stat">Stat / KPI</option>
+            <option value="chart_bar">Bar Chart</option>
+            <option value="chart_line">Line Chart</option>
+            <option value="chart_pie">Pie Chart</option>
+            <option value="table">Data Table</option>
+            <option value="list">Quick Links</option>
+            <option value="progress">Progress Bar</option>
+            <option value="custom">Custom HTML</option>
         </select>
     </div>
     <div class="nu-field" style="margin-bottom:14px;">
@@ -270,20 +301,29 @@ foreach ($widgets as $w):
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
         <div class="nu-field"><label class="nu-label">Width (1-4 cols)</label>
-            <select class="nu-input" id="nuWWidth"><option value="1">1 col</option><option value="2" selected>2 cols</option><option value="3">3 cols</option><option value="4">Full width</option></select>
+            <select class="nu-input" id="nuWWidth">
+                <option value="1">1 col</option>
+                <option value="2" selected>2 cols</option>
+                <option value="3">3 cols</option>
+                <option value="4">Full width</option>
+            </select>
         </div>
         <div class="nu-field"><label class="nu-label">Height (row spans)</label>
-            <select class="nu-input" id="nuWHeight"><option value="1" selected>1 row</option><option value="2">2 rows</option><option value="3">3 rows</option></select>
+            <select class="nu-input" id="nuWHeight">
+                <option value="1" selected>1 row</option>
+                <option value="2">2 rows</option>
+                <option value="3">3 rows</option>
+            </select>
         </div>
     </div>
     <div id="nuWConfigArea"></div>
     <?php if ($isGlobeAdmin): ?>
     <div class="nu-field" style="margin:14px 0;padding:12px;background:var(--color-surface-offset);border-radius:var(--radius-md);">
-        <label class="nu-label" style="color:var(--color-warning);">&#x1F6E1;&#xFE0F; Assign to Role (globeadmin only)</label>
+        <label class="nu-label" style="color:var(--color-warning);">Assign to Role (globeadmin only)</label>
         <select class="nu-input" id="nuWTargetRole">
-            <option value="">— My personal dashboard only —</option>
+            <option value="">-- My personal dashboard only --</option>
         </select>
-        <small style="color:var(--color-text-muted);font-size:11px;">Saving to a role replaces what that role sees by default.</small>
+        <small style="color:var(--color-text-muted);font-size:11px;">Saving to a role sets the default for all users with that role.</small>
     </div>
     <?php endif; ?>
     <div id="nuWPreviewWrap" style="display:none;margin:14px 0;">
@@ -291,7 +331,7 @@ foreach ($widgets as $w):
         <div id="nuWPreview" class="nu-card" style="padding:16px;min-height:80px;background:var(--color-surface-offset);"></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;">
-        <button class="nu-btn nu-btn-ghost" onclick="nuDash.runPreview()">&#x1F441; Preview</button>
+        <button class="nu-btn nu-btn-ghost" onclick="nuDash.runPreview()">Preview</button>
         <div style="display:flex;gap:8px;">
             <button class="nu-btn nu-btn-ghost" onclick="nuDash.closeBuilder()">Cancel</button>
             <button class="nu-btn nu-btn-primary" onclick="nuDash.saveWidget()">Save Widget</button>
@@ -300,232 +340,17 @@ foreach ($widgets as $w):
   </div>
 </div>
 
+<!-- chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<!--
+  WIDGET_DATA is written as a tiny inline <script> that only sets a global.
+  It contains NO HTML entities (json_encode with JSON_HEX_* flags), so the
+  nubuilder innerHTML injection is safe here.
+-->
 <script>
-(function(){
-'use strict';
-const API = 'modules/dashboard/widget_api.php';
-const chartInstances = {};
-const WIDGET_DATA = <?= $widgetsJson ?>;
-
-function initCharts() {
-    document.querySelectorAll('[data-chartjs]').forEach(function(canvas) {
-        var id = canvas.id;
-        if (chartInstances[id]) chartInstances[id].destroy();
-        try { chartInstances[id] = new Chart(canvas, JSON.parse(canvas.dataset.chartjs)); }
-        catch(e) { console.warn('[nuDash chart]', e); }
-    });
-}
-
-// Load dynamic roles from DB into the target-role dropdown
-function loadRolesIntoDropdown() {
-    var sel = document.getElementById('nuWTargetRole');
-    if (!sel) return;
-    fetch(API + '?action=list_roles')
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (!d.roles) return;
-            // Remove any previously loaded options (keep the first blank one)
-            while (sel.options.length > 1) sel.remove(1);
-            d.roles.forEach(function(r) {
-                var opt = document.createElement('option');
-                opt.value       = r.role_code;
-                opt.textContent = r.role_name + ' (' + r.role_code + ')';
-                sel.appendChild(opt);
-            });
-        }).catch(function() {/* silently fail, fallback options remain blank */});
-}
-
-var TYPE_CONFIGS = {
-    stat: '<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">must return a <code>value</code> column</small></label><textarea class="nu-input" id="nuWSql" rows="3" placeholder="SELECT COUNT(*) as value FROM my_table"></textarea></div><div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">Subtitle (optional)</label><input class="nu-input" id="nuWSubtitle" placeholder="Pending tasks"></div><div class="nu-field"><label class="nu-label">Accent colour</label><select class="nu-input" id="nuWColor"><option value="primary">Teal</option><option value="success">Green</option><option value="warning">Orange</option><option value="error">Red</option></select></div>',
-    chart_bar:  '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT status AS label, COUNT(*) AS value FROM my_table GROUP BY status"></textarea></div>',
-    chart_line: '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT DATE(created_at) AS label, COUNT(*) AS value FROM my_table GROUP BY DATE(created_at) ORDER BY label"></textarea></div>',
-    chart_pie:  '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT category AS label, COUNT(*) AS value FROM my_table GROUP BY category"></textarea></div>',
-    table:    '<div class="nu-field"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">use <code>{{user_id}}</code> to filter by current user</small></label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT title AS Task, status AS Status FROM my_tasks LIMIT 10"></textarea></div>',
-    list:     '<div class="nu-field"><label class="nu-label">Links (one per line: <code>Label|module_name</code> or <code>Label|https://url</code>)</label><textarea class="nu-input" id="nuWLinks" rows="5" placeholder="Open Forms|forms\nMy Reports|reports"></textarea></div>',
-    progress: '<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL (columns: <code>done</code>, <code>total</code>)</label><textarea class="nu-input" id="nuWSql" rows="3"></textarea></div><div class="nu-field"><label class="nu-label">Label</label><input class="nu-input" id="nuWSubtitle" placeholder="Tasks completed"></div>',
-    custom:   '<div class="nu-field"><label class="nu-label">HTML Content</label><textarea class="nu-input" id="nuWHtml" rows="6" placeholder="<p>Any HTML here...</p>"></textarea></div>'
-};
-
-window.nuDash = {
-    editMode:  false,
-    editingId: null,
-
-    openBuilder: function(id) {
-        this.editingId = id || null;
-        var sid = id ? String(id) : null;
-        document.getElementById('nuWid').value = id || '';
-        document.getElementById('nuWPreviewWrap').style.display = 'none';
-
-        if (sid && WIDGET_DATA[sid]) {
-            var w   = WIDGET_DATA[sid];
-            var cfg = {};
-            try { cfg = JSON.parse(w.widget_config || '{}'); } catch(e) {}
-
-            document.getElementById('nuWType').value   = w.widget_type   || 'stat';
-            document.getElementById('nuWTitle').value  = w.widget_title  || '';
-            document.getElementById('nuWWidth').value  = String(w.widget_width  || 2);
-            document.getElementById('nuWHeight').value = String(w.widget_height || 1);
-            this.onTypeChange();
-
-            var sqlEl = document.getElementById('nuWSql');
-            var subEl = document.getElementById('nuWSubtitle');
-            var colEl = document.getElementById('nuWColor');
-            var lnkEl = document.getElementById('nuWLinks');
-            var htmEl = document.getElementById('nuWHtml');
-            if (sqlEl) sqlEl.value = cfg.sql      || '';
-            if (subEl) subEl.value = cfg.subtitle || cfg.label || '';
-            if (colEl) colEl.value = cfg.color    || 'primary';
-            if (htmEl) htmEl.value = cfg.html     || '';
-            if (lnkEl && cfg.items) lnkEl.value = cfg.items.map(function(i){ return i.label + '|' + (i.module || i.url || ''); }).join('\n');
-
-            var rEl = document.getElementById('nuWTargetRole');
-            if (rEl) {
-                loadRolesIntoDropdown();
-                // Set after a tick so options are populated
-                var rv = w.widget_role || '';
-                setTimeout(function(){ rEl.value = rv; }, 80);
-            }
-        } else {
-            document.getElementById('nuWType').value   = 'stat';
-            document.getElementById('nuWTitle').value  = '';
-            document.getElementById('nuWWidth').value  = '2';
-            document.getElementById('nuWHeight').value = '1';
-            this.onTypeChange();
-            var rEl = document.getElementById('nuWTargetRole');
-            if (rEl) { loadRolesIntoDropdown(); rEl.value = ''; }
-        }
-        document.getElementById('nuBuilderModal').style.display = 'block';
-    },
-
-    closeBuilder: function() {
-        document.getElementById('nuBuilderModal').style.display = 'none';
-        document.getElementById('nuWPreviewWrap').style.display = 'none';
-    },
-
-    onTypeChange: function() {
-        document.getElementById('nuWConfigArea').innerHTML = TYPE_CONFIGS[document.getElementById('nuWType').value] || '';
-    },
-
-    buildConfig: function() {
-        var type  = document.getElementById('nuWType').value;
-        var sqlEl = document.getElementById('nuWSql');
-        var sql   = sqlEl ? sqlEl.value.trim() : '';
-        switch(type) {
-            case 'stat':     return { sql: sql, subtitle: (document.getElementById('nuWSubtitle')||{}).value||'', color: (document.getElementById('nuWColor')||{}).value||'primary' };
-            case 'chart_bar': case 'chart_line': case 'chart_pie': case 'table': return { sql: sql };
-            case 'progress': return { sql: sql, label: (document.getElementById('nuWSubtitle')||{}).value||'' };
-            case 'list':
-                var lines = ((document.getElementById('nuWLinks')||{}).value||'').split('\n').filter(Boolean);
-                return { items: lines.map(function(l){ var p=l.split('|'); var t=(p[1]||'').trim(); return t.indexOf('http')===0 ? {label:(p[0]||'').trim(),url:t} : {label:(p[0]||'').trim(),module:t}; }) };
-            case 'custom':   return { html: (document.getElementById('nuWHtml')||{}).value||'' };
-            default:         return {};
-        }
-    },
-
-    validateConfig: function(type, cfg) {
-        var sqlTypes = ['stat','chart_bar','chart_line','chart_pie','table','progress'];
-        if (sqlTypes.indexOf(type) !== -1 && !cfg.sql)            return 'Please enter a SQL query for this widget type.';
-        if (type === 'list'   && (!cfg.items || !cfg.items.length)) return 'Please add at least one link.';
-        if (type === 'custom' && !cfg.html)                        return 'Please enter HTML content.';
-        return null;
-    },
-
-    runPreview: function() {
-        var cfg  = this.buildConfig();
-        var wrap = document.getElementById('nuWPreviewWrap');
-        var prev = document.getElementById('nuWPreview');
-        wrap.style.display = 'block';
-        prev.innerHTML = '<span style="color:var(--color-text-muted)">Loading...</span>';
-        if (!cfg.sql) { prev.innerHTML = '<em>No SQL to preview.</em>'; return; }
-        fetch(API + '?action=run_sql', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({sql:cfg.sql}) })
-            .then(function(r){ return r.json(); })
-            .then(function(d){ prev.innerHTML = d.error ? '<span style="color:var(--color-error)">' + d.error + '</span>' : '<pre style="font-size:12px;white-space:pre-wrap;">' + JSON.stringify((d.rows||[]).slice(0,3),null,2) + '</pre>'; })
-            .catch(function(){ prev.innerHTML = '<span style="color:var(--color-error)">Request failed</span>'; });
-    },
-
-    saveWidget: function() {
-        var self       = this;
-        var id         = document.getElementById('nuWid').value;
-        var type       = document.getElementById('nuWType').value;
-        var title      = (document.getElementById('nuWTitle').value || '').trim();
-        var width      = parseInt(document.getElementById('nuWWidth').value)  || 2;
-        var height     = parseInt(document.getElementById('nuWHeight').value) || 1;
-        var cfg        = this.buildConfig();
-        var rEl        = document.getElementById('nuWTargetRole');
-        var targetRole = rEl ? rEl.value : null;
-
-        if (!title) { alert('Please enter a title for this widget.'); document.getElementById('nuWTitle').focus(); return; }
-        var err = this.validateConfig(type, cfg);
-        if (err) { alert(err); return; }
-
-        var payload = { type:type, title:title, width:width, height:height, config:cfg };
-        if (targetRole) payload.target_role = targetRole;
-        if (id) payload.id = id;
-
-        fetch(API + '?action=' + (id ? 'update' : 'add'), {
-            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
-        }).then(function(r){ return r.json(); })
-        .then(function(d){ if (d.ok) { self.closeBuilder(); location.reload(); } else alert('Error: ' + (d.error||'Unknown')); })
-        .catch(function(e){ alert('Request failed: ' + e.message); });
-    },
-
-    removeWidget: function(id) {
-        if (!confirm('Remove this widget?')) return;
-        fetch(API + '?action=remove', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:id}) })
-            .then(function(r){ return r.json(); })
-            .then(function(d){ if (d.ok) location.reload(); else alert('Error: '+(d.error||'')); })
-            .catch(function(){ alert('Request failed'); });
-    },
-
-    editWidget: function(id) { this.openBuilder(id); },
-
-    toggleEditMode: function() {
-        this.editMode = !this.editMode;
-        var btn = document.getElementById('nuDashEditBtn');
-        document.querySelectorAll('.nu-widget-card').forEach(function(el) {
-            el.style.outline = this.editMode ? '2px dashed var(--color-primary,#01696f)' : '';
-            el.draggable = this.editMode;
-        }.bind(this));
-        if (btn) btn.textContent = this.editMode ? '\u2705 Done Editing' : '\u270F\uFE0F Edit Layout';
-        if (this.editMode) this.initDrag();
-    },
-
-    initDrag: function() {
-        var self = this, grid = document.getElementById('nuWidgetGrid'), dragSrc = null;
-        grid.querySelectorAll('.nu-widget-card').forEach(function(card) {
-            card.addEventListener('dragstart', function(){ dragSrc=card; card.style.opacity='.4'; });
-            card.addEventListener('dragend',   function(){ card.style.opacity=''; });
-            card.addEventListener('dragover',  function(e){ e.preventDefault(); });
-            card.addEventListener('drop', function(e) {
-                e.preventDefault();
-                if (dragSrc && dragSrc !== card) {
-                    var cards = Array.prototype.slice.call(grid.querySelectorAll('.nu-widget-card'));
-                    if (cards.indexOf(dragSrc) < cards.indexOf(card)) card.after(dragSrc); else card.before(dragSrc);
-                    self.persistOrder();
-                }
-            });
-        });
-    },
-
-    persistOrder: function() {
-        var order = Array.prototype.slice.call(document.querySelectorAll('.nu-widget-card')).map(function(c,i){ return {id:parseInt(c.dataset.widgetId),position:(i+1)*10}; });
-        fetch(API+'?action=reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order:order})});
-    },
-
-    resetLayout: function() {
-        if (!confirm('Reset to role default? Personal widgets will be removed.')) return;
-        fetch(API+'?action=reset',{method:'POST'}).then(function(r){return r.json();}).then(function(d){if(d.ok)location.reload();}).catch(function(){alert('Request failed');});
-    },
-
-    openRoleDesigner: function() {
-        this.openBuilder();
-        var rEl = document.getElementById('nuWTargetRole');
-        if (rEl) setTimeout(function(){ rEl.focus(); }, 150);
-    }
-};
-
-document.addEventListener('DOMContentLoaded', initCharts);
-if (document.readyState !== 'loading') initCharts();
-})();
+window.NUDASH_WIDGET_DATA = <?= $widgetsJson ?>;
 </script>
+
+<!-- All logic lives in the external JS file - never touched by innerHTML -->
+<script src="modules/widgets/widgets.js?v=<?= filemtime(__DIR__ . '/widgets.js') ?>"></script>
