@@ -108,14 +108,20 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
                 $val = $rows[0]['value'] ?? (isset($rows[0]) ? reset($rows[0]) : 0);
                 $sub = htmlspecialchars($cfg['subtitle'] ?? '');
 
-                $linkModule = trim($cfg['link_module'] ?? '');
-                $linkUrl    = trim($cfg['link_url']    ?? '');
-                $hasLink    = ($linkModule !== '' || $linkUrl !== '');
-                $arrowHtml  = '';
+                // link_module = NuBuilder form code; link_url = external URL fallback
+                $linkFormCode = trim($cfg['link_module'] ?? '');
+                $linkUrl      = trim($cfg['link_url']    ?? '');
+                $hasLink      = ($linkFormCode !== '' || $linkUrl !== '');
+                $arrowHtml    = '';
+
                 if ($hasLink) {
-                    if ($linkModule !== '') {
-                        $safeM = htmlspecialchars($linkModule, ENT_QUOTES);
-                        $arrowHtml = '<button class="nu-stat-arrow" onclick="NuApp.loadModule(\'' . $safeM . '\')" title="View records" aria-label="View records">'
+                    if ($linkFormCode !== '') {
+                        // Pass the form code to nuDash.drillDown() which uses
+                        // NuApp._browseInline — the same inline browse the rest
+                        // of the app uses. This avoids the "Form not found" 404
+                        // that NuApp.loadModule was causing.
+                        $safeCode  = htmlspecialchars($linkFormCode, ENT_QUOTES);
+                        $arrowHtml = '<button class="nu-stat-arrow" onclick="nuDash.drillDown(\'' . $safeCode . '\')" title="View records" aria-label="View records">'
                                    . '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>'
                                    . '</button>';
                     } else {
@@ -193,7 +199,8 @@ function wu_render(array $w, NuDatabase $db, int $userId): string {
                     $lbl   = htmlspecialchars($item['label'] ?? '');
                     $mod   = htmlspecialchars($item['module'] ?? '');
                     $url   = htmlspecialchars($item['url']    ?? '');
-                    $click = $mod ? "NuApp.loadModule('$mod')" : "window.open('$url','_blank')";
+                    // Use nuDash.drillDown for form codes (consistent with stat arrow)
+                    $click = $mod ? "nuDash.drillDown('$mod')" : "window.open('$url','_blank')";
                     $html .= "<button class=\"nu-btn nu-btn-ghost\" style=\"justify-content:flex-start;\" onclick=\"$click\">$lbl</button>";
                 }
                 return $html . '</div>';

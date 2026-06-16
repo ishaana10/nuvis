@@ -153,18 +153,19 @@
       '</label>',
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">',
       '<div class="nu-field" style="margin:0;">',
-      '<label class="nu-label" style="font-size:.75rem;">Module name</label>',
-      '<input class="nu-input" id="nuWLinkModule" placeholder="forms, reports, users…"',
-      '       title="Internal module to navigate to (e.g. forms)">',
+      '<label class="nu-label" style="font-size:.75rem;">Form Code</label>',
+      '<input class="nu-input" id="nuWLinkModule" placeholder="e.g. zxy1234567890"',
+      '       title="The NuBuilder form code — clicking › opens that form\'s browse/inline view">',
       '</div>',
       '<div class="nu-field" style="margin:0;">',
       '<label class="nu-label" style="font-size:.75rem;">— or — External URL</label>',
       '<input class="nu-input" id="nuWLinkUrl" placeholder="https://…"',
-      '       title="External URL (used only if Module name is blank)">',
+      '       title="External URL (used only if Form Code is blank)">',
       '</div>',
       '</div>',
       '<small style="color:#888;font-size:11px;display:block;margin-top:6px;">',
-      'When set, a › arrow button appears on the stat card. Module name takes priority over URL.',
+      'Enter the NuBuilder <strong>form code</strong> (found in the form builder). ',
+      'Clicking › opens that form inline. External URL is used if no form code is set.',
       '</small>',
       '</div>'
     ].join('');
@@ -176,7 +177,7 @@
     chart_line: '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT DATE(created_at) AS label, COUNT(*) AS value FROM my_table GROUP BY DATE(created_at) ORDER BY label"></textarea></div>',
     chart_pie:  '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT category AS label, COUNT(*) AS value FROM my_table GROUP BY category"></textarea></div>',
     table:      '<div class="nu-field"><label class="nu-label">SQL <small style="color:#888">use <code>{{user_id}}</code> to filter by current user</small></label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT title AS Task, status AS Status FROM my_tasks LIMIT 10"></textarea></div>',
-    list:       '<div class="nu-field"><label class="nu-label">Links (one per line: <code>Label|module_name</code> or <code>Label|https://url</code>)</label><textarea class="nu-input" id="nuWLinks" rows="5" placeholder="Open Forms|forms\nMy Reports|reports"></textarea></div>',
+    list:       '<div class="nu-field"><label class="nu-label">Links (one per line: <code>Label|form_code</code> or <code>Label|https://url</code>)</label><textarea class="nu-input" id="nuWLinks" rows="5" placeholder="Open Forms|zxy1234567890\nMy Reports|abc0987654321"></textarea></div>',
     progress:   '<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL (columns: <code>done</code>, <code>total</code>)</label><textarea class="nu-input" id="nuWSql" rows="3"></textarea></div><div class="nu-field"><label class="nu-label">Label</label><input class="nu-input" id="nuWSubtitle" placeholder="Tasks completed"></div>',
     custom:     '<div class="nu-field"><label class="nu-label">HTML Content</label><textarea class="nu-input" id="nuWHtml" rows="6" placeholder="<p>Any HTML here...</p>"></textarea></div>'
   };
@@ -501,8 +502,33 @@
       if (rEl) setTimeout(function () { rEl.focus(); }, 150);
     },
 
-    drillDown: function (module, extra) {
-      if (window.NuApp && NuApp.loadModule) NuApp.loadModule(module);
+    // ── Arrow drill-down handler ─────────────────────────────────────────────
+    // Called from the › button rendered by wu_render() in widgets.php.
+    // formCode = the NuBuilder form code stored in link_module.
+    // Uses NuApp._browseInline if available (same as the rest of the app),
+    // falls back to NuApp.openForm, then NuApp.loadModule as a last resort.
+    drillDown: function (formCode) {
+      if (!formCode) return;
+      try {
+        if (window.NuApp) {
+          if (typeof NuApp._browseInline === 'function') {
+            NuApp._browseInline(formCode);
+            return;
+          }
+          if (typeof NuApp.openForm === 'function') {
+            NuApp.openForm(formCode);
+            return;
+          }
+          if (typeof NuApp.loadModule === 'function') {
+            NuApp.loadModule(formCode);
+            return;
+          }
+        }
+        // Last resort: build the URL the app itself would use
+        window.location.href = '?form=' + encodeURIComponent(formCode);
+      } catch (e) {
+        console.error('[nuDash drillDown]', e);
+      }
     }
   };
 
