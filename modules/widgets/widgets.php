@@ -19,6 +19,11 @@ $role         = strtolower((string)($_SESSION['nu_role'] ?? ''));
 $isAdmin      = in_array($role, ['globeadmin', 'admin'], true);
 $isGlobeAdmin = ($role === 'globeadmin');
 
+// Only globeadmin can manage (add/edit/remove) widgets.
+// admin can see their own widgets read-only.
+// All other roles are read-only, no management UI at all.
+$canManage = $isGlobeAdmin;
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function wu_resolve_widgets(NuDatabase $db, int $userId, string $role, bool $isGlobeAdmin): array {
     try {
@@ -224,9 +229,12 @@ if ($showRoleGroups) {
     } catch (Throwable $e) { /* non-fatal */ }
 }
 
+// Only pass widget data to JS when the user can actually manage widgets
 $widgetsForJs = [];
-foreach ($widgets as $w) {
-    $widgetsForJs[(string)$w['widget_id']] = $w;
+if ($canManage) {
+    foreach ($widgets as $w) {
+        $widgetsForJs[(string)$w['widget_id']] = $w;
+    }
 }
 $widgetsJson = json_encode($widgetsForJs, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
 
@@ -241,14 +249,13 @@ $groupAccents = [
 $accentIdx = 0;
 ?>
 
-<!-- Collapsible group styles (no external CSS file needed) -->
+<!-- Collapsible group styles -->
 <style>
 .nu-role-group-body {
     display: grid;
     grid-template-columns: repeat(4,1fr);
     gap: 16px;
     overflow: hidden;
-    /* open state - max-height animated via JS */
     transition: max-height .35s ease, opacity .25s ease, margin-top .3s ease;
     opacity: 1;
 }
@@ -267,26 +274,33 @@ $accentIdx = 0;
 }
 </style>
 
-<!-- Toolbar -->
+<!-- Toolbar: only rendered for globeadmin -->
+<?php if ($canManage): ?>
 <div id="nuDashToolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
     <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:var(--text-sm,.875rem);font-weight:600;color:var(--color-text-muted);">My Dashboard
-            <?php if (!$hasPersonal): ?><span style="font-size:var(--text-xs,.75rem);background:var(--color-surface-offset);border-radius:var(--radius-full);padding:2px 8px;margin-left:4px;"><?= $isGlobeAdmin ? 'all roles preview' : 'role default' ?></span><?php endif; ?>
+            <?php if (!$hasPersonal): ?><span style="font-size:var(--text-xs,.75rem);background:var(--color-surface-offset);border-radius:var(--radius-full);padding:2px 8px;margin-left:4px;">all roles preview</span><?php endif; ?>
         </span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="nuDash.openBuilder()">+ Add Widget</button>
-        <button class="nu-btn nu-btn-ghost nu-btn-sm" id="nuDashEditBtn" onclick="nuDash.toggleEditMode()">Edit Layout</button>
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" id="nuDashEditBtn" onclick="nuDash.toggleEditMode()">&#9999;&#65039; Edit Layout</button>
         <?php if ($hasPersonal): ?>
         <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error,#a12c7b);" onclick="nuDash.resetLayout()">Reset to Default</button>
         <?php endif; ?>
-        <?php if ($isGlobeAdmin): ?>
         <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-warning,#964219);" onclick="nuDash.openRoleDesigner()">Design Role Layout</button>
-        <?php endif; ?>
     </div>
 </div>
+<?php else: ?>
+<!-- Read-only header for non-admin roles -->
+<div style="display:flex;align-items:center;margin-bottom:20px;">
+    <span style="font-size:var(--text-sm,.875rem);font-weight:600;color:var(--color-text-muted);">My Dashboard
+        <span style="font-size:var(--text-xs,.75rem);background:var(--color-surface-offset);border-radius:var(--radius-full);padding:2px 8px;margin-left:4px;">role default</span>
+    </span>
+</div>
+<?php endif; ?>
 
-<!-- Outer wrapper - not a grid itself when role groups active; each group has its own sub-grid -->
+<!-- Widget Grid -->
 <div id="nuWidgetGrid"<?= !$showRoleGroups ? ' style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;"' : '' ?>>
 <?php if (empty($widgets)): ?>
     <div id="nuWidgetEmpty" style="<?= $showRoleGroups ? '' : 'grid-column:1/-1;' ?>">
@@ -295,8 +309,12 @@ $accentIdx = 0;
                 <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
                 <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
             </svg>
-            <p style="margin:0 0 16px;color:var(--color-text-muted);">No widgets yet - add your first one.</p>
-            <button class="nu-btn nu-btn-primary" onclick="nuDash.openBuilder()">+ Add Widget</button>
+            <?php if ($canManage): ?>
+                <p style="margin:0 0 16px;color:var(--color-text-muted);">No widgets yet &mdash; add your first one.</p>
+                <button class="nu-btn nu-btn-primary" onclick="nuDash.openBuilder()">+ Add Widget</button>
+            <?php else: ?>
+                <p style="margin:0;color:var(--color-text-muted);">No widgets have been configured for your role yet.</p>
+            <?php endif; ?>
         </div>
     </div>
 <?php else: ?>
@@ -312,50 +330,21 @@ $accentIdx = 0;
 ?>
 
 <?php if ($isNamedGroup): ?>
-<!-- Role group wrapper -->
 <div class="nu-role-group" style="margin-top:<?= $accentIdx > 1 ? '28px' : '0' ?>;">
-
-    <!-- Clickable header -->
     <div
         class="nu-role-group-header"
         onclick="nuDash.toggleGroup('<?= $groupBodyId ?>', '<?= $roleCode ?>')"
-        style="
-            display:flex;
-            align-items:center;
-            gap:12px;
-            padding:14px 16px;
-            background:var(--color-surface-offset,#f8f9fa);
-            border-radius:var(--radius-md,.5rem);
-            border-left:4px solid <?= $accentColor ?>;
-            cursor:pointer;
-            user-select:none;
-            margin-bottom:12px;
-        "
+        style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--color-surface-offset,#f8f9fa);border-radius:var(--radius-md,.5rem);border-left:4px solid <?= $accentColor ?>;cursor:pointer;user-select:none;margin-bottom:12px;"
     >
-        <!-- Chevron -->
         <svg id="<?= $groupBodyId ?>_chevron" class="nu-group-chevron" width="16" height="16" viewBox="0 0 24 24"
              fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--color-text-muted,#888);">
             <polyline points="6 9 12 15 18 9"/>
         </svg>
-
-        <!-- Role name + code pill + count -->
         <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
             <span style="font-size:var(--text-sm,.875rem);font-weight:700;color:var(--color-text,#111);"><?= $displayRole ?></span>
-            <span style="
-                font-size:var(--text-xs,.75rem);
-                font-weight:600;
-                padding:2px 8px;
-                border-radius:var(--radius-full,9999px);
-                background:<?= $accentColor ?>;
-                color:#fff;
-                letter-spacing:.04em;
-            "><?= $roleCode ?></span>
-            <span style="font-size:var(--text-xs,.75rem);color:var(--color-text-muted,#888);">
-                <?= $widgetCount ?> widget<?= $widgetCount !== 1 ? 's' : '' ?>
-            </span>
+            <span style="font-size:var(--text-xs,.75rem);font-weight:600;padding:2px 8px;border-radius:var(--radius-full,9999px);background:<?= $accentColor ?>;color:#fff;letter-spacing:.04em;"><?= $roleCode ?></span>
+            <span style="font-size:var(--text-xs,.75rem);color:var(--color-text-muted,#888);"><?= $widgetCount ?> widget<?= $widgetCount !== 1 ? 's' : '' ?></span>
         </div>
-
-        <!-- Quick action: add widget for this role (stop propagation so it doesn't toggle) -->
         <button
             class="nu-btn nu-btn-ghost nu-btn-sm"
             style="color:<?= $accentColor ?>;white-space:nowrap;"
@@ -363,15 +352,8 @@ $accentIdx = 0;
             title="Add widget for this role"
         >+ Add</button>
     </div>
-
-    <!-- Collapsible sub-grid body -->
-    <div
-        id="<?= $groupBodyId ?>"
-        class="nu-role-group-body"
-        style="margin-top:0;"
-    >
+    <div id="<?= $groupBodyId ?>" class="nu-role-group-body" style="margin-top:0;">
 <?php else: ?>
-<!-- Flat (non-grouped) widgets go straight into the outer grid -->
 <?php endif; ?>
 
 <?php foreach ($groupWidgets as $w):
@@ -385,10 +367,12 @@ $accentIdx = 0;
                 <?php if (!empty($w['widget_icon'])): ?><span style="margin-right:6px;"><?= htmlspecialchars($w['widget_icon']) ?></span><?php endif; ?>
                 <?= htmlspecialchars($w['widget_title']) ?>
             </h3>
+            <?php if ($canManage): ?>
             <div class="nu-widget-controls" style="display:flex;gap:4px;">
                 <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nuDash.editWidget(<?= (int)$w['widget_id'] ?>)" title="Configure">&#9881;</button>
                 <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error);" onclick="nuDash.removeWidget(<?= (int)$w['widget_id'] ?>)" title="Remove">&times;</button>
             </div>
+            <?php endif; ?>
         </div>
         <div class="nu-widget-body"><?= wu_render($w, $db, $userId) ?></div>
     </div>
@@ -403,7 +387,8 @@ $accentIdx = 0;
 <?php endif; ?>
 </div><!-- /#nuWidgetGrid -->
 
-<!-- Add/Edit Widget Modal -->
+<?php if ($canManage): ?>
+<!-- Add/Edit Widget Modal — only emitted for globeadmin -->
 <div id="nuBuilderModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);overflow-y:auto;">
   <div style="background:var(--color-surface,#fff);border-radius:var(--radius-lg,.75rem);max-width:600px;margin:40px auto;padding:28px;box-shadow:var(--shadow-lg);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
@@ -446,15 +431,13 @@ $accentIdx = 0;
         </div>
     </div>
     <div id="nuWConfigArea"></div>
-    <?php if ($isGlobeAdmin): ?>
     <div class="nu-field" style="margin:14px 0;padding:12px;background:var(--color-surface-offset);border-radius:var(--radius-md);">
-        <label class="nu-label" style="color:var(--color-warning);">Assign to Role (globeadmin only)</label>
+        <label class="nu-label" style="color:var(--color-warning);">Assign to Role</label>
         <select class="nu-input" id="nuWTargetRole">
             <option value="">-- My personal dashboard only --</option>
         </select>
         <small style="color:var(--color-text-muted);font-size:11px;">Saving to a role sets the default for all users with that role.</small>
     </div>
-    <?php endif; ?>
     <div id="nuWPreviewWrap" style="display:none;margin:14px 0;">
         <label class="nu-label">Live Preview</label>
         <div id="nuWPreview" class="nu-card" style="padding:16px;min-height:80px;background:var(--color-surface-offset);"></div>
@@ -468,12 +451,14 @@ $accentIdx = 0;
     </div>
   </div>
 </div>
+<?php endif; ?>
 
-<!-- chart.js -->
+<!-- chart.js (needed for all roles that have chart widgets) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 
 <script>
 window.NUDASH_WIDGET_DATA = <?= $widgetsJson ?>;
+window.NUDASH_CAN_MANAGE  = <?= $canManage ? 'true' : 'false' ?>;
 </script>
 
 <script src="modules/widgets/widgets.js?v=<?= filemtime(__DIR__ . '/widgets.js') ?>"></script>
