@@ -7,11 +7,11 @@
 (function () {
   'use strict';
 
-  var API = 'modules/dashboard/widget_api.php';
+  var API       = 'modules/dashboard/widget_api.php';
+  var ROLES_API = 'api/roles.php';          // authoritative roles endpoint
   var chartInstances = {};
 
   /* WIDGET_DATA is written by widgets.php as a global before this file loads */
-  /* window.NUDASH_WIDGET_DATA is set in the inline <script> in widgets.php  */
   var WIDGET_DATA = window.NUDASH_WIDGET_DATA || {};
 
   /* ── chart init ─────────────────────────────────────────────────────────── */
@@ -28,22 +28,31 @@
   }
 
   /* ── dynamic role dropdown ──────────────────────────────────────────────── */
-  function loadRolesIntoDropdown() {
+  function loadRolesIntoDropdown(selectedValue) {
     var sel = document.getElementById('nuWTargetRole');
     if (!sel) return;
-    fetch(API + '?action=list_roles')
+
+    fetch(ROLES_API + '?action=list')
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.roles) return;
+        if (!d.success || !Array.isArray(d.roles)) {
+          console.warn('[nuDash] roles fetch failed', d);
+          return;
+        }
+        // Rebuild options, keeping the blank "personal only" first entry
         while (sel.options.length > 1) sel.remove(1);
         d.roles.forEach(function (r) {
           var opt = document.createElement('option');
-          opt.value = r.role_code;
+          opt.value       = r.role_code;
           opt.textContent = r.role_name + ' (' + r.role_code + ')';
           sel.appendChild(opt);
         });
+        // Restore selected value after options are populated
+        if (selectedValue) sel.value = selectedValue;
       })
-      .catch(function () { /* silent fallback */ });
+      .catch(function (e) {
+        console.warn('[nuDash] roles fetch error', e);
+      });
   }
 
   /* ── config field HTML per widget type ─────────────────────────────────── */
@@ -61,11 +70,11 @@
       '</select></div>'
     ].join(''),
 
-    chart_bar: '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT status AS label, COUNT(*) AS value FROM my_table GROUP BY status"></textarea></div>',
+    chart_bar:  '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT status AS label, COUNT(*) AS value FROM my_table GROUP BY status"></textarea></div>',
     chart_line: '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT DATE(created_at) AS label, COUNT(*) AS value FROM my_table GROUP BY DATE(created_at) ORDER BY label"></textarea></div>',
     chart_pie:  '<div class="nu-field"><label class="nu-label">SQL (columns: <code>label</code>, <code>value</code>)</label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT category AS label, COUNT(*) AS value FROM my_table GROUP BY category"></textarea></div>',
     table:      '<div class="nu-field"><label class="nu-label">SQL <small style="color:var(--color-text-muted)">use <code>{{user_id}}</code> to filter by current user</small></label><textarea class="nu-input" id="nuWSql" rows="4" placeholder="SELECT title AS Task, status AS Status FROM my_tasks LIMIT 10"></textarea></div>',
-    list:       '<div class="nu-field"><label class="nu-label">Links (one per line: <code>Label|module_name</code> or <code>Label|https://url</code>)</label><textarea class="nu-input" id="nuWLinks" rows="5" placeholder="Open Forms|forms&#10;My Reports|reports"></textarea></div>',
+    list:       '<div class="nu-field"><label class="nu-label">Links (one per line: <code>Label|module_name</code> or <code>Label|https://url</code>)</label><textarea class="nu-input" id="nuWLinks" rows="5" placeholder="Open Forms|forms\nMy Reports|reports"></textarea></div>',
     progress:   '<div class="nu-field" style="margin-bottom:12px;"><label class="nu-label">SQL (columns: <code>done</code>, <code>total</code>)</label><textarea class="nu-input" id="nuWSql" rows="3"></textarea></div><div class="nu-field"><label class="nu-label">Label</label><input class="nu-input" id="nuWSubtitle" placeholder="Tasks completed"></div>',
     custom:     '<div class="nu-field"><label class="nu-label">HTML Content</label><textarea class="nu-input" id="nuWHtml" rows="6" placeholder="<p>Any HTML here...</p>"></textarea></div>'
   };
@@ -109,9 +118,8 @@
 
         var rEl = document.getElementById('nuWTargetRole');
         if (rEl) {
-          loadRolesIntoDropdown();
-          var rv = w.widget_role || '';
-          setTimeout(function () { rEl.value = rv; }, 80);
+          // Pass the current role value so it gets re-selected after options load
+          loadRolesIntoDropdown(w.widget_role || '');
         }
       } else {
         document.getElementById('nuWType').value   = 'stat';
@@ -120,7 +128,7 @@
         document.getElementById('nuWHeight').value = '1';
         this.onTypeChange();
         var rEl2 = document.getElementById('nuWTargetRole');
-        if (rEl2) { loadRolesIntoDropdown(); rEl2.value = ''; }
+        if (rEl2) loadRolesIntoDropdown('');
       }
       document.getElementById('nuBuilderModal').style.display = 'block';
     },
