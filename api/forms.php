@@ -126,6 +126,40 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
 }
 
 /**
+ * Ensure nu_forms has all expected columns (auto-migration).
+ * Safe to call on every request — uses DESCRIBE cache per request.
+ */
+function nu_ensure_nu_forms_columns(NuDatabase $db): void {
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+
+    $existing = [];
+    foreach ($db->fetchAll("DESCRIBE `nu_forms`") as $col) {
+        $existing[$col['Field']] = true;
+    }
+
+    $needed = [
+        'form_panel_mode'  => "VARCHAR(20) NOT NULL DEFAULT 'fixed'",
+        'form_panel_width' => "INT NOT NULL DEFAULT 0",
+        'form_custom_js'   => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_js_before_save' => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_js_after_save'  => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_custom_php'  => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_custom_css'  => "MEDIUMTEXT NULL DEFAULT NULL",
+    ];
+
+    foreach ($needed as $col => $def) {
+        if (isset($existing[$col])) continue;
+        try {
+            $db->query("ALTER TABLE `nu_forms` ADD COLUMN `{$col}` {$def}");
+        } catch (Throwable $e) {
+            error_log("[forms.php] nu_forms auto-migrate ADD {$col}: " . $e->getMessage());
+        }
+    }
+}
+
+/**
  * Drop a table using the $db->query() wrapper (same path as all other
  * successful DDL in this file). Checks existence first with SHOW TABLES
  * to avoid relying on IF EXISTS support. Returns [bool $dropped, string $error].
@@ -216,6 +250,9 @@ function actionList($db) {
 
 // ── SAVE (insert or update) ───────────────────────────────────────────────
 function actionSave($db) {
+    // Ensure all expected nu_forms columns exist before writing
+    nu_ensure_nu_forms_columns($db);
+
     $raw  = file_get_contents('php://input');
     $data = json_decode($raw, true);
     if (!is_array($data)) { echo json_encode(['success' => false, 'error' => 'Invalid JSON payload']); return; }
@@ -255,6 +292,9 @@ function actionSave($db) {
         'form_js_after_save'        => $data['form_js_after_save']       ?? '',
         'form_custom_php'           => $data['form_custom_php']          ?? '',
         'form_custom_css'           => $data['form_custom_css']          ?? '',
+        // Panel resize settings
+        'form_panel_mode'           => $data['form_panel_mode']          ?? 'fixed',
+        'form_panel_width'          => isset($data['form_panel_width'])  ? (int)$data['form_panel_width'] : 0,
     ];
 
     try {
