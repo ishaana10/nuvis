@@ -131,15 +131,19 @@ function nu_form_columns() {
             'browse_columns'=>'browsecolumns','browse_search_enabled'=>'browsesearchenabled',
             'browse_search_placeholder'=>'browsesearchplaceholder','browse_search_fields'=>'browsesearchfields',
             'browse_page_size'=>'browsepagesize','browse_default_sort'=>'browsedefaultsort',
-            'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode'];
+            'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode',
+            'type'=>'form_type','display_mode'=>'browse_display_mode',
+            'js_before_save'=>'formjsbeforesave','js_after_save'=>'formjsaftersave'];
     }
-    return ['id'=>'id','name'=>'form_name','code'=>'form_code','table'=>'form_table',
+    return ['id'=>'form_id','name'=>'form_name','code'=>'form_code','table'=>'form_table',
         'layout'=>'form_layout','active'=>'form_active','custom_js'=>'form_custom_js',
         'custom_php'=>'form_custom_php','custom_css'=>'form_custom_css','browse_sql'=>'browse_sql',
         'browse_columns'=>'browse_columns','browse_search_enabled'=>'browse_search_enabled',
         'browse_search_placeholder'=>'browse_search_placeholder','browse_search_fields'=>'browse_search_fields',
         'browse_page_size'=>'browse_page_size','browse_default_sort'=>'browse_default_sort',
-        'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode'];
+        'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode',
+        'type'=>'form_type','display_mode'=>'browse_display_mode',
+        'js_before_save'=>'form_js_before_save','js_after_save'=>'form_js_after_save'];
 }
 
 function nu_get_form($code) {
@@ -313,15 +317,6 @@ function nu_field_server_readonly($field)  { return !empty($field['server_readon
 
 /**
  * Render a single field using a label-left inline layout that mirrors the form editor.
- *
- * Layout:
- *   +------------------+------------------------------------+
- *   |  Label (right)   |  Input / control (left-aligned)    |
- *   +------------------+------------------------------------+
- *
- * - Label column: fixed 160px, right-aligned, bold, text-muted colour
- * - Control column: flex 1, full width
- * - Full-width exceptions (subform, checkbox, html, button, fieldset): no label column
  */
 function nu_render_field($field, $value = '', $record = []) {
     $type  = nu_field_type($field);
@@ -356,7 +351,6 @@ function nu_render_field($field, $value = '', $record = []) {
 
     if (in_array($type, $fullWidthTypes, true)) {
 
-        // Checkbox: inline label next to tick box
         if ($type === 'checkbox') {
             $checked = !empty($value) ? ' checked' : '';
             $control = '<div class="nu-field-wrapper" data-field="' . nu_attr($name) . '"'
@@ -371,7 +365,6 @@ function nu_render_field($field, $value = '', $record = []) {
             return $control;
         }
 
-        // Subform: full-width block with label as section header
         if ($type === 'subform') {
             $sf       = $field['subform'] ?? [];
             $sfCode   = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? $name));
@@ -397,7 +390,6 @@ function nu_render_field($field, $value = '', $record = []) {
                  . '</div>';
         }
 
-        // HTML / content
         if ($type === 'html' || $type === 'content') {
             $htmlContent = $field['html_content'] ?? ($field['default_value'] ?? '');
             return '<div class="nu-field-wrapper"'
@@ -406,7 +398,6 @@ function nu_render_field($field, $value = '', $record = []) {
                  . '</div>';
         }
 
-        // Button
         if ($type === 'button') {
             $action  = $field['button_action'] ?? '';
             $onclick = $action !== '' ? ' onclick="' . nu_attr($action) . '"' : '';
@@ -416,7 +407,6 @@ function nu_render_field($field, $value = '', $record = []) {
                  . '</div>';
         }
 
-        // Fieldset
         if ($type === 'fieldset') {
             $legend = $field['legend'] ?? $label;
             return '<fieldset style="grid-column:span ' . $col . ';margin-bottom:16px;padding:12px;border:1px solid #ddd;border-radius:8px;">'
@@ -425,7 +415,7 @@ function nu_render_field($field, $value = '', $record = []) {
         }
     }
 
-    // ── Hidden / UUID with no value ──────────────────────────────────────
+    // ── Hidden / UUID ──────────────────────────────────────────────────
     if ($type === 'hidden') {
         return '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '">';
     }
@@ -437,9 +427,8 @@ function nu_render_field($field, $value = '', $record = []) {
         } else {
             return '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="">';
         }
-        // Falls through to label-left wrapper below
     } else {
-        // ── Build the input control ─────────────────────────────────────
+        // ── Build the input control ──────────────────────────────────────
         switch ($type) {
 
             case 'textarea':
@@ -552,15 +541,13 @@ function nu_render_field($field, $value = '', $record = []) {
                 $control = '<input type="text" class="' . nu_attr($cssClass) . '" data-field="' . nu_attr($name) . '" data-calculated="true" data-expression="' . nu_attr($expr) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
                 break;
 
-            default: // text and everything else
+            default:
                 $control = '<input type="text" class="' . nu_attr($cssClass) . '" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '"' . $placeholder . $required . ' style="width:100%;">';
                 break;
         }
     }
 
     // ── Label-left inline wrapper ────────────────────────────────────────
-    // Mirrors the form editor: bold label right-aligned in a 160px column,
-    // input stretches to fill the remaining space.
     $labelHtml = '<label for="nuf_' . nu_attr($name) . '"'
                . ' style="display:block;font-weight:600;font-size:13px;color:#555;'
                . 'text-align:right;padding-right:10px;padding-top:7px;'
@@ -712,6 +699,23 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
 
     $layout = nu_inject_parent_context($layout, $formTable, (string)($recordId ?? ''));
 
+    // ── Custom PHP hook (runs before render, may modify $record) ──────────
+    $customPhp = trim((string)($form[$c['custom_php']] ?? ''));
+    if ($customPhp !== '') {
+        try {
+            // Expose $record and $form to the custom PHP snippet
+            $data = $record;
+            eval($customPhp);
+            // If snippet modifies $data, merge back into $record
+            if (is_array($data)) $record = array_merge($record, $data);
+        } catch (Throwable $e) {
+            // Silently swallow custom PHP errors in production;
+            // expose error as HTML comment for debugging
+            // phpcs:ignore
+            $layout[] = ['type' => 'html', 'html_content' => '<!-- custom_php error: ' . htmlspecialchars($e->getMessage()) . ' -->', 'col' => 12];
+        }
+    }
+
     $html  = '<form class="nu-generated-form"'
            . ' data-form-code="'  . nu_attr($formCode)   . '"'
            . ' data-table="'      . nu_attr($formTable)  . '"'
@@ -720,18 +724,26 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
            . ' onsubmit="event.preventDefault(); submitNuForm(this);"'
            . ' style="font-size:13px;">';
 
+    // ── Custom CSS injection ──────────────────────────────────────────────
+    $customCss = trim((string)($form[$c['custom_css']] ?? ''));
+    if ($customCss !== '') {
+        $scopeId = 'nu-form-' . preg_replace('/[^a-zA-Z0-9_-]/', '-', $formCode);
+        $html .= '<style id="' . nu_attr($scopeId) . '-styles">'
+              . '.nu-generated-form[data-form-code="' . addslashes($formCode) . '"] {'
+              . '/* custom css wrapper */'
+              . '}'
+              . $customCss
+              . '</style>';
+    }
+
     // ── Group flat fields by row_index before rendering ──────────────────
-    // Fields saved by the builder carry row_index + col but are stored as a
-    // flat array. Group them so fields sharing the same row_index share one
-    // nu-form-row grid container, letting col=6+col=6 sit side-by-side.
-    $structuredNodes = []; // section / group / row nodes (pass through as-is)
-    $flatByRow       = []; // row_index => [field, ...]
-    $flatNoRow       = []; // fields with no row_index
+    $structuredNodes = [];
+    $flatByRow       = [];
+    $flatNoRow       = [];
 
     foreach ($layout as $node) {
         $type = $node['type'] ?? 'field';
         if (in_array($type, ['section', 'group', 'row'], true)) {
-            // Flush any accumulated flat fields first, preserving order
             if ($flatNoRow || $flatByRow) {
                 $structuredNodes[] = ['_flat_flush' => true, 'byRow' => $flatByRow, 'noRow' => $flatNoRow];
                 $flatByRow = [];
@@ -747,7 +759,6 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
             }
         }
     }
-    // Flush remaining flat fields
     if ($flatNoRow || $flatByRow) {
         $structuredNodes[] = ['_flat_flush' => true, 'byRow' => $flatByRow, 'noRow' => $flatNoRow];
     }
@@ -759,9 +770,7 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
         if (!empty($entry['_structured'])) {
             $html .= nu_render_layout_node($entry['node'], $record, $si++);
         } elseif (!empty($entry['_flat_flush'])) {
-            // Sort by row_index key so non-sequential indices (0,2,5) still render in order
             ksort($entry['byRow']);
-            // Emit grouped rows (fields sharing a row_index) in ascending row_index order
             foreach ($entry['byRow'] as $rowFields) {
                 $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
                 foreach ($rowFields as $node) {
@@ -769,7 +778,6 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
                 }
                 $html .= '</div>';
             }
-            // Emit ungrouped fields (no row_index), each in its own row
             foreach ($entry['noRow'] as $node) {
                 $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
                 $html .= nu_render_field($node, nu_field_value($record, $node), $record);
@@ -777,12 +785,59 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
             }
         }
     }
-    // ── END: row_index grouping ──────────────────────────────────────────
 
     $html .= '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:12px;border-top:1px solid #eee;">';
     $html .= '<button type="button" class="nu-btn nu-btn-ghost" onclick="closeNuForm(this)">Cancel</button>';
     $html .= '<button type="submit" class="nu-btn nu-btn-primary">Save</button>';
     $html .= '</div></form>';
+
+    // ── Custom JS injection (on-load hook) ────────────────────────────────
+    $customJs       = trim((string)($form[$c['custom_js']] ?? ''));
+    $jsBeforeSave   = trim((string)($form[$c['js_before_save']] ?? ''));
+    $jsAfterSave    = trim((string)($form[$c['js_after_save']] ?? ''));
+
+    if ($customJs !== '' || $jsBeforeSave !== '' || $jsAfterSave !== '') {
+        $escapedCode = htmlspecialchars($formCode, ENT_QUOTES, 'UTF-8');
+        $html .= '<script data-nu-form-hooks="' . $escapedCode . '">';
+        $html .= '(function(){';
+        $html .= 'var _fc=' . json_encode($formCode) . ';';
+
+        // On-load: run after form is inserted into DOM
+        if ($customJs !== '') {
+            $html .= 'window._nuFormOnLoad=window._nuFormOnLoad||{};';
+            $html .= 'window._nuFormOnLoad[_fc]=function(formEl){';
+            $html .= 'var nu=window.nu||{};';
+            $html .= $customJs;
+            $html .= '};';
+        }
+
+        // Before save hook
+        if ($jsBeforeSave !== '') {
+            $html .= 'window._nuFormBeforeSave=window._nuFormBeforeSave||{};';
+            $html .= 'window._nuFormBeforeSave[_fc]=function(formEl,data){';
+            $html .= 'var nu=window.nu||{};';
+            $html .= $jsBeforeSave;
+            $html .= '};';
+        }
+
+        // After save hook
+        if ($jsAfterSave !== '') {
+            $html .= 'window._nuFormAfterSave=window._nuFormAfterSave||{};';
+            $html .= 'window._nuFormAfterSave[_fc]=function(formEl,result){';
+            $html .= 'var nu=window.nu||{};';
+            $html .= $jsAfterSave;
+            $html .= '};';
+        }
+
+        // Auto-trigger on-load hook once this <script> runs (form is already in DOM at this point)
+        if ($customJs !== '') {
+            $html .= 'var _el=document.querySelector(\'form.nu-generated-form[data-form-code="\'+_fc+\'"]\');';
+            $html .= 'if(_el && typeof window._nuFormOnLoad[_fc]==="function") window._nuFormOnLoad[_fc](_el);';
+        }
+
+        $html .= '})();';
+        $html .= '</script>';
+    }
 
     return $html;
 }
@@ -1143,6 +1198,127 @@ function nu_handle_save() {
     }
 }
 
+/**
+ * Save (create or update) a form definition in nu_forms.
+ * Called by the builder's "Save Form" button via POST action=save_form.
+ */
+function nu_handle_save_form() {
+    $data = nu_request_json();
+
+    $formId   = (int)($data['form_id'] ?? 0);
+    $c        = nu_form_columns();
+    $ftable   = nu_form_table_name();
+
+    // Required
+    $name   = trim((string)($data['form_name']   ?? ''));
+    $code   = trim((string)($data['form_code']   ?? ''));
+    $table  = trim((string)($data['form_table']  ?? ''));
+    $layout = $data['form_layout'] ?? [];
+
+    if ($name === '') nu_json(['success' => false, 'error' => 'form_name is required'], 400);
+
+    // Auto-generate code from name if not provided
+    if ($code === '') {
+        $code = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $name));
+        $code = trim($code, '_');
+    }
+
+    $save = [
+        $c['name']                    => $name,
+        $c['code']                    => $code,
+        $c['table']                   => $table,
+        $c['layout']                  => json_encode(is_array($layout) ? $layout : []),
+        $c['active']                  => 1,
+        $c['type']                    => $data['form_type']        ?? 'main',
+        $c['display_mode']            => $data['browse_display_mode'] ?? 'inline',
+        $c['pk_type']                 => $data['form_pk_type']     ?? 'autoincrement',
+        $c['table_mode']              => $data['form_table_mode']  ?? 'new',
+        $c['custom_js']               => $data['form_custom_js']   ?? '',
+        $c['js_before_save']          => $data['form_js_before_save'] ?? '',
+        $c['js_after_save']           => $data['form_js_after_save']  ?? '',
+        $c['custom_php']              => $data['form_custom_php']  ?? '',
+        $c['custom_css']              => $data['form_custom_css']  ?? '',
+        $c['browse_sql']              => $data['browse_sql']       ?? '',
+        $c['browse_columns']          => $data['browse_columns']   ?? '',
+        $c['browse_search_enabled']   => !empty($data['browse_search_enabled']) ? 1 : 0,
+        $c['browse_search_placeholder']=> $data['browse_search_placeholder'] ?? 'Search...',
+        $c['browse_search_fields']    => $data['browse_search_fields'] ?? '',
+        $c['browse_page_size']        => (int)($data['browse_page_size'] ?? 20),
+        $c['browse_default_sort']     => $data['browse_default_sort'] ?? '',
+    ];
+
+    // Strip any columns that don't exist in nu_forms yet (graceful degradation)
+    $formTableCols = nu_get_table_columns($ftable);
+    if (!empty($formTableCols)) {
+        $save = array_intersect_key($save, $formTableCols);
+    }
+
+    if ($formId > 0) {
+        // UPDATE
+        $sets = []; $params = [];
+        foreach ($save as $col => $val) {
+            $sets[]   = "`{$col}` = ?";
+            $params[] = $val;
+        }
+        $params[] = $formId;
+        $pk = $c['id'];
+        nu_q("UPDATE `{$ftable}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
+        nu_json(['success' => true, 'form_id' => $formId, 'form_code' => $code]);
+    } else {
+        // INSERT
+        $cols         = array_keys($save);
+        $placeholders = array_fill(0, count($cols), '?');
+        nu_q(
+            "INSERT INTO `{$ftable}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")",
+            array_values($save)
+        );
+        $newId = (int)nu_db()->lastInsertId();
+        nu_json(['success' => true, 'form_id' => $newId, 'form_code' => $code]);
+    }
+}
+
+/**
+ * Load a form definition for the builder editor.
+ */
+function nu_handle_load_form() {
+    $formId = (int)($_GET['form_id'] ?? 0);
+    if ($formId <= 0) nu_json(['success' => false, 'error' => 'Missing form_id'], 400);
+
+    $ftable = nu_form_table_name();
+    $c      = nu_form_columns();
+    $pk     = $c['id'];
+
+    $form = nu_q("SELECT * FROM `{$ftable}` WHERE `{$pk}` = ? LIMIT 1", [$formId])
+                ->fetch(PDO::FETCH_ASSOC);
+
+    if (!$form) nu_json(['success' => false, 'error' => 'Form not found'], 404);
+
+    // Normalise output keys to the builder's expected camelCase / snake_case names
+    nu_json(['success' => true, 'data' => [
+        'form_id'                  => (int)$form[$c['id']],
+        'form_name'                => $form[$c['name']]                     ?? '',
+        'form_code'                => $form[$c['code']]                     ?? '',
+        'form_table'               => $form[$c['table']]                    ?? '',
+        'form_layout'              => json_decode($form[$c['layout']] ?? '[]', true) ?: [],
+        'form_type'                => $form[$c['type']]                     ?? 'main',
+        'browse_display_mode'      => $form[$c['display_mode']]             ?? 'inline',
+        'form_pk_type'             => $form[$c['pk_type']]                  ?? 'autoincrement',
+        'form_table_mode'          => $form[$c['table_mode']]               ?? 'new',
+        'form_custom_js'           => $form[$c['custom_js']]                ?? '',
+        'form_js_before_save'      => $form[$c['js_before_save']]           ?? '',
+        'form_js_after_save'       => $form[$c['js_after_save']]            ?? '',
+        'form_custom_php'          => $form[$c['custom_php']]               ?? '',
+        'form_custom_css'          => $form[$c['custom_css']]               ?? '',
+        'browse_sql'               => $form[$c['browse_sql']]               ?? '',
+        'browse_columns'           => $form[$c['browse_columns']]           ?? '',
+        'browse_search_enabled'    => (int)($form[$c['browse_search_enabled']] ?? 0),
+        'browse_search_placeholder'=> $form[$c['browse_search_placeholder']] ?? 'Search...',
+        'browse_search_fields'     => $form[$c['browse_search_fields']]     ?? '',
+        'browse_page_size'         => (int)($form[$c['browse_page_size']]   ?? 20),
+        'browse_default_sort'      => $form[$c['browse_default_sort']]      ?? '',
+    ]]);
+}
+
 /* ── Router ────────────────────────────────────────── */
 try {
     $action = $_GET['action'] ?? '';
@@ -1152,6 +1328,8 @@ try {
         case 'events':           nu_handle_events();          break;
         case 'list':             nu_handle_list();            break;
         case 'save':             nu_handle_save();            break;
+        case 'save_form':        nu_handle_save_form();       break;
+        case 'load_form':        nu_handle_load_form();       break;
         case 'subform_fields':   nu_handle_subform_fields();  break;
         case 'subform_list':     nu_handle_subform_list();    break;
         case 'subform_save':     nu_handle_subform_save();    break;
