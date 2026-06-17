@@ -494,22 +494,32 @@ foreach ($forms as $f) {
 }
 /* ── Resize handle below each Ace editor ── */
 .nb-ace-resize-handle {
-  height:8px;
+  height:10px;
   background:#181825;
-  border-top:1px solid rgba(255,255,255,.07);
+  border-top:1px solid rgba(255,255,255,.1);
   cursor:ns-resize;
-  display:flex; align-items:center; justify-content:center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   user-select:none;
   flex-shrink:0;
+  gap:3px;
 }
+/* Always-visible grip dots */
+.nb-ace-resize-handle::before,
 .nb-ace-resize-handle::after {
   content:'';
   display:block;
-  width:32px; height:2px;
+  width:24px;
+  height:3px;
   border-radius:2px;
-  background:rgba(255,255,255,.18);
+  background:rgba(255,255,255,.30);
+  transition:background .15s;
 }
-.nb-ace-resize-handle:hover::after { background:rgba(255,255,255,.4); }
+.nb-ace-resize-handle:hover::before,
+.nb-ace-resize-handle:hover::after {
+  background:rgba(255,255,255,.65);
+}
 /* Hidden textarea synced on save */
 .nb-ace-hidden { display:none !important; }
 </style>
@@ -1064,7 +1074,7 @@ if (!window._nbFormsModuleInit) {
       return editor;
     }
 
-    // setValue: if editor not yet mounted, retry every 100ms up to 20x (2s)
+    // setValue: push value into editor, retrying via rAF if not yet mounted
     function _setValue(editorId, value) {
       var entry = _editors[editorId];
       if (entry) {
@@ -1074,21 +1084,22 @@ if (!window._nbFormsModuleInit) {
         var h = document.getElementById(entry.hiddenId);
         if (h) h.value = value || '';
       } else {
+        // Editor not yet mounted — retry on next animation frame (up to 40 frames ~660ms)
         var attempts = 0;
-        var timer = setInterval(function() {
+        function _retry() {
           attempts++;
           var e2 = _editors[editorId];
           if (e2) {
-            clearInterval(timer);
             e2.editor.setValue(value || '', -1);
             e2.editor.clearSelection();
             e2.editor.getSession().getUndoManager().reset();
             var h2 = document.getElementById(e2.hiddenId);
             if (h2) h2.value = value || '';
-          } else if (attempts >= 20) {
-            clearInterval(timer);
+          } else if (attempts < 40) {
+            requestAnimationFrame(_retry);
           }
-        }, 100);
+        }
+        requestAnimationFrame(_retry);
       }
     }
 
@@ -1283,86 +1294,18 @@ if (!window._nbFormsModuleInit) {
     if (typeof _origSaveForm === 'function') return _origSaveForm.apply(this, arguments);
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  //  FIX: Populate Ace editors when editing an existing form.
-  //
-  //  Approach: make our OWN direct fetch to api/forms.php?action=get
-  //  immediately after _origEdit is called, then push the values
-  //  straight into Ace — no fetch interception, no timing race.
-  // ══════════════════════════════════════════════════════════════════
-  var _aceDataMap = {
-    aceCustomJs:     'form_custom_js',
-    aceJsBeforeSave: 'form_js_before_save',
-    aceJsAfterSave:  'form_js_after_save',
-    aceCustomPhp:    'form_custom_php',
-    aceCustomCss:    'form_custom_css',
-  };
-
-  function _pushDataToAce(formData) {
-    Object.keys(_aceDataMap).forEach(function(aceId) {
-      nbAce.setValue(aceId, formData[_aceDataMap[aceId]] || '');
-    });
-    nbAce.resizeAll();
-  }
-
-  // Strategy 1: custom event (in case original edit() dispatches it)
-  document.addEventListener('nbFormLoaded', function(e) {
-    if (e.detail && e.detail.form) _pushDataToAce(e.detail.form);
-  });
-
-  // Strategy 2: make our own direct fetch after _origEdit fires
-  var _origEdit = nbFormBuilder.edit;
-  nbFormBuilder.edit = function(formId) {
-    // Call original first so the builder UI opens/populates
-    if (typeof _origEdit === 'function') _origEdit.call(nbFormBuilder, formId);
-
-    // Independently fetch form data and push to Ace editors
-    fetch('api/forms.php?action=get&id=' + encodeURIComponent(formId))
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data && data.success && data.form) {
-          _pushDataToAce(data.form);
-        }
-      })
-      .catch(function(err) {
-        console.warn('[nub5] ace edit fetch failed, falling back to textarea poll', err);
-        // Strategy 3: poll hidden textareas as last resort
-        var polls = 0;
-        var textareaMap = {
-          aceCustomJs:     'formCustomJs',
-          aceJsBeforeSave: 'formJsBeforeSave',
-          aceJsAfterSave:  'formJsAfterSave',
-          aceCustomPhp:    'formCustomPhp',
-          aceCustomCss:    'formCustomCss',
-        };
-        var timer = setInterval(function() {
-          polls++;
-          var anyFilled = false;
-          Object.keys(textareaMap).forEach(function(aceId) {
-            var ta = document.getElementById(textareaMap[aceId]);
-            if (ta && ta.value) {
-              nbAce.setValue(aceId, ta.value);
-              anyFilled = true;
-            }
-          });
-          if (anyFilled || polls >= 30) {
-            clearInterval(timer);
-            nbAce.resizeAll();
-          }
-        }, 100);
-      });
-  };
-
   // ── Patch nbFormBuilder.open: clear Ace editors on new form ──────
+  // nb-form-builder.js owns edit() — we only need to clear on new form open.
   const _origOpen = nbFormBuilder.open;
   nbFormBuilder.open = function() {
     if (typeof _origOpen === 'function') _origOpen.call(nbFormBuilder);
-    setTimeout(function() {
+    // Use rAF so Ace editors are mounted before we clear them
+    requestAnimationFrame(function() {
       ['aceCustomJs','aceJsBeforeSave','aceJsAfterSave','aceCustomPhp','aceCustomCss'].forEach(function(id) {
         nbAce.setValue(id, '');
       });
       nbAce.resizeAll();
-    }, 150);
+    });
   };
 
   // ── Patch toolbox drag for preset-bearing select tools ───────────
