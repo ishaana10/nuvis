@@ -26,10 +26,6 @@ foreach ($forms as $f) {
 }
 ?>
 
-<!-- Ace Editor CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.9/ace.min.js" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.9/ext-language_tools.min.js" crossorigin="anonymous"></script>
-
 <style>
 /* ── Form Builder Styles ─────────────────────────────────────── */
 .nb-builder-wrap { display:flex; gap:16px; height:calc(100vh - 300px); min-height:500px; }
@@ -492,6 +488,24 @@ foreach ($forms as $f) {
   font-size:13px;
   line-height:1.6;
 }
+/* ── Resize handle below each Ace editor ── */
+.nb-ace-resize-handle {
+  height:8px;
+  background:#181825;
+  border-top:1px solid rgba(255,255,255,.07);
+  cursor:ns-resize;
+  display:flex; align-items:center; justify-content:center;
+  user-select:none;
+  flex-shrink:0;
+}
+.nb-ace-resize-handle::after {
+  content:'';
+  display:block;
+  width:32px; height:2px;
+  border-radius:2px;
+  background:rgba(255,255,255,.18);
+}
+.nb-ace-resize-handle:hover::after { background:rgba(255,255,255,.4); }
 /* Hidden textarea synced on save */
 .nb-ace-hidden { display:none !important; }
 </style>
@@ -918,13 +932,14 @@ foreach ($forms as $f) {
             JS On Load
             <span style="font-weight:400;color:var(--text-tertiary);">— runs after form renders, use <code>nu.getValue()</code> etc.</span>
           </label>
-          <div class="nb-ace-wrap">
+          <div class="nb-ace-wrap" id="wrapCustomJs">
             <div class="nb-ace-topbar">
               <span class="nb-ace-lang-badge js">JS</span>
               <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo</span>
               <button class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceCustomJs')">☀ theme</button>
             </div>
             <div id="aceCustomJs" class="nb-ace-editor" style="height:180px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceCustomJs"></div>
           </div>
           <textarea id="formCustomJs" class="nb-ace-hidden"></textarea>
         </div>
@@ -935,13 +950,14 @@ foreach ($forms as $f) {
             JS Before Save
             <span style="font-weight:400;color:var(--text-tertiary);">— return false to cancel</span>
           </label>
-          <div class="nb-ace-wrap">
+          <div class="nb-ace-wrap" id="wrapJsBeforeSave">
             <div class="nb-ace-topbar">
               <span class="nb-ace-lang-badge js">JS</span>
               <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo</span>
               <button class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceJsBeforeSave')">☀ theme</button>
             </div>
             <div id="aceJsBeforeSave" class="nb-ace-editor" style="height:140px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceJsBeforeSave"></div>
           </div>
           <textarea id="formJsBeforeSave" class="nb-ace-hidden"></textarea>
         </div>
@@ -952,13 +968,14 @@ foreach ($forms as $f) {
             JS After Save
             <span style="font-weight:400;color:var(--text-tertiary);">— e.g. nu.toast('Saved!')</span>
           </label>
-          <div class="nb-ace-wrap">
+          <div class="nb-ace-wrap" id="wrapJsAfterSave">
             <div class="nb-ace-topbar">
               <span class="nb-ace-lang-badge js">JS</span>
               <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo</span>
               <button class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceJsAfterSave')">☀ theme</button>
             </div>
             <div id="aceJsAfterSave" class="nb-ace-editor" style="height:140px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceJsAfterSave"></div>
           </div>
           <textarea id="formJsAfterSave" class="nb-ace-hidden"></textarea>
         </div>
@@ -976,13 +993,14 @@ foreach ($forms as $f) {
             Custom PHP
             <span style="font-weight:400;color:var(--text-tertiary);">— runs server-side before render</span>
           </label>
-          <div class="nb-ace-wrap">
+          <div class="nb-ace-wrap" id="wrapCustomPhp">
             <div class="nb-ace-topbar">
               <span class="nb-ace-lang-badge php">PHP</span>
               <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo</span>
               <button class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceCustomPhp')">☀ theme</button>
             </div>
             <div id="aceCustomPhp" class="nb-ace-editor" style="height:200px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceCustomPhp"></div>
           </div>
           <textarea id="formCustomPhp" class="nb-ace-hidden"></textarea>
         </div>
@@ -993,13 +1011,14 @@ foreach ($forms as $f) {
             Custom CSS
             <span style="font-weight:400;color:var(--text-tertiary);">— scoped to this form</span>
           </label>
-          <div class="nb-ace-wrap">
+          <div class="nb-ace-wrap" id="wrapCustomCss">
             <div class="nb-ace-topbar">
               <span class="nb-ace-lang-badge css">CSS</span>
               <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo</span>
               <button class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceCustomCss')">☀ theme</button>
             </div>
             <div id="aceCustomCss" class="nb-ace-editor" style="height:180px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceCustomCss"></div>
           </div>
           <textarea id="formCustomCss" class="nb-ace-hidden"></textarea>
         </div>
@@ -1026,12 +1045,11 @@ if (!window._nbFormsModuleInit) {
   //  Ace Editor manager
   // ══════════════════════════════════════════════════════════════════
   window.nbAce = (function() {
-    // Map of editorId -> { editor, hiddenId, darkTheme, lightTheme }
+    // Map of editorId -> { editor, hiddenId, dark }
     var _editors = {};
     var _darkTheme  = 'ace/theme/one_dark';
     var _lightTheme = 'ace/theme/chrome';
 
-    // Detect parent app theme (dark/light) from html data-theme or prefers-color-scheme
     function _isDarkMode() {
       var t = document.documentElement.getAttribute('data-theme');
       if (t === 'dark')  return true;
@@ -1040,105 +1058,111 @@ if (!window._nbFormsModuleInit) {
     }
 
     function _init(editorId, hiddenId, mode) {
-      if (!window.ace) return;
+      if (!window.ace) return null;
       ace.require('ace/ext/language_tools');
 
       var editor = ace.edit(editorId);
       editor.setOptions({
-        mode:                 'ace/mode/' + mode,
-        theme:                _isDarkMode() ? _darkTheme : _lightTheme,
-        fontSize:             '13px',
-        tabSize:              2,
-        useSoftTabs:          true,
-        showPrintMargin:      false,
-        enableBasicAutocompletion:  true,
-        enableLiveAutocompletion:   true,
-        enableSnippets:             true,
-        wrap:                       false,
-        scrollPastEnd:              0.3,
-        showLineNumbers:            true,
-        showGutter:                 true,
-        highlightActiveLine:        true,
-        fontFamily:                 'ui-monospace, "Cascadia Code", "Fira Code", monospace',
+        mode:                        'ace/mode/' + mode,
+        theme:                       _isDarkMode() ? _darkTheme : _lightTheme,
+        fontSize:                    '13px',
+        tabSize:                     2,
+        useSoftTabs:                 true,
+        showPrintMargin:             false,
+        enableBasicAutocompletion:   true,
+        enableLiveAutocompletion:    true,
+        enableSnippets:              true,
+        wrap:                        false,
+        scrollPastEnd:               0.3,
+        showLineNumbers:             true,
+        showGutter:                  true,
+        highlightActiveLine:         true,
+        fontFamily:                  'ui-monospace, "Cascadia Code", "Fira Code", monospace',
       });
 
-      // Sync to hidden textarea on every change
+      // ── FIX: sync to hidden textarea on every keystroke ──────────
       var hidden = document.getElementById(hiddenId);
       editor.session.on('change', function() {
         if (hidden) hidden.value = editor.getValue();
       });
 
-      _editors[editorId] = { editor: editor, hiddenId: hiddenId, dark: true };
+      // Store with correct hiddenId reference
+      _editors[editorId] = { editor: editor, hiddenId: hiddenId, dark: _isDarkMode() };
 
-      // Load initial content from hidden textarea if any
+      // Load existing content from hidden textarea
       if (hidden && hidden.value) {
-        editor.setValue(hidden.value, -1); // -1 = cursor to start
+        editor.setValue(hidden.value, -1);
       }
 
       return editor;
     }
 
+    // ── FIX: _setValue — look up hiddenId from the _editors map ────
     function _setValue(editorId, value) {
-      if (_editors[editorId]) {
-        _editors[editorId].editor.setValue(value || '', -1);
-      } else {
-        // Editor not mounted yet — write directly to hidden textarea
-        var h = document.getElementById(_editors[editorId] ? _editors[editorId].hiddenId : null);
+      var entry = _editors[editorId];
+      if (entry) {
+        entry.editor.setValue(value || '', -1);
+        // Also sync to hidden textarea immediately
+        var h = document.getElementById(entry.hiddenId);
         if (h) h.value = value || '';
+      } else {
+        // Editor not yet mounted — write to textarea so it loads correctly on mount
+        // We don't know the hiddenId here, so do nothing (mount will pull from textarea)
       }
     }
 
     function _getValue(editorId) {
-      if (_editors[editorId]) return _editors[editorId].editor.getValue();
-      return '';
+      var entry = _editors[editorId];
+      return entry ? entry.editor.getValue() : '';
     }
 
+    // ── syncAll: flush all editors → hidden textareas before save ──
     function _syncAll() {
-      // Flush all editors to their hidden textareas (called just before saveForm)
       Object.keys(_editors).forEach(function(id) {
-        var h = document.getElementById(_editors[id].hiddenId);
-        if (h) h.value = _editors[id].editor.getValue();
+        var entry = _editors[id];
+        var h = document.getElementById(entry.hiddenId);
+        if (h) h.value = entry.editor.getValue();
       });
     }
 
     function _toggleTheme(editorId) {
-      if (!_editors[editorId]) return;
-      var e = _editors[editorId];
-      e.dark = !e.dark;
-      e.editor.setTheme(e.dark ? _darkTheme : _lightTheme);
+      var entry = _editors[editorId];
+      if (!entry) return;
+      entry.dark = !entry.dark;
+      entry.editor.setTheme(entry.dark ? _darkTheme : _lightTheme);
     }
 
     function _resize(editorId) {
-      if (_editors[editorId]) _editors[editorId].editor.resize();
+      var entry = _editors[editorId];
+      if (entry) entry.editor.resize();
     }
 
     function _resizeAll() {
       Object.keys(_editors).forEach(_resize);
     }
 
-    // Public API
     return {
       init:        _init,
       setValue:    _setValue,
       getValue:    _getValue,
       syncAll:     _syncAll,
       toggleTheme: _toggleTheme,
+      resize:      _resize,
       resizeAll:   _resizeAll,
     };
   })();
 
-  // ── Mount all Ace editors after DOM is ready ─────────────────────
-  // Use a short timeout to ensure the DOM is fully rendered
+  // ── Mount all Ace editors ─────────────────────────────────────────
   setTimeout(function() {
     if (!window.ace) {
       console.warn('[nub5] Ace editor not loaded — falling back to plain textareas');
-      // Unhide the textareas as fallback
       ['formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomCss'].forEach(function(id){
         var el = document.getElementById(id);
         if (el) { el.classList.remove('nb-ace-hidden'); el.rows = 8; }
       });
       return;
     }
+    ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.9/');
     nbAce.init('aceCustomJs',      'formCustomJs',      'javascript');
     nbAce.init('aceJsBeforeSave',  'formJsBeforeSave',  'javascript');
     nbAce.init('aceJsAfterSave',   'formJsAfterSave',   'javascript');
@@ -1146,11 +1170,40 @@ if (!window._nbFormsModuleInit) {
     nbAce.init('aceCustomCss',     'formCustomCss',     'css');
   }, 100);
 
-  // Resize Ace when its parent tab becomes visible
-  // (Ace editors inside hidden divs have 0-size until forced resize)
+  // ── Resize Ace when its parent tab becomes visible ────────────────
   document.addEventListener('click', function(e) {
     var tab = e.target.closest('.nb-tab');
     if (tab) setTimeout(function(){ nbAce.resizeAll(); }, 50);
+  });
+
+  // ── Drag-to-resize handles ────────────────────────────────────────
+  // Each .nb-ace-resize-handle[data-ace="aceId"] drags to grow/shrink
+  // the editor div above it.
+  document.addEventListener('mousedown', function(e) {
+    var handle = e.target.closest('.nb-ace-resize-handle');
+    if (!handle) return;
+    e.preventDefault();
+
+    var aceId     = handle.dataset.ace;
+    var editorDiv = document.getElementById(aceId);
+    if (!editorDiv) return;
+
+    var startY  = e.clientY;
+    var startH  = editorDiv.offsetHeight;
+    var minH    = 80;
+
+    function onMove(ev) {
+      var newH = Math.max(minH, startH + (ev.clientY - startY));
+      editorDiv.style.height = newH + 'px';
+      nbAce.resize(aceId);
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      nbAce.resize(aceId);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   });
 
   // ── Form type filter ─────────────────────────────────────────────
@@ -1178,7 +1231,6 @@ if (!window._nbFormsModuleInit) {
     const header = row.querySelector('.nb-option-row-header');
     const body   = row.querySelector('.nb-option-row-body');
     const isOpen = body.classList.contains('open');
-    // Close all other rows first
     document.querySelectorAll('.nb-option-row-body.open').forEach(b => {
       b.classList.remove('open');
       b.previousElementSibling.classList.remove('open');
@@ -1227,7 +1279,6 @@ if (!window._nbFormsModuleInit) {
     const radio = document.querySelector('input[name="formType"][value="'+type+'"]');
     if (radio) radio.checked = true;
 
-    // Update option row pill
     const typeLabels = { main:'⊞ Main Form', subform:'⊟ Subform', popup:'▣ Popup', report:'📊 Report' };
     const pill = document.getElementById('optValFormType');
     if (pill) pill.textContent = typeLabels[type] || type;
@@ -1257,21 +1308,18 @@ if (!window._nbFormsModuleInit) {
     if (pill) pill.textContent = type === 'uuid' ? 'NuBuilder UUID' : 'Auto-increment INT';
   };
 
-  // ── Patch saveForm to flush Ace editors first ─────────────────────
-  // Wrap the global saveForm so Ace content is always synced to
-  // the hidden textareas before the payload is assembled.
+  // ── Patch saveForm: flush Ace editors first ───────────────────────
   const _origSaveForm = window.saveForm;
   window.saveForm = function() {
     nbAce.syncAll();
     if (typeof _origSaveForm === 'function') return _origSaveForm.apply(this, arguments);
   };
 
-  // ── Patch nbFormBuilder.edit to populate Ace editors on load ─────
+  // ── Patch nbFormBuilder.edit: push saved values into Ace on open ─
   const _origEdit = nbFormBuilder.edit;
   nbFormBuilder.edit = function(formId) {
     if (typeof _origEdit === 'function') _origEdit.call(nbFormBuilder, formId);
-    // After edit loads the form data into hidden textareas, push to Ace
-    // Use a short delay so the original edit() has time to set textarea values
+    // Wait for original edit() to populate the hidden textareas, then push to Ace
     setTimeout(function() {
       var map = {
         aceCustomJs:     'formCustomJs',
@@ -1285,10 +1333,10 @@ if (!window._nbFormsModuleInit) {
         if (hidden) nbAce.setValue(aceId, hidden.value);
       });
       nbAce.resizeAll();
-    }, 120);
+    }, 150);
   };
 
-  // ── Patch nbFormBuilder.open (new form) to clear Ace editors ─────
+  // ── Patch nbFormBuilder.open: clear Ace editors on new form ──────
   const _origOpen = nbFormBuilder.open;
   nbFormBuilder.open = function() {
     if (typeof _origOpen === 'function') _origOpen.call(nbFormBuilder);
@@ -1297,7 +1345,7 @@ if (!window._nbFormsModuleInit) {
         nbAce.setValue(id, '');
       });
       nbAce.resizeAll();
-    }, 120);
+    }, 150);
   };
 
   // ── Patch toolbox drag for preset-bearing select tools ───────────
