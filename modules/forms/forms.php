@@ -494,31 +494,28 @@ foreach ($forms as $f) {
 }
 /* ── Resize handle below each Ace editor ── */
 .nb-ace-resize-handle {
-  height:10px;
+  height:16px;
   background:#181825;
-  border-top:1px solid rgba(255,255,255,.1);
+  border-top:1px solid rgba(255,255,255,.12);
   cursor:ns-resize;
   display:flex;
   align-items:center;
   justify-content:center;
   user-select:none;
   flex-shrink:0;
-  gap:3px;
+  /* single visible grip line using a text character */
+  font-size:11px;
+  letter-spacing:2px;
+  color:rgba(255,255,255,.45);
+  line-height:1;
+  transition:background .15s, color .15s;
 }
-/* Always-visible grip dots */
-.nb-ace-resize-handle::before,
 .nb-ace-resize-handle::after {
-  content:'';
-  display:block;
-  width:24px;
-  height:3px;
-  border-radius:2px;
-  background:rgba(255,255,255,.30);
-  transition:background .15s;
+  content: '— — —';
 }
-.nb-ace-resize-handle:hover::before,
-.nb-ace-resize-handle:hover::after {
-  background:rgba(255,255,255,.65);
+.nb-ace-resize-handle:hover {
+  background:#1f1f30;
+  color:rgba(255,255,255,.85);
 }
 /* Hidden textarea synced on save */
 .nb-ace-hidden { display:none !important; }
@@ -1295,17 +1292,37 @@ if (!window._nbFormsModuleInit) {
   };
 
   // ── Patch nbFormBuilder.open: clear Ace editors on new form ──────
-  // nb-form-builder.js owns edit() — we only need to clear on new form open.
   const _origOpen = nbFormBuilder.open;
   nbFormBuilder.open = function() {
     if (typeof _origOpen === 'function') _origOpen.call(nbFormBuilder);
-    // Use rAF so Ace editors are mounted before we clear them
     requestAnimationFrame(function() {
       ['aceCustomJs','aceJsBeforeSave','aceJsAfterSave','aceCustomPhp','aceCustomCss'].forEach(function(id) {
         nbAce.setValue(id, '');
       });
       nbAce.resizeAll();
     });
+  };
+
+  // ── Patch nbFormBuilder.edit: push saved values into Ace editors ─
+  // nb-form-builder.js edit() sets hidden textarea values via _sv(),
+  // but Ace editors do not watch the textarea — we must push explicitly.
+  const _origEdit = nbFormBuilder.edit;
+  nbFormBuilder.edit = async function(formId) {
+    if (typeof _origEdit === 'function') await _origEdit.call(nbFormBuilder, formId);
+    // After the original edit() has populated the hidden textareas,
+    // push each value into its Ace editor.
+    const aceMap = {
+      aceCustomJs:     'formCustomJs',
+      aceJsBeforeSave: 'formJsBeforeSave',
+      aceJsAfterSave:  'formJsAfterSave',
+      aceCustomPhp:    'formCustomPhp',
+      aceCustomCss:    'formCustomCss',
+    };
+    Object.keys(aceMap).forEach(function(aceId) {
+      const hidden = document.getElementById(aceMap[aceId]);
+      if (hidden) nbAce.setValue(aceId, hidden.value || '');
+    });
+    nbAce.resizeAll();
   };
 
   // ── Patch toolbox drag for preset-bearing select tools ───────────
