@@ -801,6 +801,14 @@ foreach ($forms as $f) {
             <div class="nb-tool" data-type="select2" draggable="true">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>Select2
             </div>
+            <!-- Radio: single-choice radio button group -->
+            <div class="nb-tool" data-type="radio" draggable="true">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>Radio
+            </div>
+            <!-- Checkbox Group: multi-choice checkbox group -->
+            <div class="nb-tool" data-type="checkbox_group" draggable="true">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Checkbox Group
+            </div>
           </div>
           <div class="nb-tools-group">
             <div class="nb-tools-group-label">Advanced</div>
