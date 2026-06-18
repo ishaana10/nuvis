@@ -265,12 +265,25 @@
       // options panel renders; the Select Type dropdown records the sub-type.
       var canvasType  = type;
       var selectType  = extra.select_type || '';
+
       if (type === 'select2') {
         canvasType = 'select';
         selectType = selectType || 'select2';
       } else if (type === 'multiselect') {
         canvasType = 'select';
         selectType = selectType || 'multiselect';
+      } else if (type === 'select') {
+        // Back-compat: old saves used select2:true / multiple:true flags
+        // instead of select_type. Resolve those here.
+        if (!selectType) {
+          if (extra.select2 === true || extra.select2 === 'true' || extra.select2 === 1) {
+            selectType = 'select2';
+          } else if (extra.multiple === true || extra.multiple === 'true' || extra.multiple === 1) {
+            selectType = 'multiselect';
+          } else {
+            selectType = 'select';
+          }
+        }
       }
 
       var spanBtns = [3,4,6,8,12].map(function (n) {
@@ -283,7 +296,7 @@
         // ── Select-type sub-selector (only for 'select') ──────────────
         var selectTypeHtml = '';
         if (canvasType === 'select') {
-          var resolvedSelType = selectType || extra.select_type || 'select';
+          var resolvedSelType = selectType || 'select';
           var isS2     = resolvedSelType === 'select2'     ? 'selected' : '';
           var isMulti  = resolvedSelType === 'multiselect' ? 'selected' : '';
           var isSingle = (!isS2 && !isMulti)               ? 'selected' : '';
@@ -297,6 +310,17 @@
               + '</select>'
             + '</div>';
         }
+
+        // ── Allow Clear toggle (select2 only, hidden for others) ────
+        var allowClearChecked = (extra.allow_clear === false || extra.allow_clear === 'false') ? '' : 'checked';
+        var allowClearStyle   = (resolvedSelType === 'select2') ? '' : 'display:none;';
+        var allowClearHtml =
+          '<div class="nb-fp nb-fp-allow-clear" style="' + allowClearStyle + '">'
+            + '<label class="nb-fp-check" style="font-size:11px;">'
+              + '<input type="checkbox" class="nu-field-allow-clear"' + (allowClearChecked ? ' checked' : '') + '>'
+              + ' Allow Clear (×)'
+            + '</label>'
+          + '</div>';
 
         // ── Options source: manual | from table ─────────────────
         var optSource    = extra.options_source || 'manual';
@@ -348,7 +372,7 @@
             + '</div>'
           + '</div>';
 
-        extraBody += selectTypeHtml + sourceSwitcherHtml + manualPanel + fromTablePanel;
+        extraBody += selectTypeHtml + allowClearHtml + sourceSwitcherHtml + manualPanel + fromTablePanel;
       }
 
       if (canvasType === 'calculated') {
@@ -473,6 +497,8 @@
       // Wire options-source radio toggle for select / radio / checkbox_group
       if (canvasType === 'select' || canvasType === 'radio' || canvasType === 'checkbox_group') {
         _attachSelectOptionsToggle(card);
+        // Wire select-type dropdown → show/hide allow_clear row
+        _attachSelectTypeToggle(card);
       }
 
       if (canvasType === 'subform') {
@@ -565,9 +591,10 @@
               if (field.multiple) {
                 field.type = 'select'; // multiselect stays as 'select' with multiple flag
               }
-              // allow_clear for select2 — default true
+              // allow_clear — read from checkbox, only meaningful for select2
+              var allowClearEl = card.querySelector('.nu-field-allow-clear');
               if (selTypeVal2 === 'select2') {
-                field.allow_clear = true;
+                field.allow_clear = allowClearEl ? allowClearEl.checked : true;
               }
             }
 
@@ -727,6 +754,19 @@
       manualPanel.style.display    = isTable ? 'none' : '';
       fromTablePanel.style.display = isTable ? ''     : 'none';
     }
+  }
+
+  // ── _attachSelectTypeToggle ────────────────────────────────
+  // Shows/hides the Allow Clear row depending on whether select2 is chosen.
+  function _attachSelectTypeToggle(card) {
+    var selTypeEl   = card.querySelector('.nu-field-select-type');
+    var allowClearRow = card.querySelector('.nb-fp-allow-clear');
+    if (!selTypeEl || !allowClearRow) return;
+    function _sync() {
+      allowClearRow.style.display = (selTypeEl.value === 'select2') ? '' : 'none';
+    }
+    selTypeEl.addEventListener('change', _sync);
+    _sync();
   }
 
   function _attachRowBodyDrop(rowBody) {
@@ -1159,6 +1199,7 @@
         if (type === 'select' || type === 'select2' || type === 'multiselect' ||
             type === 'radio'  || type === 'checkbox_group') {
           _attachSelectOptionsToggle(card);
+          _attachSelectTypeToggle(card);
         }
         var body = card.querySelector('.nb-cfield-body');
         if (body) body.classList.add('open');
