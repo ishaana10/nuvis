@@ -138,7 +138,6 @@
       this.selectFormType('main',  document.querySelector('input[name="formType"][value="main"]')   ? document.querySelector('input[name="formType"][value="main"]').closest('.nb-ftype-card')  : null);
       this.selectTableMode('new',  document.querySelector('input[name="formTableMode"][value="new"]')? document.querySelector('input[name="formTableMode"][value="new"]').closest('.nb-tmode-card') : null);
       this.selectPkType('autoincrement', document.querySelector('input[name="formPkType"][value="autoincrement"]') ? document.querySelector('input[name="formPkType"][value="autoincrement"]').closest('.nb-pk-card') : null);
-      // Reset browse display mode dropdown to default
       this.selectDisplayMode('inline');
     },
 
@@ -181,7 +180,6 @@
       if (radio) radio.checked = true;
     },
 
-    // ── selectDisplayMode — now drives a <select> dropdown ────────
     selectDisplayMode: function (mode) {
       var sel = document.getElementById('browseDisplayMode');
       if (sel) sel.value = mode || 'inline';
@@ -194,7 +192,7 @@
       empty.style.display = canvas.querySelector('.nb-cfield') ? 'none' : 'block';
     },
 
-    // ── addRow ────────────────────────────────────────────────────
+    // ── addRow ────────────────────────────────────────────
     addRow: function () {
       var canvas = document.getElementById('formCanvas');
       if (!canvas) return null;
@@ -205,7 +203,7 @@
       row.className = 'nb-row';
       row.innerHTML =
         '<div class="nb-row-header">'
-          + '<span class="nb-row-drag" title="Drag row">⠿</span>'
+          + '<span class="nb-row-drag" title="Drag row">⠇</span>'
           + '<span class="nb-row-label">Row</span>'
           + '<span class="nb-row-actions">'
             + '<button class="nb-row-btn del" onclick="this.closest(\'.nb-row\').remove();window.nbFormBuilder._updateEmptyState();">✕</button>'
@@ -221,7 +219,7 @@
       return row;
     },
 
-    // ── addField ──────────────────────────────────────────────────
+    // ── addField ──────────────────────────────────────────
     addField: function (type, extraData) {
       var canvas = document.getElementById('formCanvas');
       if (!canvas) return null;
@@ -256,10 +254,24 @@
       return card;
     },
 
-    // ── _makeFieldCard ────────────────────────────────────────────
+    // ── _makeFieldCard ─────────────────────────────────────
     _makeFieldCard: function (type, label, name, required, extra) {
       extra = extra || {};
       var col = parseInt(extra.col || extra.colspan, 10) || 12;
+
+      // ── Normalise incoming type for the builder canvas ──────────
+      // The form layout stores the real runtime type (select2, multiselect).
+      // The builder canvas always uses 'select' as the card type so the
+      // options panel renders; the Select Type dropdown records the sub-type.
+      var canvasType  = type;
+      var selectType  = extra.select_type || '';
+      if (type === 'select2') {
+        canvasType = 'select';
+        selectType = selectType || 'select2';
+      } else if (type === 'multiselect') {
+        canvasType = 'select';
+        selectType = selectType || 'multiselect';
+      }
 
       var spanBtns = [3,4,6,8,12].map(function (n) {
         return '<button type="button" class="nb-span-btn' + (n === col ? ' active' : '') + '" data-span="' + n + '">' + n + '</button>';
@@ -267,14 +279,14 @@
 
       var extraBody = '';
 
-      if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
-        // ── Select-type selector (only for 'select') ──────────────
+      if (canvasType === 'select' || canvasType === 'radio' || canvasType === 'checkbox_group') {
+        // ── Select-type sub-selector (only for 'select') ──────────────
         var selectTypeHtml = '';
-        if (type === 'select') {
-          var selType   = extra.select_type || 'select';
-          var isS2      = selType === 'select2'    ? 'selected' : '';
-          var isMulti   = selType === 'multiselect' ? 'selected' : '';
-          var isSingle  = (!isS2 && !isMulti)       ? 'selected' : '';
+        if (canvasType === 'select') {
+          var resolvedSelType = selectType || extra.select_type || 'select';
+          var isS2     = resolvedSelType === 'select2'     ? 'selected' : '';
+          var isMulti  = resolvedSelType === 'multiselect' ? 'selected' : '';
+          var isSingle = (!isS2 && !isMulti)               ? 'selected' : '';
           selectTypeHtml =
             '<div class="nb-fp">'
               + '<label style="font-size:11px;font-weight:600;">Select Type</label>'
@@ -286,13 +298,13 @@
             + '</div>';
         }
 
-        // ── Options source: manual | from table ───────────────────
-        var optSource     = extra.options_source || 'manual';
-        var fromTable     = extra.options_table  || '';
-        var fromValCol    = extra.options_value_col || '';
-        var fromLabelCol  = extra.options_label_col || '';
-        var fromFilter    = extra.options_filter || '';
-        var isFromTable   = (optSource === 'table');
+        // ── Options source: manual | from table ─────────────────
+        var optSource    = extra.options_source || 'manual';
+        var fromTable    = extra.options_table  || '';
+        var fromValCol   = extra.options_value_col || '';
+        var fromLabelCol = extra.options_label_col || '';
+        var fromFilter   = extra.options_filter || '';
+        var isFromTable  = (optSource === 'table');
 
         var opts = (extra.options || []).map(function (o) {
           return typeof o === 'object' ? (o.value + '|' + o.label) : o;
@@ -339,13 +351,13 @@
         extraBody += selectTypeHtml + sourceSwitcherHtml + manualPanel + fromTablePanel;
       }
 
-      if (type === 'calculated') {
+      if (canvasType === 'calculated') {
         extraBody += '<div class="nb-fp nb-fp-full"><label>Formula / Expression</label>'
           + '<textarea class="nu-input nu-field-formula" rows="2" placeholder="e.g. {qty} * {price}">'
           + _esc(extra.formula || extra.calc_formula || '') + '</textarea></div>';
       }
 
-      if (type === 'lookup') {
+      if (canvasType === 'lookup') {
         var lk       = (extra.lookup && typeof extra.lookup === 'object') ? extra.lookup : {};
         var lkTable  = lk.table          || lk.form_code       || extra.lookup_form    || '';
         var lkDisp   = lk.display_column || lk.displaycolumn   || extra.lookup_display || '';
@@ -383,7 +395,7 @@
           + '</div>';
       }
 
-      if (type === 'subform') {
+      if (canvasType === 'subform') {
         var sf          = (extra.subform && typeof extra.subform === 'object') ? extra.subform : {};
         var sfData = {
           form_code:       sf.form_code    || sf.formcode  || extra.sf_form_code    || '',
@@ -399,12 +411,15 @@
 
       var card = document.createElement('div');
       card.className = 'nb-cfield';
-      card.dataset.type = type;
+      // Store the normalised canvas type (always 'select' for all select variants)
+      card.dataset.type = canvasType;
+      // Also store the actual runtime type so getLayout() can read it back
+      card.dataset.runtimeType = type;
       card.style.gridColumn = 'span ' + col;
       card.dataset.col = String(col);
       card.innerHTML =
         '<div class="nb-cfield-header">'
-          + '<span class="nb-cfield-drag">⠿</span>'
+          + '<span class="nb-cfield-drag">⠇</span>'
           + '<span class="nb-cfield-type-badge">' + _esc(type) + '</span>'
           + '<span class="nb-cfield-label">' + _esc(label) + '</span>'
           + '<span class="nb-cfield-span-badge">' + col + '/12</span>'
@@ -422,8 +437,8 @@
             + '<div class="nb-fp"><label>Label</label><input type="text" class="nu-input nu-field-label" value="' + _esc(label) + '"></div>'
             + '<div class="nb-fp"><label>Field Name</label><input type="text" class="nu-input nu-field-name" value="' + _esc(name) + '"></div>'
             + '<div class="nb-fp"><label class="nb-fp-check"><input type="checkbox" class="nu-field-required"' + (required ? ' checked' : '') + '> Required</label></div>'
-            + (type !== 'subform' ? '<div class="nb-fp"><label>Placeholder</label><input type="text" class="nu-input nu-field-placeholder" value="' + _esc(extra.placeholder || '') + '"></div>' : '')
-            + (type !== 'subform' ? '<div class="nb-fp"><label>Default Value</label><input type="text" class="nu-input nu-field-default" value="' + _esc(extra.default_value || extra.defaultvalue || '') + '"></div>' : '')
+            + (canvasType !== 'subform' ? '<div class="nb-fp"><label>Placeholder</label><input type="text" class="nu-input nu-field-placeholder" value="' + _esc(extra.placeholder || '') + '"></div>' : '')
+            + (canvasType !== 'subform' ? '<div class="nb-fp"><label>Default Value</label><input type="text" class="nu-input nu-field-default" value="' + _esc(extra.default_value || extra.defaultvalue || '') + '"></div>' : '')
             + '<div class="nb-fp nb-fp-full"><label>Help Text</label><input type="text" class="nu-input nu-field-help" value="' + _esc(extra.help_text || extra.field_help_text || '') + '"></div>'
             + extraBody
           + '</div>'
@@ -456,18 +471,18 @@
       });
 
       // Wire options-source radio toggle for select / radio / checkbox_group
-      if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
+      if (canvasType === 'select' || canvasType === 'radio' || canvasType === 'checkbox_group') {
         _attachSelectOptionsToggle(card);
       }
 
-      if (type === 'subform') {
+      if (canvasType === 'subform') {
         _attachSubformPanelEvents(card, sfData);
       }
 
       return card;
     },
 
-    // ── _applyColSpan ─────────────────────────────────────────────
+    // ── _applyColSpan ───────────────────────────────────────
     _applyColSpan: function (card, col) {
       var c = parseInt(col, 10) || 12;
       if (c < 1 || c > 12) c = 12;
@@ -482,7 +497,7 @@
       });
     },
 
-    // ── getLayout ─────────────────────────────────────────────────
+    // ── getLayout ──────────────────────────────────────────
     getLayout: function () {
       var canvas = document.getElementById('formCanvas');
       if (!canvas) return [];
@@ -491,7 +506,7 @@
 
       canvas.querySelectorAll('.nb-row').forEach(function (row) {
         row.querySelectorAll('.nb-cfield').forEach(function (card) {
-          var type       = card.dataset.type || 'text';
+          var canvasType = card.dataset.type || 'text';
           var labelEl    = card.querySelector('.nu-field-label');
           var nameEl     = card.querySelector('.nu-field-name');
           var reqEl      = card.querySelector('.nu-field-required');
@@ -507,8 +522,27 @@
           var lkFilterEl = card.querySelector('.nu-lookup-filter');
           var lkExtraEl  = card.querySelector('.nu-lookup-extra');
 
+          // ── Resolve the real serialised type ───────────────────────
+          // canvasType is always 'select' for all select variants.
+          // Read the Select Type dropdown to get the real runtime type:
+          //   'select'      → type: 'select'       (plain browser select)
+          //   'select2'     → type: 'select2'      (Select2 enhanced)
+          //   'multiselect' → type: 'select', multiple: true
+          var runtimeType = canvasType;
+          if (canvasType === 'select') {
+            var selTypeEl = card.querySelector('.nu-field-select-type');
+            var selTypeVal = selTypeEl ? (selTypeEl.value || 'select') : 'select';
+            if (selTypeVal === 'select2') {
+              runtimeType = 'select2';
+            } else if (selTypeVal === 'multiselect') {
+              runtimeType = 'select'; // stays 'select' but gets multiple:true below
+            } else {
+              runtimeType = 'select';
+            }
+          }
+
           var field = {
-            type:          type,
+            type:          runtimeType,
             label:         labelEl ? labelEl.value  : '',
             name:          nameEl  ? nameEl.value   : '',
             required:      reqEl   ? reqEl.checked  : false,
@@ -519,31 +553,38 @@
             row_index:     rowIndex
           };
 
-          // ── select-type + options source ──────────────────────
-          if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
-            // select_type (select / select2 / multiselect)
-            if (type === 'select') {
-              var selTypeEl = card.querySelector('.nu-field-select-type');
-              field.select_type = selTypeEl ? (selTypeEl.value || 'select') : 'select';
-              // convenience flags consumed by api/form.php
-              field.select2    = field.select_type === 'select2';
-              field.multiple   = field.select_type === 'multiselect';
+          // ── select / select2 / multiselect ────────────────────
+          if (canvasType === 'select' || canvasType === 'radio' || canvasType === 'checkbox_group') {
+            if (canvasType === 'select') {
+              var selTypeEl2  = card.querySelector('.nu-field-select-type');
+              var selTypeVal2 = selTypeEl2 ? (selTypeEl2.value || 'select') : 'select';
+              field.select_type = selTypeVal2;
+              // Flags consumed by api/form.php and FormRenderer.php
+              field.select2  = selTypeVal2 === 'select2';
+              field.multiple = selTypeVal2 === 'multiselect';
+              if (field.multiple) {
+                field.type = 'select'; // multiselect stays as 'select' with multiple flag
+              }
+              // allow_clear for select2 — default true
+              if (selTypeVal2 === 'select2') {
+                field.allow_clear = true;
+              }
             }
 
             // options source: manual list or from table
-            var optSrcEl = card.querySelector('.nu-field-opt-src:checked');
+            var optSrcEl  = card.querySelector('.nu-field-opt-src:checked');
             var optSource = optSrcEl ? optSrcEl.value : 'manual';
             field.options_source = optSource;
 
             if (optSource === 'table') {
-              var otEl  = card.querySelector('.nu-field-opt-table');
-              var ovEl  = card.querySelector('.nu-field-opt-val-col');
-              var olEl  = card.querySelector('.nu-field-opt-label-col');
-              var ofEl  = card.querySelector('.nu-field-opt-filter');
-              field.options_table     = otEl  ? otEl.value.trim()  : '';
-              field.options_value_col = ovEl  ? ovEl.value.trim()  : '';
-              field.options_label_col = olEl  ? olEl.value.trim()  : '';
-              field.options_filter    = ofEl  ? ofEl.value.trim()  : '';
+              var otEl = card.querySelector('.nu-field-opt-table');
+              var ovEl = card.querySelector('.nu-field-opt-val-col');
+              var olEl = card.querySelector('.nu-field-opt-label-col');
+              var ofEl = card.querySelector('.nu-field-opt-filter');
+              field.options_table     = otEl ? otEl.value.trim() : '';
+              field.options_value_col = ovEl ? ovEl.value.trim() : '';
+              field.options_label_col = olEl ? olEl.value.trim() : '';
+              field.options_filter    = ofEl ? ofEl.value.trim() : '';
               field.options = [];
             } else if (optsEl) {
               field.options = optsEl.value.split('\n').map(function (l) {
@@ -558,7 +599,7 @@
 
           if (formulaEl) field.formula = formulaEl.value;
 
-          if (type === 'lookup' && lkTableEl) {
+          if (canvasType === 'lookup' && lkTableEl) {
             field.lookup = {
               table:          lkTableEl  ? lkTableEl.value.trim()  : '',
               display_column: lkDispEl   ? (lkDispEl.value.trim()  || 'name') : 'name',
@@ -568,7 +609,7 @@
             };
           }
 
-          if (type === 'subform') field.subform = {};
+          if (canvasType === 'subform') field.subform = {};
           fields.push(field);
         });
         rowIndex++;
@@ -580,7 +621,7 @@
       return fields;
     },
 
-    // ── saveForm ──────────────────────────────────────────────────
+    // ── saveForm ──────────────────────────────────────────
     saveForm: async function () {
       var nameEl  = document.getElementById('builderFormName');
       var codeEl  = document.getElementById('builderFormCode');
@@ -608,7 +649,6 @@
         form_table_mode: _r('formTableMode')   || 'new',
         form_pk_type:    _r('formPkType')      || 'autoincrement',
         form_layout:     JSON.stringify(layout),
-        // Read browseDisplayMode from the <select> dropdown
         browse_display_mode:       (function () { var e = document.getElementById('browseDisplayMode'); return e ? e.value : 'inline'; }()),
         browse_sql:                _v('formBrowseSql'),
         browse_columns:            _v('formBrowseColumns'),
@@ -668,8 +708,7 @@
     };
   }
 
-  // ── _attachSelectOptionsToggle ────────────────────────────────
-  // Wires the Manual / From Table radio switcher inside a select card.
+  // ── _attachSelectOptionsToggle ─────────────────────────────
   function _attachSelectOptionsToggle(card) {
     var radios = card.querySelectorAll('.nu-field-opt-src');
     var manualPanel    = card.querySelector('.nb-select-manual');
@@ -682,7 +721,6 @@
         fromTablePanel.style.display = isTable ? ''     : 'none';
       });
     });
-    // Sync visibility to current checked state immediately
     var checked = card.querySelector('.nu-field-opt-src:checked');
     if (checked) {
       var isTable = checked.value === 'table';
@@ -1034,7 +1072,6 @@
       _sv('formBrowseSearchFields',       f.browse_search_fields      || '');
       _sc('formBrowseSearchEnabled',      f.browse_search_enabled);
 
-      // Restore browse display mode via the dropdown
       window.nbFormBuilder.selectDisplayMode(f.browse_display_mode || 'inline');
 
       _sv('formCustomJs',     f.form_custom_js      || '');
@@ -1051,7 +1088,7 @@
     }
   };
 
-  // ── _rebuildCanvas ────────────────────────────────────────────────
+  // ── _rebuildCanvas ──────────────────────────────────────────
   function _rebuildCanvas(layoutJson) {
     var canvas = document.getElementById('formCanvas');
     var empty  = document.getElementById('canvasEmpty');
@@ -1088,6 +1125,9 @@
       var rowBody = row ? row.querySelector('.nb-row-body') : null;
 
       groups[ri].forEach(function (f) {
+        // Pass the real stored type (e.g. 'select2') into _makeFieldCard
+        // so it can normalise to canvasType='select' and pre-select the
+        // correct Select Type dropdown value.
         var type = f.type || f.fieldtype || 'text';
         var card = window.nbFormBuilder._makeFieldCard(
           type,
@@ -1116,8 +1156,8 @@
 
         window.nbFormBuilder._applyColSpan(card, parseInt(f.col, 10) || 12);
 
-        // ── FIX: re-wire options-source toggle + open body in edit mode ──
-        if (type === 'select' || type === 'radio' || type === 'checkbox_group') {
+        if (type === 'select' || type === 'select2' || type === 'multiselect' ||
+            type === 'radio'  || type === 'checkbox_group') {
           _attachSelectOptionsToggle(card);
         }
         var body = card.querySelector('.nb-cfield-body');
