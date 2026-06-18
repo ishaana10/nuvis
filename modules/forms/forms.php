@@ -1304,13 +1304,16 @@ if (!window._nbFormsModuleInit) {
   };
 
   // ── Patch nbFormBuilder.edit: push saved values into Ace editors ─
-  // nb-form-builder.js edit() sets hidden textarea values via _sv(),
-  // but Ace editors do not watch the textarea — we must push explicitly.
+  //
+  // Root cause: edit() calls open() which schedules a RAF that clears
+  // all Ace editors. We must capture the values from the hidden
+  // textareas BEFORE that RAF fires, then push them AFTER it fires
+  // (second RAF), so the clear doesn't overwrite our restored values.
   const _origEdit = nbFormBuilder.edit;
   nbFormBuilder.edit = async function(formId) {
     if (typeof _origEdit === 'function') await _origEdit.call(nbFormBuilder, formId);
-    // After the original edit() has populated the hidden textareas,
-    // push each value into its Ace editor.
+    // Snapshot textarea values synchronously (they are now populated
+    // by the original edit() but the open() RAF clear hasn't run yet).
     const aceMap = {
       aceCustomJs:     'formCustomJs',
       aceJsBeforeSave: 'formJsBeforeSave',
@@ -1318,11 +1321,22 @@ if (!window._nbFormsModuleInit) {
       aceCustomPhp:    'formCustomPhp',
       aceCustomCss:    'formCustomCss',
     };
+    const snapshot = {};
     Object.keys(aceMap).forEach(function(aceId) {
       const hidden = document.getElementById(aceMap[aceId]);
-      if (hidden) nbAce.setValue(aceId, hidden.value || '');
+      snapshot[aceId] = hidden ? (hidden.value || '') : '';
     });
-    nbAce.resizeAll();
+    // Schedule AFTER the open() RAF clear by using a nested rAF.
+    // First RAF: open()'s clear runs now.
+    // Second RAF (inside): our restore runs after the clear.
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        Object.keys(snapshot).forEach(function(aceId) {
+          nbAce.setValue(aceId, snapshot[aceId]);
+        });
+        nbAce.resizeAll();
+      });
+    });
   };
 
   // ── Patch toolbox drag for preset-bearing select tools ───────────
