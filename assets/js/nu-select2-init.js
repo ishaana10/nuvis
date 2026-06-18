@@ -1,84 +1,71 @@
 /**
  * nu-select2-init.js
  *
- * Initialises Select2 on every <select data-select2="1"> element found
- * within the given scope (defaults to document).
- *
- * Why the old clone approach broke:
- *   Select2 stores its instance via jQuery.data() — a JS-side cache keyed by
- *   an internal integer, not the DOM attribute. cloneNode(true) copies DOM
- *   attributes but NOT jQuery data, so $(clone).select2() still hit a stale
- *   jQuery-data entry and crashed with:
+ * ROOT CAUSE (confirmed by console logs):
+ *   Select2 stores its instance via jQuery.data(el, 'select2').
+ *   When a previous init cycle fails or is interrupted, it leaves a
+ *   corrupted/partial object in jQuery's data cache. Our try/catch
+ *   on $(el).select2('destroy') swallows the error but does NOT clear
+ *   the stale jQuery data. So when we call $(el).select2(opts) fresh,
+ *   Select2's own constructor runs:
+ *       if (GetData(el, "select2")) GetData(el, "select2").destroy()
+ *   ...finds the stale object, and crashes:
  *       "r.GetData(...).destroy is not a function"
  *
- * New approach:
- *   1. Attempt a graceful $(el).select2('destroy') — catch & ignore any error.
- *   2. Strip data-select2-id from the element AND its options (belt+suspenders).
- *   3. Call $(el).select2(opts) fresh.
+ * FIX:
+ *   After the try/catch destroy (whether it succeeds or throws), always
+ *   forcibly wipe the jQuery data entry with $.removeData(el, 'select2')
+ *   AND remove the data-select2-id attribute. This guarantees Select2's
+ *   constructor finds nothing and constructs a clean new instance.
  */
 (function () {
   'use strict';
 
   function nuInitSelect2(scope) {
-    var hasJQ     = typeof jQuery !== 'undefined';
+    var hasJQ      = typeof jQuery !== 'undefined';
     var hasSelect2 = hasJQ && typeof jQuery.fn.select2 !== 'undefined';
 
     console.group('[nuInitSelect2] called');
-    console.log('  scope     :', scope || document);
-    console.log('  jQuery    :', hasJQ     ? 'YES v' + (jQuery.fn.jquery || '?') : 'MISSING');
-    console.log('  Select2   :', hasSelect2 ? 'YES' : 'MISSING — aborting');
+    console.log('  scope   :', scope || document);
+    console.log('  jQuery  :', hasJQ      ? 'YES v' + (jQuery.fn.jquery || '?') : 'MISSING');
+    console.log('  Select2 :', hasSelect2 ? 'YES' : 'MISSING — aborting');
 
-    if (!hasJQ || !hasSelect2) {
-      console.groupEnd();
-      return;
-    }
+    if (!hasJQ || !hasSelect2) { console.groupEnd(); return; }
 
     var $ = jQuery;
     var root = scope || document;
     var $selects = $(root).find('select[data-select2="1"]');
 
-    console.log('  found selects with data-select2="1":', $selects.length);
-
-    if (!$selects.length) {
-      // Also log ALL selects found so we can spot wrong attribute names
-      var allSelects = $(root).find('select');
-      console.log('  (all <select> elements in scope:', allSelects.length, ')');
-      allSelects.each(function (i) {
-        console.log('    [' + i + '] name=' + this.name + ' data-select2="' + (this.getAttribute('data-select2') || '') + '" data-select2-id="' + (this.getAttribute('data-select2-id') || '') + '"');
-      });
-    }
+    console.log('  selects found:', $selects.length);
 
     $selects.each(function (i) {
       var el = this;
       console.group('  [' + i + '] <select name="' + el.name + '">');
-      console.log('    data-select2-id before clean:', el.getAttribute('data-select2-id') || '(none)');
-      console.log('    options count:', el.options.length);
-      console.log('    in DOM:', document.body.contains(el));
 
-      // Step 1: graceful destroy
+      // Step 1: graceful destroy — catch any error
       try {
         if ($(el).data('select2')) {
-          console.log('    existing Select2 instance found — destroying');
+          console.log('    existing instance found — destroying');
           $(el).select2('destroy');
           console.log('    destroy OK');
         } else {
-          console.log('    no existing Select2 instance — skipping destroy');
+          console.log('    no existing instance');
         }
-      } catch (destroyErr) {
-        console.warn('    destroy threw (ignored):', destroyErr.message);
+      } catch (e) {
+        console.warn('    destroy threw (ignored):', e.message);
       }
 
-      // Step 2: strip stale cache keys from element and options
+      // Step 2: ALWAYS force-wipe jQuery data + DOM attribute after destroy
+      // (even if destroy threw — the stale data is still there)
+      try { $.removeData(el, 'select2'); } catch (e) {}
       el.removeAttribute('data-select2-id');
-      var dirtyOpts = el.querySelectorAll('[data-select2-id]');
-      if (dirtyOpts.length) {
-        console.log('    stripped data-select2-id from', dirtyOpts.length, 'option(s)');
-        for (var j = 0; j < dirtyOpts.length; j++) {
-          dirtyOpts[j].removeAttribute('data-select2-id');
-        }
+      var staleOpts = el.querySelectorAll('[data-select2-id]');
+      for (var j = 0; j < staleOpts.length; j++) {
+        staleOpts[j].removeAttribute('data-select2-id');
       }
+      console.log('    jQuery data + data-select2-id cleared');
 
-      // Step 3: build Select2 options
+      // Step 3: build options
       var s2opts = {
         width:          '100%',
         theme:          'default',
@@ -86,15 +73,15 @@
       };
       var blank = el.options[0];
       if (blank && blank.value === '') {
-        s2opts.placeholder = blank.textContent.trim() || blank.innerText || 'Select…';
+        s2opts.placeholder = blank.textContent.trim() || 'Select…';
         s2opts.allowClear  = true;
         console.log('    placeholder:', s2opts.placeholder);
       }
 
-      // Step 4: initialise
+      // Step 4: fresh init
       try {
         $(el).select2(s2opts);
-        console.log('    select2() init OK');
+        console.log('    select2() init OK ✓');
       } catch (initErr) {
         console.error('    select2() init FAILED:', initErr.message, initErr);
       }
@@ -109,8 +96,7 @@
 
   document.addEventListener('nu:form:opened', function (e) {
     var scope = e.detail && e.detail.scope;
-    console.log('[nuInitSelect2] nu:form:opened fired, scope:', scope || document);
-    // Small delay so the DOM is fully painted before Select2 measures widths
+    console.log('[nuInitSelect2] nu:form:opened — scope:', scope || document);
     setTimeout(function () { nuInitSelect2(scope); }, 50);
   });
 
