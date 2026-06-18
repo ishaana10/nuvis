@@ -89,9 +89,42 @@ class NuFormRenderer {
                 $html .= '<textarea name="' . $name . '" class="nu-input" ' . $required . ' ' . $disabledAttr . ' placeholder="' . htmlspecialchars($placeholder) . '" rows="4">' . htmlspecialchars($value) . '</textarea>';
                 break;
 
+            // -------------------------------------------------------
+            // Standard browser <select> — no Select2, ever
+            // -------------------------------------------------------
             case 'select':
                 $html .= '<select name="' . $name . '" class="nu-input" ' . $required . ' ' . $disabledAttr . '>';
                 $html .= '<option value="">-- Select --</option>';
+                foreach ($options as $opt) {
+                    $selected = $value == $opt['value'] ? 'selected' : '';
+                    $html .= '<option value="' . htmlspecialchars($opt['value']) . '" ' . $selected . '>' . htmlspecialchars($opt['label']) . '</option>';
+                }
+                $html .= '</select>';
+                break;
+
+            // -------------------------------------------------------
+            // Select2 — born as Select2, initialised once by
+            // nu-select2-init.js via the .nu-select2 class.
+            // No destroy/swap logic needed; element is always fresh.
+            // Supports: placeholder, allow_clear, multiple.
+            // JSON field example:
+            //   { "type": "select2", "name": "status",
+            //     "placeholder": "Choose…", "allow_clear": true,
+            //     "options": [{"value":"a","label":"A"}] }
+            // -------------------------------------------------------
+            case 'select2':
+                $s2Placeholder = htmlspecialchars($field['placeholder'] ?? '-- Select --');
+                $s2AllowClear  = !empty($field['allow_clear'])  ? 'true'  : 'false';
+                $s2Multiple    = !empty($field['multiple'])     ? 'multiple' : '';
+                $html .= '<select name="' . $name . '"'
+                       . ' class="nu-input nu-select2"'
+                       . ' data-placeholder="' . $s2Placeholder . '"'
+                       . ' data-allow-clear="'  . $s2AllowClear  . '"'
+                       . ($s2Multiple ? ' multiple' : '')
+                       . ' ' . $required
+                       . ' ' . $disabledAttr . '>';
+                // Empty first option is required by Select2 for placeholder to work
+                if (!$s2Multiple) $html .= '<option value=""></option>';
                 foreach ($options as $opt) {
                     $selected = $value == $opt['value'] ? 'selected' : '';
                     $html .= '<option value="' . htmlspecialchars($opt['value']) . '" ' . $selected . '>' . htmlspecialchars($opt['label']) . '</option>';
@@ -153,13 +186,21 @@ class NuFormRenderer {
         return $html;
     }
 
+    /**
+     * Render a lookup (remote-populated) <select>.
+     * Add "use_select2": true in the field JSON to get a Select2-enhanced
+     * lookup — it will receive the .nu-select2 class and be initialised
+     * by nu-select2-init.js exactly like a native select2 field.
+     */
     private function renderLookup($field, $value, $readonly = false) {
-        $name       = $field['name'];
-        $lookup     = $field['lookup'];
-        $table      = $lookup['table']          ?? '';
-        $idCol      = $lookup['id_column']      ?? 'id';
-        $displayCol = $lookup['display_column'] ?? 'name';
+        $name         = $field['name'];
+        $lookup       = $field['lookup'];
+        $table        = $lookup['table']          ?? '';
+        $idCol        = $lookup['id_column']      ?? 'id';
+        $displayCol   = $lookup['display_column'] ?? 'name';
         $disabledAttr = $readonly ? 'disabled' : '';
+        $useSelect2   = !empty($field['use_select2']);
+        $placeholder  = htmlspecialchars($field['placeholder'] ?? '-- Select --');
 
         $options = [];
         if ($table) {
@@ -168,8 +209,16 @@ class NuFormRenderer {
             );
         }
 
-        $html = '<select name="' . $name . '" class="nu-input nu-lookup" ' . $disabledAttr . '>';
-        $html .= '<option value="">-- Select --</option>';
+        $cssClass = $useSelect2 ? 'nu-input nu-select2 nu-lookup' : 'nu-input nu-lookup';
+
+        $html = '<select name="' . $name . '" class="' . $cssClass . '"';
+        if ($useSelect2) {
+            $html .= ' data-placeholder="' . $placeholder . '"';
+            $html .= ' data-allow-clear="true"';
+        }
+        $html .= ' ' . $disabledAttr . '>';
+        // Empty first option required for both plain select and Select2 placeholder
+        $html .= '<option value="">' . ($useSelect2 ? '' : '-- Select --') . '</option>';
         foreach ($options as $opt) {
             $selected = $value == $opt['id'] ? 'selected' : '';
             $html .= '<option value="' . htmlspecialchars($opt['id']) . '" ' . $selected . '>' . htmlspecialchars($opt['label']) . '</option>';
