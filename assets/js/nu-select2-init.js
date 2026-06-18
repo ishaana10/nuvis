@@ -1,25 +1,22 @@
 /**
  * nu-select2-init.js
  *
- * APPROACH: Option A — select and select2 are separate element types.
+ * Initialises Select2 on any <select> that has data-select-type="select2".
+ * The renderer emits data-select-mode="single|multiple" which controls
+ * whether the element is a single or multi-value Select2.
  *
- * FormRenderer.php emits:
- *   - <select class="nu-input">            for type="select"  (plain, never touched here)
- *   - <select class="nu-input nu-select2"> for type="select2" (always initialised below)
+ * Also handles the legacy .nu-select2 class for backwards compatibility.
  *
- * Because .nu-select2 elements are always freshly rendered before this
- * runs, there is never a pre-existing Select2 instance on them.
- * The :not([data-select2-id]) guard is a safety net — Select2 stamps
- * data-select2-id on every element it owns, so a second call is a no-op.
- *
- * No destroy, no try/catch, no $.removeData needed.
- * Eliminates the 'r.GetData(...).destroy is not a function' errors entirely.
+ * Fix for "r.GetData(...).destroy is not a function":
+ *   After a failed destroy we clear stale jQuery data with $.removeData
+ *   before re-initialising, preventing Select2's constructor from hitting
+ *   the corrupted object a second time.
  */
 (function () {
   'use strict';
 
   /**
-   * Initialise all un-initialised .nu-select2 elements within `scope`.
+   * Initialise all uninitialised Select2 fields within `scope`.
    * @param {Element|null} scope  Container to search in (default: document)
    */
   function nuInitSelect2(scope) {
@@ -31,26 +28,46 @@
       return;
     }
 
-    var $  = jQuery;
+    var $    = jQuery;
     var root = scope instanceof Element ? scope : document;
 
-    // Target only .nu-select2 elements that have NOT yet been initialised.
-    // Select2 stamps data-select2-id on every element it owns, so
-    // :not([data-select2-id]) guarantees we never double-init.
-    var $targets = $(root).find('select.nu-select2:not([data-select2-id])');
+    // Match both the new data-select-type="select2" pattern and the legacy .nu-select2 class.
+    // :not([data-select2-id]) skips elements already owned by Select2.
+    var $targets = $(root).find(
+      'select[data-select-type="select2"]:not([data-select2-id]), ' +
+      'select.nu-select2:not([data-select2-id])'
+    );
 
     if (!$targets.length) return;
 
     $targets.each(function () {
-      var el          = this;
-      var placeholder = el.dataset.placeholder || 'Select…';
-      var allowClear  = el.dataset.allowClear === 'true';
+      var el = this;
+
+      // Guard: if a stale (non-functional) Select2 object is in jQuery data,
+      // clear it before re-initialising to prevent the
+      // "r.GetData(...).destroy is not a function" crash.
+      if ($.data(el, 'select2')) {
+        try {
+          $(el).select2('destroy');
+        } catch (e) {
+          // destroy threw — manually clear the corrupted reference
+          $.removeData(el, 'select2');
+        }
+        // Always remove data after destroy attempt so the constructor
+        // doesn't encounter a stale object on the first $.data() read.
+        $.removeData(el, 'select2');
+      }
+
+      var placeholder = el.dataset.placeholder || 'Select\u2026';
+      var allowClear  = el.dataset.allowClear !== 'false'; // default true
+      var isMultiple  = el.dataset.selectMode === 'multiple' || el.hasAttribute('multiple');
 
       $(el).select2({
         width:          '100%',
         theme:          (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
         placeholder:    placeholder,
         allowClear:     allowClear,
+        multiple:       isMultiple,
         dropdownParent: $(document.body),
       });
     });
