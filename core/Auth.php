@@ -267,22 +267,23 @@ class NuAuth {
     // --- Private Helpers ---
     private function createSession($user) {
         session_regenerate_id(true);
-        $_SESSION['nu_user_id']       = $user['usr_id'];
+        $_SESSION['nu_user_id']       = $user['usr_id'];  // preserved as-is: string (UUID) or int
         $_SESSION['nu_username']      = $user['usr_username'];
         $_SESSION['nu_role']          = $user['usr_role'];
         $_SESSION['nu_last_activity'] = time();
         $_SESSION['nu_csrf']          = bin2hex(random_bytes(32));
 
-        // Inject global user meta into session for ##key## hash replacement.
-        // Only fields marked 'global' => true in config.user_fields.php are loaded.
-        $_SESSION['nu_user_meta'] = $this->loadGlobalMeta((int)$user['usr_id']);
+        // Pass usr_id without casting — loadGlobalMeta accepts string|int.
+        // A (int) cast here would silently zero any UUID string.
+        $_SESSION['nu_user_meta'] = $this->loadGlobalMeta($user['usr_id']);
     }
 
     /**
      * Load all 'global' meta values for a user from nu_user_meta.
+     * Accepts string|int $userId to support both UUID and auto_increment modes.
      * Returns an associative array: ['station' => 'North', ...]
      */
-    private function loadGlobalMeta(int $userId): array {
+    private function loadGlobalMeta(string|int $userId): array {
         $configFile = NU_ROOT . '/config.user_fields.php';
         if (!file_exists($configFile)) return [];
 
@@ -298,7 +299,7 @@ class NuAuth {
         }
         if (empty($globalKeys)) return [];
 
-        // Fetch from DB
+        // Fetch from DB — $userId is passed directly to PDO, no cast needed
         $rows = $this->db->fetchAll(
             "SELECT umeta_key, umeta_value FROM nu_user_meta WHERE umeta_user_id = :id",
             [':id' => $userId]
