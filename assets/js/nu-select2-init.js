@@ -8,15 +8,20 @@
  * Also handles the legacy .nu-select2 class for backwards compatibility.
  *
  * Fix for "r.GetData(...).destroy is not a function":
- *   After a failed destroy we clear stale jQuery data with $.removeData
- *   before re-initialising, preventing Select2's constructor from hitting
- *   the corrupted object a second time.
+ *   1. The :not([data-select2-id]) guard is intentionally NOT used in the
+ *      selector — after a failed init Select2 still stamps data-select2-id
+ *      onto the element, so the guard would permanently skip broken selects.
+ *   2. We detect a live instance via $.data(el,'select2') AND check that
+ *      .destroy is actually a function before calling it.
+ *   3. After any destroy attempt (successful or not) we always call
+ *      $.removeData to flush any stale/corrupted object so Select2's
+ *      constructor never hits a broken reference on the first $.data() read.
  */
 (function () {
   'use strict';
 
   /**
-   * Initialise all uninitialised Select2 fields within `scope`.
+   * Initialise (or re-initialise) all Select2 fields within `scope`.
    * @param {Element|null} scope  Container to search in (default: document)
    */
   function nuInitSelect2(scope) {
@@ -31,45 +36,56 @@
     var $    = jQuery;
     var root = scope instanceof Element ? scope : document;
 
-    // Match both the new data-select-type="select2" pattern and the legacy .nu-select2 class.
-    // :not([data-select2-id]) skips elements already owned by Select2.
+    // Do NOT use :not([data-select2-id]) here.
+    // A failed Select2 init still writes data-select2-id, so that guard would
+    // permanently skip elements that never successfully initialised.
     var $targets = $(root).find(
-      'select[data-select-type="select2"]:not([data-select2-id]), ' +
-      'select.nu-select2:not([data-select2-id])'
+      'select[data-select-type="select2"], ' +
+      'select.nu-select2'
     );
 
     if (!$targets.length) return;
 
     $targets.each(function () {
       var el = this;
+      var existing = $.data(el, 'select2');
 
-      // Guard: if a stale (non-functional) Select2 object is in jQuery data,
-      // clear it before re-initialising to prevent the
-      // "r.GetData(...).destroy is not a function" crash.
-      if ($.data(el, 'select2')) {
-        try {
-          $(el).select2('destroy');
-        } catch (e) {
-          // destroy threw — manually clear the corrupted reference
-          $.removeData(el, 'select2');
+      if (existing) {
+        // Only call destroy if it's a real, functional Select2 instance.
+        if (typeof existing.destroy === 'function') {
+          try { $(el).select2('destroy'); } catch (e) { /* ignore */ }
         }
-        // Always remove data after destroy attempt so the constructor
-        // doesn't encounter a stale object on the first $.data() read.
+        // Always flush stale/corrupted data so the constructor starts clean.
         $.removeData(el, 'select2');
+        // Also remove the id attribute stamp left by a failed init.
+        el.removeAttribute('data-select2-id');
+      } else {
+        // No $.data entry, but element might still have a stale attribute
+        // stamp from a previous failed init — clean that up too.
+        if (el.hasAttribute('data-select2-id')) {
+          el.removeAttribute('data-select2-id');
+        }
       }
 
       var placeholder = el.dataset.placeholder || 'Select\u2026';
       var allowClear  = el.dataset.allowClear !== 'false'; // default true
       var isMultiple  = el.dataset.selectMode === 'multiple' || el.hasAttribute('multiple');
 
-      $(el).select2({
-        width:          '100%',
-        theme:          (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
-        placeholder:    placeholder,
-        allowClear:     allowClear,
-        multiple:       isMultiple,
-        dropdownParent: $(document.body),
-      });
+      try {
+        $(el).select2({
+          width:          '100%',
+          theme:          (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
+          placeholder:    placeholder,
+          allowClear:     allowClear,
+          multiple:       isMultiple,
+          dropdownParent: $(document.body),
+        });
+      } catch (initErr) {
+        console.warn('[nuInitSelect2] select2() init failed on element:', el, initErr);
+        // Final safety net: clear any partial state left by the failed init.
+        $.removeData(el, 'select2');
+        el.removeAttribute('data-select2-id');
+      }
     });
   }
 
