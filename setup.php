@@ -45,6 +45,12 @@ function checkRequirement($name, $check, $required = true) {
         .setup-actions { display: flex; gap: 10px; margin-top: 24px; }
         .setup-success { background: var(--success-light); color: var(--success); padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; }
         .setup-error { background: var(--danger-light); color: var(--danger); padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; }
+        .id-type-option { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 2px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.2s; margin-bottom: 10px; }
+        .id-type-option:has(input:checked) { border-color: var(--accent); background: var(--accent-light, #f0f4ff); }
+        .id-type-option input { margin-top: 3px; accent-color: var(--accent); }
+        .id-type-option strong { display: block; margin-bottom: 4px; }
+        .id-type-option span { font-size: 13px; color: var(--text-secondary); }
+        .id-type-option code { background: var(--bg-secondary); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -102,7 +108,7 @@ function checkRequirement($name, $check, $required = true) {
                 <strong>All requirements met!</strong> You can proceed with installation.
             </div>
             <div class="setup-actions">
-                <a href="setup.php?step=install" class="nu-btn nu-btn-primary">Install Database</a>
+                <a href="setup.php?step=configure" class="nu-btn nu-btn-primary">Configure &amp; Install</a>
                 <a href="index.php" class="nu-btn nu-btn-ghost">Go to Application</a>
             </div>
         <?php else: ?>
@@ -111,8 +117,43 @@ function checkRequirement($name, $check, $required = true) {
             </div>
         <?php endif; ?>
 
+        <?php elseif ($step === 'configure'): ?>
+        <div class="setup-step">
+            <h3>User ID Type</h3>
+            <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;">
+                Choose how <strong>user_id</strong> is generated. This setting is written to
+                <code>config.local.php</code> and cannot be changed after install without a migration.
+            </p>
+            <form method="POST" action="setup.php?step=install">
+                <label class="id-type-option">
+                    <input type="radio" name="user_id_type" value="uuid" checked>
+                    <div>
+                        <strong>UUID <span style="font-weight:400;font-size:12px;color:var(--text-secondary);">(VARCHAR 36)</span></strong>
+                        <span>e.g. <code>550e8400-e29b-41d4-a716-446655440000</code><br>
+                        Recommended for nuBuilder Forte data transfer &amp; multi-instance migration. IDs are globally unique across installations.</span>
+                    </div>
+                </label>
+                <label class="id-type-option">
+                    <input type="radio" name="user_id_type" value="auto_increment">
+                    <div>
+                        <strong>Auto Increment <span style="font-weight:400;font-size:12px;color:var(--text-secondary);">(INT)</span></strong>
+                        <span>e.g. <code>1, 2, 3 ...</code><br>
+                        Simpler for standalone installs. Smaller index size and faster joins, but IDs may conflict during data transfer.</span>
+                    </div>
+                </label>
+                <div class="setup-actions">
+                    <button type="submit" class="nu-btn nu-btn-primary">Install Database</button>
+                    <a href="setup.php?step=check" class="nu-btn nu-btn-ghost">Back</a>
+                </div>
+            </form>
+        </div>
+
         <?php elseif ($step === 'install'): ?>
             <?php
+            // Read chosen ID type from POST (defaults to uuid for safety)
+            $userIdType = $_POST['user_id_type'] ?? 'uuid';
+            $userIdType = in_array($userIdType, ['uuid', 'auto_increment']) ? $userIdType : 'uuid';
+
             $sqlFile = 'install.sql';
             if (!file_exists($sqlFile)) {
                 echo '<div class="setup-error">install.sql not found</div>';
@@ -124,6 +165,43 @@ function checkRequirement($name, $check, $required = true) {
                     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
                     $sql = file_get_contents($sqlFile);
+
+                    // Swap user_id column type based on setup choice
+                    if ($userIdType === 'uuid') {
+                        // Replace INT AUTO_INCREMENT with VARCHAR(36) for user_id PRIMARY KEY
+                        $sql = preg_replace(
+                            '/(`user_id`\s+)INT(?:\(\d+\))?\s+NOT NULL\s+AUTO_INCREMENT/i',
+                            '$1VARCHAR(36) NOT NULL',
+                            $sql
+                        );
+                        // Inject UUID default via BEFORE INSERT trigger after CREATE TABLE statements
+                        // (MySQL 5.7 compatibility - no DEFAULT (UUID()) support)
+                        $triggerSql = "
+CREATE TRIGGER nu_users_uuid_insert
+BEFORE INSERT ON nu_users
+FOR EACH ROW
+BEGIN
+    IF NEW.user_id IS NULL OR NEW.user_id = '' THEN
+        SET NEW.user_id = UUID();
+    END IF;
+END";
+                        $sql .= ";\n" . $triggerSql;
+                    }
+
+                    // Write user_id_type to config.local.php
+                    $configLocalPath = 'config.local.php';
+                    $existingConfig = file_exists($configLocalPath) ? file_get_contents($configLocalPath) : "<?php\n";
+                    if (strpos($existingConfig, 'userIdType') === false) {
+                        $existingConfig = rtrim($existingConfig) . "\n\$nuConfig['userIdType'] = '{$userIdType}';\n";
+                    } else {
+                        $existingConfig = preg_replace(
+                            '/\\\$nuConfig\[\'userIdType\'\]\s*=\s*\'[^\']+\';/',
+                            "\$nuConfig['userIdType'] = '{$userIdType}';",
+                            $existingConfig
+                        );
+                    }
+                    file_put_contents($configLocalPath, $existingConfig);
+
                     $statements = array_filter(array_map('trim', explode(';', $sql)));
 
                     foreach ($statements as $stmt) {
@@ -140,14 +218,15 @@ function checkRequirement($name, $check, $required = true) {
                         }
                     }
 
-                    echo '<div class="setup-success">Database installed successfully!</div>';
+                    $idLabel = $userIdType === 'uuid' ? 'UUID (VARCHAR 36)' : 'Auto Increment (INT)';
+                    echo '<div class="setup-success">Database installed successfully!<br>User ID type: <strong>' . htmlspecialchars($idLabel) . '</strong></div>';
                     echo '<div class="setup-actions">';
                     echo '<a href="index.php" class="nu-btn nu-btn-primary">Launch Application</a>';
                     echo '</div>';
                     echo '<p style="margin-top:16px;font-size:13px;color:var(--text-secondary);">Default login: <strong>globeadmin</strong> / <strong>password</strong> (change immediately)</p>';
                 } catch (Exception $e) {
                     echo '<div class="setup-error">Installation failed: ' . htmlspecialchars($e->getMessage()) . '</div>';
-                    echo '<div class="setup-actions"><a href="setup.php?step=check" class="nu-btn nu-btn-ghost">Back to Check</a></div>';
+                    echo '<div class="setup-actions"><a href="setup.php?step=configure" class="nu-btn nu-btn-ghost">Back to Configure</a></div>';
                 }
             }
             ?>
