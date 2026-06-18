@@ -121,7 +121,7 @@ function checkRequirement($name, $check, $required = true) {
         <div class="setup-step">
             <h3>User ID Type</h3>
             <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;">
-                Choose how <strong>user_id</strong> is generated. This setting is written to
+                Choose how <strong>usr_id</strong> is generated. This setting is written to
                 <code>config.local.php</code> and cannot be changed after install without a migration.
             </p>
             <form method="POST" action="setup.php?step=install">
@@ -130,7 +130,8 @@ function checkRequirement($name, $check, $required = true) {
                     <div>
                         <strong>UUID <span style="font-weight:400;font-size:12px;color:var(--text-secondary);">(VARCHAR 36)</span></strong>
                         <span>e.g. <code>550e8400-e29b-41d4-a716-446655440000</code><br>
-                        Recommended for nuBuilder Forte data transfer &amp; multi-instance migration. IDs are globally unique across installations.</span>
+                        Recommended for nuBuilder Forte data transfer &amp; multi-instance migration.
+                        Uses MySQL 8.0 <code>DEFAULT (UUID())</code> — globally unique across installations.</span>
                     </div>
                 </label>
                 <label class="id-type-option">
@@ -138,7 +139,8 @@ function checkRequirement($name, $check, $required = true) {
                     <div>
                         <strong>Auto Increment <span style="font-weight:400;font-size:12px;color:var(--text-secondary);">(INT)</span></strong>
                         <span>e.g. <code>1, 2, 3 ...</code><br>
-                        Simpler for standalone installs. Smaller index size and faster joins, but IDs may conflict during data transfer.</span>
+                        Simpler for standalone installs. Smaller index size and faster joins,
+                        but IDs may conflict during data transfer between instances.</span>
                     </div>
                 </label>
                 <div class="setup-actions">
@@ -150,7 +152,7 @@ function checkRequirement($name, $check, $required = true) {
 
         <?php elseif ($step === 'install'): ?>
             <?php
-            // Read chosen ID type from POST (defaults to uuid for safety)
+            // Read and validate chosen ID type from POST
             $userIdType = $_POST['user_id_type'] ?? 'uuid';
             $userIdType = in_array($userIdType, ['uuid', 'auto_increment']) ? $userIdType : 'uuid';
 
@@ -166,27 +168,18 @@ function checkRequirement($name, $check, $required = true) {
 
                     $sql = file_get_contents($sqlFile);
 
-                    // Swap user_id column type based on setup choice
                     if ($userIdType === 'uuid') {
-                        // Replace INT AUTO_INCREMENT with VARCHAR(36) for user_id PRIMARY KEY
+                        // MySQL 8.0+: replace INT AUTO_INCREMENT with VARCHAR(36) DEFAULT (UUID())
+                        // Targets the usr_id PRIMARY KEY line in nu_users
                         $sql = preg_replace(
-                            '/(`user_id`\s+)INT(?:\(\d+\))?\s+NOT NULL\s+AUTO_INCREMENT/i',
-                            '$1VARCHAR(36) NOT NULL',
+                            '/(`usr_id`\s+)INT(?:\(\d+\))?\s+AUTO_INCREMENT\s+PRIMARY KEY/i',
+                            '$1VARCHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY',
                             $sql
                         );
-                        // Inject UUID default via BEFORE INSERT trigger after CREATE TABLE statements
-                        // (MySQL 5.7 compatibility - no DEFAULT (UUID()) support)
-                        $triggerSql = "
-CREATE TRIGGER nu_users_uuid_insert
-BEFORE INSERT ON nu_users
-FOR EACH ROW
-BEGIN
-    IF NEW.user_id IS NULL OR NEW.user_id = '' THEN
-        SET NEW.user_id = UUID();
-    END IF;
-END";
-                        $sql .= ";\n" . $triggerSql;
+                        // Also fix the seed INSERT so globeadmin gets a UUID automatically
+                        // (no change needed — DEFAULT (UUID()) fires on INSERT with no usr_id supplied)
                     }
+                    // else: leave SQL as-is for auto_increment
 
                     // Write user_id_type to config.local.php
                     $configLocalPath = 'config.local.php';
@@ -195,13 +188,15 @@ END";
                         $existingConfig = rtrim($existingConfig) . "\n\$nuConfig['userIdType'] = '{$userIdType}';\n";
                     } else {
                         $existingConfig = preg_replace(
-                            '/\\\$nuConfig\[\'userIdType\'\]\s*=\s*\'[^\']+\';/',
+                            '/\$nuConfig\[\'userIdType\'\]\s*=\s*\'[^\']+\';/',
                             "\$nuConfig['userIdType'] = '{$userIdType}';",
                             $existingConfig
                         );
                     }
                     file_put_contents($configLocalPath, $existingConfig);
 
+                    // Split and execute statements
+                    // Handle DELIMITER for stored procedures/triggers if any
                     $statements = array_filter(array_map('trim', explode(';', $sql)));
 
                     foreach ($statements as $stmt) {
@@ -209,7 +204,6 @@ END";
                             try {
                                 $pdo->exec($stmt);
                             } catch (PDOException $e) {
-                                // Skip "already exists" errors, fail on others
                                 $msg = $e->getMessage();
                                 if (strpos($msg, 'already exists') === false && strpos($msg, 'Duplicate entry') === false) {
                                     throw $e;
@@ -218,7 +212,7 @@ END";
                         }
                     }
 
-                    $idLabel = $userIdType === 'uuid' ? 'UUID (VARCHAR 36)' : 'Auto Increment (INT)';
+                    $idLabel = $userIdType === 'uuid' ? 'UUID — VARCHAR(36) with DEFAULT (UUID())' : 'Auto Increment — INT';
                     echo '<div class="setup-success">Database installed successfully!<br>User ID type: <strong>' . htmlspecialchars($idLabel) . '</strong></div>';
                     echo '<div class="setup-actions">';
                     echo '<a href="index.php" class="nu-btn nu-btn-primary">Launch Application</a>';
