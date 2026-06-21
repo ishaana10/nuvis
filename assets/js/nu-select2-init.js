@@ -12,22 +12,31 @@
  * ─── Why the crash happened ──────────────────────────────────────────
  * Error: "r.GetData(...).destroy is not a function"
  *
- * Select2's constructor calls GetData(el, 'select2').destroy() internally
- * before we get a chance to intercept it.  The stale object came from a
- * previous (failed or partial) Select2 init cycle; it was not a real
- * Select2 instance so it had no .destroy() method.
+ * Select2 v4's constructor calls GetData(el, 'select2').destroy()
+ * internally before we can intercept it.  A previous (failed or partial)
+ * Select2 init cycle left a stub object in jQuery's data store that had no
+ * .destroy() method.
  *
- * Root cause: $.cache was REMOVED in jQuery 3.x.  In jQuery 3.x all
- * element data is stored directly on el[jQuery.expando] as a plain
- * object — NOT as a numeric index into a global $.cache bucket.
+ * Root cause (jQuery 3.x): jQuery 3 stores element data directly on
+ * el[jQuery.expando] as a plain object.  Two separate data paths exist:
  *
- * The old hard-nuke code did:
- *   var cacheKey = el[expando];          // a NUMBER in jQuery 1/2
- *   var cache    = $.cache[cacheKey];    // always undefined in jQuery 3 ❌
- *   delete cache.data['select2'];        // never ran → stale data stayed
+ *   A) The PUBLIC path — $.data(el, key) / $.removeData(el, key)
+ *      writes into el[expando].data[key].
  *
- * Fix: treat el[expando] as the data bucket itself (jQuery 3.x) while
- * keeping a fallback for jQuery 1/2 environments.
+ *   B) The INTERNAL path — jQuery.cache is gone in v3; some Select2 builds
+ *      write their instance at el[expando][key] (top-level, not nested
+ *      under .data).
+ *
+ * Our old code nuked path B but called $.removeData for path A afterwards.
+ * In some jQuery 3.x micro-versions $.removeData re-reads the expando to
+ * find the key, and if the expando was already partially wiped it could
+ * leave a ghost entry — or the reverse: the polite destroy ran first and
+ * left a stub at path B.  Either way, Select2's next constructor call hit
+ * the stub and crashed.
+ *
+ * Fix: nuke path B (raw expando) FIRST in a single comprehensive pass,
+ * then call $.removeData so jQuery's own bookkeeping stays clean.
+ * Guard polite destroy with a typeof check so a stub never throws.
  *
  * Public API
  *   nuDestroySelect2(el)        — hard-destroy a single element (safe if none)
@@ -48,45 +57,32 @@
     if (typeof jQuery === 'undefined') return;
     var $ = jQuery;
 
-    // ── Step 1: polite destroy via the public API ──────────────────────
-    try {
-      if (typeof $.fn.select2 !== 'undefined') {
-        var existing = $.data(el, 'select2');
-        if (existing && typeof existing.destroy === 'function') {
-          $(el).select2('destroy');
-        }
-      }
-    } catch (e) { /* ignore — the crash we are trying to prevent */ }
-
-    // Always flush the public $.data entry
-    $.removeData(el, 'select2');
-
-    // ── Step 2: hard-nuke the jQuery internal expando bucket ───────────
+    // ── Step 1: hard-nuke the jQuery internal expando bucket FIRST ─────
     //
-    // jQuery 3.x stores data directly on el[jQuery.expando] as a plain
-    // object, e.g.:
-    //   el["jQuery3600049091"] = { data: { select2: <instance>, … } }
+    // We do this BEFORE the polite destroy so that if $.removeData or
+    // the Select2 destroy implementation internally re-reads the expando,
+    // it will find nothing rather than the stale stub.
     //
-    // jQuery 1.x/2.x stored a numeric cache key on el[jQuery.expando]
-    // and the actual data in jQuery.cache[key].
+    // jQuery 3.x:  el[expando] is a plain object  { data: { select2: … }, … }
+    // jQuery 1/2:  el[expando] is a numeric cache key → $.cache[key]
     //
-    // We handle both:
     var expando = $.expando;
     if (expando && el[expando] !== undefined) {
       var bucket = el[expando];
 
       if (typeof bucket === 'object' && bucket !== null) {
-        // jQuery 3.x: bucket IS the data container
+        // jQuery 3.x — bucket IS the data container.
+        // Wipe every known Select2 key at both levels.
         if (bucket.data) {
           delete bucket.data['select2'];
           delete bucket.data['select2-id'];
         }
-        // Also wipe keys stored at the top level of the bucket
-        // (some Select2 versions write here directly)
+        // Some Select2 builds write at the top level of the expando object
         delete bucket['select2'];
         delete bucket['select2-id'];
+
       } else if (typeof bucket === 'number') {
-        // jQuery 1.x/2.x: bucket is a numeric cache key
+        // jQuery 1.x / 2.x — bucket is a numeric cache key
         var cache = $.cache && $.cache[bucket];
         if (cache && cache.data) {
           delete cache.data['select2'];
@@ -95,17 +91,38 @@
       }
     }
 
-    // ── Step 3: remove the HTML attribute stamp ────────────────────────
+    // ── Step 2: polite destroy via the public API ──────────────────────
+    // Now that the expando is clean, attempt the official teardown.
+    // Guard with typeof so a stub object (no .destroy method) never throws.
+    try {
+      if (typeof $.fn.select2 !== 'undefined') {
+        var existing = $.data(el, 'select2');
+        if (existing && typeof existing.destroy === 'function') {
+          $(el).select2('destroy');
+        }
+      }
+    } catch (e) { /* intentionally swallowed */ }
+
+    // ── Step 3: flush the public $.data entry ─────────────────────────
+    // Runs after Steps 1 & 2 so jQuery's internal bookkeeping is correct.
+    $.removeData(el, 'select2');
+
+    // ── Step 4: remove the HTML attribute stamp ────────────────────────
     el.removeAttribute('data-select2-id');
 
-    // ── Step 4: remove the generated Select2 container from the DOM ───
-    // Select2 injects a <span class="select2 …"> sibling after the
-    // <select>.  If destroy() above didn't clean it up (because the
-    // instance was corrupted), remove it manually so the next init
-    // does not end up with a duplicate widget.
+    // ── Step 5: remove orphaned Select2 container siblings from the DOM ─
+    // Select2 injects a <span class="select2 …"> (or "select2-container …")
+    // sibling after the <select>.  If destroy() above didn't remove it
+    // (because the instance was corrupted), remove it manually so the next
+    // init does not produce a duplicate widget.
     var next = el.nextElementSibling;
-    if (next && next.classList && next.classList.contains('select2')) {
-      next.parentNode.removeChild(next);
+    while (next && next.classList && (
+      next.classList.contains('select2') ||
+      next.classList.contains('select2-container')
+    )) {
+      var toRemove = next;
+      next = next.nextElementSibling;
+      toRemove.parentNode.removeChild(toRemove);
     }
   }
 
@@ -158,7 +175,7 @@
         });
       } catch (initErr) {
         console.warn('[nuInitSelect2] select2() init failed on element:', el, initErr);
-        // Final safety net — clean up so next attempt starts fresh
+        // Final safety net — clean up so the next attempt starts fresh
         nuDestroySelect2(el);
       }
     });
