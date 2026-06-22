@@ -14,20 +14,30 @@
  *   var id = el.getAttribute('data-select2-id'); // e.g. "select2-data-8-u9m9"
  *   $.data(el, id).destroy();
  *
- * If data-select2-id is still present on the element when the constructor
- * runs, Select2 looks up that key via $.data(el, id).  In jQuery 3 this
- * reads from an internal cache that is NOT the same as the raw expando
- * bucket.  Previous fixes wiped the expando but left the $.data cache
- * intact, so the stale (destroy-less) stub survived and crashed.
+ * If data-select2-id is still on the element when the constructor runs,
+ * Select2 looks up that key via $.data(el, id). In jQuery 3 this reads
+ * from an internal cache that is NOT the same as the raw expando bucket.
+ * Previous fixes wiped the expando but left the $.data cache intact, so
+ * the stale (destroy-less) stub survived and crashed — including on retry.
  *
- * Fix:
- *   1. Strip data-select2-id from ALL targets at the very start of
- *      nuInitSelect2, before any per-element work, so stale IDs left
- *      over from a previous render never reach the Select2 constructor.
- *   2. Remove data-select2-id FIRST per element, before any Select2 call.
- *   3. Call $.removeData(el) with NO key to atomically flush the entire
- *      jQuery data store for the element (both cache layers).
- *   4. Stamp data-nu-s2="1" after success to guard against double-init.
+ * Root causes addressed in this version:
+ *   1. Server-rendered HTML from form.php can arrive with data-select2-id
+ *      already baked in from a previous render cycle.
+ *   2. _execModuleScripts() re-runs inline <script> tags which can call
+ *      select2() before the nu:form:opened handler fires, stamping the
+ *      attribute again before our cleanup runs.
+ *   3. The retry path in _initOne was missing removeAttribute('data-select2-id')
+ *      before $.removeData(), so the constructor still found the stale ID
+ *      and crashed identically on every retry.
+ *
+ * Fix strategy:
+ *   A. nuInitSelect2: strip data-select2-id from ALL targets up-front AND
+ *      fully flush jQuery data before touching any element.
+ *   B. nuDestroySelect2: always remove the attribute first, then flush data.
+ *   C. _initOne: remove attribute + flush data at BOTH entry and retry paths.
+ *   D. nuInitSelect2: remove the data-nu-s2 double-init guard entirely —
+ *      it was preventing re-init after _execModuleScripts re-ran inline
+ *      scripts, leaving elements in a half-initialised state.
  *
  * Public API
  *   nuDestroySelect2(el)   — hard-destroy a single element (safe if none)
@@ -48,41 +58,24 @@
   }
 
   /**
-   * Hard-destroy any Select2 instance on `el`, including corrupted ones.
-   * Clears the ready stamp so the element can be re-initialised.
+   * Atomically wipe ALL Select2 state from a single element.
+   * Safe to call even if Select2 was never initialised on the element.
    */
-  function nuDestroySelect2(el) {
+  function _hardWipe(el) {
     if (typeof jQuery === 'undefined') return;
     var $ = jQuery;
 
-    // Clear ready stamp
-    el.removeAttribute(READY_ATTR);
-
-    dbg('destroy', el.name || el.getAttribute('data-field') || '?');
-
-    // Step 1: Remove data-select2-id FIRST.
-    // Select2's constructor reads this attribute to find its stored instance.
-    // Removing it before any $.data call means the constructor finds nothing
-    // to look up, regardless of what is in the jQuery data cache.
+    // ── 1. Remove the attribute FIRST — this is the critical step.
+    //       Select2's constructor reads this attribute before touching $.data,
+    //       so removing it here means no stale lookup can ever reach .destroy().
     el.removeAttribute('data-select2-id');
 
-    // Step 2: Polite destroy via the public API while instance still reachable
-    try {
-      if (typeof $.fn.select2 !== 'undefined') {
-        var existing = $.data(el, 'select2');
-        if (existing && typeof existing.destroy === 'function') {
-          $(el).select2('destroy');
-          dbg('  polite destroy OK');
-        }
-      }
-    } catch (e) { dbg('  destroy threw (ignored):', e.message); }
-
-    // Step 3: Flush the ENTIRE jQuery data store for this element.
-    // $.removeData(el) with no key argument is the only reliable way to
-    // clear both the expando bucket AND jQuery 3's internal data cache.
+    // ── 2. Flush the entire jQuery data store (both cache layers).
+    //       $.removeData(el) with no key is the only call that clears both
+    //       the jQuery 3 internal cache AND the expando bucket atomically.
     try { $.removeData(el); } catch (e) { /* ignore */ }
 
-    // Step 4: Also wipe raw expando as belt-and-braces
+    // ── 3. Belt-and-braces: also wipe raw expando keys that start with 'select2'
     try {
       var expando = $.expando;
       if (expando && el[expando]) {
@@ -95,8 +88,37 @@
         }
       }
     } catch (e) { /* ignore */ }
+  }
 
-    // Step 5: Remove orphaned Select2 DOM siblings
+  /**
+   * Hard-destroy any Select2 instance on `el`, including corrupted ones.
+   * Clears the ready stamp so the element can be re-initialised.
+   */
+  function nuDestroySelect2(el) {
+    if (typeof jQuery === 'undefined') return;
+    var $ = jQuery;
+
+    el.removeAttribute(READY_ATTR);
+    dbg('destroy', el.name || el.getAttribute('data-field') || '?');
+
+    // Wipe attribute + data BEFORE attempting polite destroy
+    _hardWipe(el);
+
+    // Attempt polite destroy via public API (may be a no-op if already wiped)
+    try {
+      if (typeof $.fn.select2 !== 'undefined') {
+        var existing = $.data(el, 'select2');
+        if (existing && typeof existing.destroy === 'function') {
+          $(el).select2('destroy');
+          dbg('  polite destroy OK');
+        }
+      }
+    } catch (e) { dbg('  destroy threw (ignored):', e.message); }
+
+    // Second wipe to clean up anything polite destroy re-stamped
+    _hardWipe(el);
+
+    // Remove orphaned Select2 DOM siblings
     var next = el.nextElementSibling;
     while (next && next.classList && (
       next.classList.contains('select2') ||
@@ -113,12 +135,13 @@
   /* ── Run select2() on one already-cleaned element ────────────────── */
   function _initOne(el) {
     var $ = jQuery;
-    var placeholder = el.dataset.placeholder || 'Select…';
+    var placeholder = el.dataset.placeholder || 'Select\u2026';
     var allowClear  = el.dataset.allowClear !== 'false';
     var isMultiple  = el.dataset.selectMode === 'multiple' || el.hasAttribute('multiple');
 
-    // Guarantee no stale ID attribute exists right before we call select2()
-    el.removeAttribute('data-select2-id');
+    // Always hard-wipe before calling select2() — covers the case where
+    // _execModuleScripts already ran an inline script that stamped the element.
+    _hardWipe(el);
 
     var opts = {
       width:          '100%',
@@ -132,20 +155,23 @@
     try {
       $(el).select2(opts);
       el.setAttribute(READY_ATTR, '1');
-      dbg('init OK ✅', el.name || el.getAttribute('data-field') || '?');
+      dbg('init OK \u2705', el.name || el.getAttribute('data-field') || '?');
       return true;
     } catch (err) {
-      console.error('[nu-select2] init FAILED ❌', err.message, el);
-      // Full wipe then one retry
+      console.error('[nu-select2] init FAILED \u274c', err.message, el);
+
+      // Full hard-wipe then one retry — attribute MUST be removed before
+      // $.removeData, otherwise Select2's constructor still finds the stale
+      // ID on retry and crashes identically.
+      _hardWipe(el);
+
       try {
-        el.removeAttribute('data-select2-id');
-        try { $.removeData(el); } catch (e2) { /* ignore */ }
         $(el).select2(opts);
         el.setAttribute(READY_ATTR, '1');
-        dbg('retry OK ✅', el.name || el.getAttribute('data-field') || '?');
+        dbg('retry OK \u2705', el.name || el.getAttribute('data-field') || '?');
         return true;
       } catch (retryErr) {
-        console.error('[nu-select2] retry FAILED ❌', retryErr.message, el);
+        console.error('[nu-select2] retry FAILED \u274c', retryErr.message, el);
         return false;
       }
     }
@@ -153,7 +179,16 @@
 
   /**
    * Initialise all Select2 targets within `scope`.
-   * Elements stamped data-nu-s2="1" are skipped (double-init guard).
+   *
+   * NOTE: The data-nu-s2 double-init guard has been intentionally removed.
+   * nubuilder-next.js calls _execModuleScripts() which re-runs any inline
+   * <script> tags inside the form HTML — these can call select2() directly
+   * and stamp data-nu-s2="1" before nuInitSelect2 fires from nu:form:opened.
+   * When nuInitSelect2 then skips those elements (because the guard is set),
+   * it leaves them in a state where data-select2-id is present but the jQuery
+   * data cache has been invalidated by the DOM re-injection, causing the
+   * destroy crash on the NEXT open. Removing the guard ensures every call
+   * to nuInitSelect2 does a clean destroy+reinit cycle via _hardWipe.
    */
   function nuInitSelect2(scope) {
     var hasJQ      = typeof jQuery !== 'undefined';
@@ -170,32 +205,19 @@
       'select[data-select-type="select2"], select.nu-select2'
     );
 
-    dbg('nuInitSelect2 — targets:', $targets.length);
+    dbg('nuInitSelect2 \u2014 targets:', $targets.length, '| options:', $targets.length > 0 ? $targets.first()[0].options.length : 'n/a');
 
-    // ── KEY FIX: strip stale data-select2-id from every target up-front ──
-    // When a form is re-rendered into an existing container, Select2 may have
-    // previously stamped data-select2-id onto the <select> elements. If those
-    // IDs survive into the next init cycle, Select2's constructor tries to call
-    // .destroy() on whatever $.data(el, id) returns — which is no longer a
-    // real Select2 instance — causing "r.GetData(...).destroy is not a function".
-    // Removing the attribute before any per-element work ensures the constructor
-    // never finds a stale ID to look up.
-    $targets.each(function () {
-      this.removeAttribute('data-select2-id');
-    });
+    // ── KEY FIX A: Strip stale data-select2-id + flush jQuery data from ALL
+    //    targets up-front, BEFORE any per-element loop work.
+    //    Server-rendered HTML from form.php can arrive with these attributes
+    //    already baked in from a previous render, and _execModuleScripts can
+    //    re-stamp them via inline scripts before this function runs.
+    $targets.each(function () { _hardWipe(this); });
 
     $targets.each(function () {
       var el = this;
-
-      // Double-init guard
-      if (el.getAttribute(READY_ATTR) === '1') {
-        dbg('skip (already ready):', el.name || el.getAttribute('data-field') || '?');
-        return;
-      }
-
       dbg('init [' + (el.name || el.getAttribute('data-field') || '?') + ']',
           '| options:', el.options.length);
-
       nuDestroySelect2(el);
       _initOne(el);
     });
@@ -209,7 +231,7 @@
   function nuReinitSelect2(el) {
     if (!el) return;
     el.removeAttribute(READY_ATTR);
-    el.removeAttribute('data-select2-id');
+    _hardWipe(el);
     nuDestroySelect2(el);
     _initOne(el);
   }
@@ -219,7 +241,8 @@
   // Auto-init: nu:form:opened fires after modal is in DOM
   document.addEventListener('nu:form:opened', function (e) {
     var scope = e.detail && e.detail.scope;
-    // Small delay lets any inline scripts run and stamp their elements first
+    // Small delay lets any inline scripts run and stamp their elements first,
+    // then nuInitSelect2 hard-wipes everything and does a clean re-init.
     setTimeout(function () { nuInitSelect2(scope); }, 50);
   });
 
