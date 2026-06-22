@@ -2,28 +2,41 @@
 (function () {
   'use strict';
 
-  function _s2FreshClone(el) {
-    var clone = el.cloneNode(true);
-    clone.removeAttribute('data-select2-id');
-    clone.removeAttribute('data-nu-s2');
-    // Delete jQuery expando property so no cache is inherited
-    if (typeof jQuery !== 'undefined' && jQuery.expando) {
-      try { delete clone[jQuery.expando]; } catch(e) {}
+  /**
+   * Build a brand-new <select> from scratch — copies attributes and <option>
+   * elements manually so there is ZERO jQuery cache, ZERO expando, ZERO
+   * data-select2-id. No cloneNode, no destroy() call needed ever.
+   */
+  function _s2BuildFresh(el) {
+    var fresh = document.createElement('select');
+
+    // Copy all attributes except ones Select2 stamps
+    var skip = { 'data-select2-id': 1, 'data-nu-s2': 1 };
+    for (var i = 0; i < el.attributes.length; i++) {
+      var attr = el.attributes[i];
+      if (!skip[attr.name]) fresh.setAttribute(attr.name, attr.value);
     }
-    el.parentNode.replaceChild(clone, el);
-    // Remove orphaned Select2 DOM siblings
-    var next = clone.nextElementSibling;
+
+    // Copy <option> and <optgroup> children
+    for (var j = 0; j < el.childNodes.length; j++) {
+      fresh.appendChild(el.childNodes[j].cloneNode(true));
+    }
+
+    // Remove orphaned Select2 UI siblings from a previous init
+    var next = el.nextElementSibling;
     while (next && next.classList &&
            (next.classList.contains('select2') || next.classList.contains('select2-container'))) {
       var rem = next; next = next.nextElementSibling; rem.parentNode.removeChild(rem);
     }
-    return clone;
+
+    el.parentNode.replaceChild(fresh, el);
+    return fresh;
   }
 
   function _s2InitOne(el) {
     if (typeof jQuery === 'undefined' || typeof jQuery.fn.select2 === 'undefined') return;
     var $ = jQuery;
-    var fresh = _s2FreshClone(el);
+    var fresh = _s2BuildFresh(el);
     var opts = {
       width: '100%',
       theme: (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
@@ -50,7 +63,7 @@
   }
 
   window.nuInitSelect2    = nuInitSelect2;
-  window.nuDestroySelect2 = function (el) { _s2FreshClone(el); };
+  window.nuDestroySelect2 = function (el) { _s2BuildFresh(el); };
   window.nuReinitSelect2  = function (el) { _s2InitOne(el); };
 
   if (document.readyState === 'loading') {
@@ -179,9 +192,6 @@ window.NuApp = {
     });
   },
 
-  // NOTE: _initFormWidgets is called BEFORE _execModuleScripts in every form-open
-  // path. This ensures Select2 inits on a clean element before any inline <script>
-  // in the form HTML gets a chance to call select2() again.
   _initFormWidgets(scope) {
     if (scope) scope.dataset.nuS2Done = '1';
     if (typeof window.nuInitSelect2 === 'function') window.nuInitSelect2(scope);
@@ -389,7 +399,6 @@ window.NuApp = {
       applySize(currentSize);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(box);
       this._execModuleScripts(box);
       this._dispatchFormOpened(box);
@@ -446,7 +455,6 @@ window.NuApp = {
       document.body.appendChild(overlay);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(box);
       this._execModuleScripts(box);
       this._dispatchFormOpened(box);
@@ -731,7 +739,6 @@ window.NuApp = {
       container.appendChild(formWrap);
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'inline';
-      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(container);
       this._execModuleScripts(container);
       this._dispatchFormOpened(container);
@@ -766,7 +773,6 @@ window.NuApp = {
       container.appendChild(formWrap);
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'fullpage';
-      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(container);
       this._execModuleScripts(container);
       this._dispatchFormOpened(container);
