@@ -47,6 +47,17 @@
 (function () {
   'use strict';
 
+  // ── DEBUG FLAG ────────────────────────────────────────────────────────────
+  // Set window.NU_SELECT2_DEBUG = false in your app bootstrap to silence logs.
+  var DEBUG = (window.NU_SELECT2_DEBUG !== false);
+
+  function dbg() {
+    if (!DEBUG) return;
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift('[nu-select2]');
+    console.log.apply(console, args);
+  }
+
   /**
    * Hard-destroy any Select2 instance on `el`, including corrupted ones.
    * Safe to call when no instance exists.
@@ -56,6 +67,11 @@
   function nuDestroySelect2(el) {
     if (typeof jQuery === 'undefined') return;
     var $ = jQuery;
+
+    var dataSelectId = el.getAttribute('data-select2-id');
+    dbg('destroy START', el.tagName,
+        'name=' + (el.name || el.getAttribute('data-field') || '?'),
+        'data-select2-id before clean:', dataSelectId);
 
     // ── Step 1: hard-nuke the jQuery internal expando bucket FIRST ─────
     //
@@ -97,11 +113,12 @@
     try {
       if (typeof $.fn.select2 !== 'undefined') {
         var existing = $.data(el, 'select2');
+        dbg('existing Select2 instance found —', existing ? 'destroying' : 'none');
         if (existing && typeof existing.destroy === 'function') {
           $(el).select2('destroy');
         }
       }
-    } catch (e) { /* intentionally swallowed */ }
+    } catch (e) { dbg('destroy threw (ignored):', e.message); }
 
     // ── Step 3: flush the public $.data entry ─────────────────────────
     // Runs after Steps 1 & 2 so jQuery's internal bookkeeping is correct.
@@ -124,6 +141,9 @@
       next = next.nextElementSibling;
       toRemove.parentNode.removeChild(toRemove);
     }
+
+    dbg('destroy END', el.tagName,
+        'name=' + (el.name || el.getAttribute('data-field') || '?'));
   }
 
   // Expose globally — nb-form-builder.js and other modules call this
@@ -146,15 +166,92 @@
     var $ = jQuery;
     var root = scope instanceof Element ? scope : document;
 
+    // ── DIAGNOSTIC BLOCK ──────────────────────────────────────────────────
+    // Scans every element whose name/data-field contains "select2" and logs
+    // whether it is actually a <select> or some other tag (e.g. <input>).
+    // This is the key diagnostic to determine whether the renderer is
+    // outputting the wrong element type for select2 fields.
+    if (DEBUG) {
+      var allEls = root.querySelectorAll('[name],[data-field]');
+      var suspects = [];
+      allEls.forEach(function (el) {
+        var nm = el.name || el.getAttribute('data-field') || '';
+        if (/select2/i.test(nm)) {
+          suspects.push({
+            tag:            el.tagName,
+            type:           el.type || '(none)',
+            name:           nm,
+            classes:        el.className,
+            dataSelectType: el.getAttribute('data-select-type') || '(none)',
+            isSelect:       el.tagName === 'SELECT'
+          });
+        }
+      });
+      if (suspects.length) {
+        console.group('[nu-select2] DIAGNOSTIC — fields whose name/data-field contains "select2"');
+        suspects.forEach(function (s) {
+          var status = s.isSelect
+            ? '✅ SELECT (correct)'
+            : '❌ NOT a <select> — got <' + s.tag + ' type=' + s.type + '> — Select2 will never run on this';
+          console.log(
+            status,
+            '| name/data-field:', s.name,
+            '| data-select-type:', s.dataSelectType,
+            '| classes:', s.classes
+          );
+          if (!s.isSelect) {
+            console.warn(
+              '[nu-select2] ROOT CAUSE: field "' + s.name + '" is rendered as <' + s.tag + '> not <select>.',
+              'Check the renderer that built this element:',
+              '  • FormRenderer.php renderField() for type "select2"',
+              '  • nb-form-builder.js live-preview renderer field-type switch',
+              'One of them is outputting <input> instead of <select> for this field type.'
+            );
+          }
+        });
+        console.groupEnd();
+      }
+
+      // Also log all <select> elements found in scope for comparison
+      var allSelects = root.querySelectorAll('select');
+      dbg('All <select> elements in scope (' + allSelects.length + '):');
+      allSelects.forEach(function (el) {
+        dbg('  <select>',
+            'name=' + (el.name || '?'),
+            '| data-select-type=' + (el.getAttribute('data-select-type') || '(none)'),
+            '| class=' + el.className,
+            '| options count:', el.options.length,
+            '| in DOM:', document.contains(el));
+      });
+    }
+    // ── END DIAGNOSTIC BLOCK ──────────────────────────────────────────────
+
     var $targets = $(root).find(
       'select[data-select-type="select2"], ' +
       'select.nu-select2'
     );
 
-    if (!$targets.length) return;
+    dbg('nuInitSelect2 called — scope:', root === document ? 'document' : (root.tagName + '#' + (root.id || '?')),
+        '| targets matched:', $targets.length);
+
+    if (!$targets.length) {
+      if (DEBUG) {
+        console.warn(
+          '[nu-select2] nuInitSelect2: 0 targets matched.',
+          'Selector: select[data-select-type="select2"], select.nu-select2',
+          'If select2 fields are showing as <input> elements (see DIAGNOSTIC above),',
+          'the renderer is outputting the wrong tag — fix the PHP or JS renderer.'
+        );
+      }
+      return;
+    }
 
     $targets.each(function () {
       var el = this;
+
+      dbg('init [' + (el.name || el.getAttribute('data-field') || '?') + ']',
+          '| options count:', el.options.length,
+          '| in DOM:', document.contains(el));
 
       // Hard-nuke any stale/corrupted instance BEFORE Select2's constructor
       // gets a chance to call GetData(el,'select2').destroy() itself.
@@ -163,6 +260,10 @@
       var placeholder = el.dataset.placeholder || 'Select\u2026';
       var allowClear  = el.dataset.allowClear !== 'false'; // default true
       var isMultiple  = el.dataset.selectMode === 'multiple' || el.hasAttribute('multiple');
+
+      dbg('  placeholder:', placeholder,
+          '| allowClear:', allowClear,
+          '| multiple:', isMultiple);
 
       try {
         $(el).select2({
@@ -173,8 +274,9 @@
           multiple:       isMultiple,
           dropdownParent: $(document.body),
         });
+        dbg('  select2() init OK ✅', el.name || el.getAttribute('data-field') || '?');
       } catch (initErr) {
-        console.warn('[nuInitSelect2] select2() init failed on element:', el, initErr);
+        console.error('[nu-select2] select2() init FAILED ❌', initErr.message, el, initErr);
         // Final safety net — clean up so the next attempt starts fresh
         nuDestroySelect2(el);
       }
@@ -193,6 +295,8 @@
    */
   function nuReinitSelect2(el) {
     if (!el) return;
+    dbg('nuReinitSelect2 called on', el.tagName,
+        el.name || el.getAttribute('data-field') || '?');
     nuDestroySelect2(el);
     // Re-init just this one element
     nuInitSelect2(el.parentElement || document);
@@ -205,6 +309,8 @@
   // Re-init whenever a form modal/panel is opened
   document.addEventListener('nu:form:opened', function (e) {
     var scope = e.detail && e.detail.scope;
+    dbg('nu:form:opened event — will init in 50ms, scope:',
+        scope ? (scope.tagName + '#' + (scope.id || '?')) : 'null');
     // Small delay to ensure DOM is fully painted before Select2 measures widths
     setTimeout(function () { nuInitSelect2(scope); }, 50);
   });
