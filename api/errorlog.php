@@ -74,15 +74,15 @@ try {
                 $params[':type'] = strtoupper($type);
             }
             if ($severity !== '') {
-                $where[]             = 'errlog_severity = :sev';
-                $params[':sev']      = strtolower($severity);
+                $where[]        = 'errlog_severity = :sev';
+                $params[':sev'] = strtolower($severity);
             }
             if ($search !== '') {
-                $where[]             = '(errlog_message LIKE :s1 OR errlog_file LIKE :s2 OR errlog_context LIKE :s3)';
-                $like                = '%' . $search . '%';
-                $params[':s1']       = $like;
-                $params[':s2']       = $like;
-                $params[':s3']       = $like;
+                $where[]       = '(errlog_message LIKE :s1 OR errlog_file LIKE :s2 OR errlog_context LIKE :s3)';
+                $like          = '%' . $search . '%';
+                $params[':s1'] = $like;
+                $params[':s2'] = $like;
+                $params[':s3'] = $like;
             }
 
             $whereStr = implode(' AND ', $where);
@@ -92,6 +92,10 @@ try {
                 $params
             )['cnt'];
 
+            // LIMIT and OFFSET cannot be bound as named parameters in MySQL —
+            // they get quoted as strings ('50', '0') which causes a syntax error.
+            // Both values are already cast to int and range-clamped above, so
+            // inlining them directly into the SQL is safe.
             $rows = $db->fetchAll(
                 "SELECT errlog_id, errlog_type, errlog_severity, errlog_message,
                         errlog_file, errlog_line, errlog_request_uri,
@@ -99,8 +103,8 @@ try {
                  FROM nu_error_log
                  WHERE {$whereStr}
                  ORDER BY errlog_id DESC
-                 LIMIT :lim OFFSET :off",
-                array_merge($params, [':lim' => $perPage, ':off' => $offset])
+                 LIMIT {$perPage} OFFSET {$offset}",
+                $params
             );
 
             echo json_encode([
