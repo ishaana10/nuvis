@@ -48,15 +48,15 @@ class NuMenuRenderer
         $userRole = strtolower((string)($currentUser['usr_role'] ?? ''));
         $isAdmin  = ($userRole === 'globeadmin' || $userRole === 'admin');
 
-        // ── Primary query: try to read the three new columns ─────────────────
-        // Falls back to the legacy menu_open_mode string if they don't exist yet.
         $rows = [];
         try {
             $db   = NuDatabase::getInstance();
+            // menu_target is the only target column — menu_code does not exist.
+            // Three open-mode columns are selected with COALESCE fallbacks for
+            // installs that have not yet run the phase-8 migration.
             $rows = $db->fetchAll(
                 "SELECT menu_id, menu_label, menu_type,
                         COALESCE(menu_target, '') AS menu_target,
-                        COALESCE(menu_code,   '') AS menu_code,
                         menu_parent_id, menu_order, menu_roles,
                         menu_active, menu_icon,
                         COALESCE(menu_browse_mode,  'inline') AS menu_browse_mode,
@@ -67,13 +67,12 @@ class NuMenuRenderer
                  ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
             );
         } catch (Throwable $e) {
-            // New columns not yet migrated — fall back to legacy menu_open_mode
+            // open-mode columns not yet migrated — fall back to legacy menu_open_mode
             try {
-                $db   = NuDatabase::getInstance();
-                $raw  = $db->fetchAll(
+                $db  = NuDatabase::getInstance();
+                $raw = $db->fetchAll(
                     "SELECT menu_id, menu_label, menu_type,
                             COALESCE(menu_target, '') AS menu_target,
-                            COALESCE(menu_code,   '') AS menu_code,
                             menu_parent_id, menu_order, menu_roles,
                             menu_active, menu_icon,
                             COALESCE(menu_open_mode, 'inline') AS menu_open_mode
@@ -81,7 +80,6 @@ class NuMenuRenderer
                      WHERE  menu_active = 1
                      ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
                 );
-                // Derive three columns from legacy combined string "browseMode|defaultView"
                 $rows = array_map(static function (array $r): array {
                     $parts = explode('|', $r['menu_open_mode'] ?? 'inline|browse', 2);
                     $bm    = in_array($parts[0] ?? '', ['inline','popup'])   ? $parts[0] : 'inline';
@@ -92,8 +90,28 @@ class NuMenuRenderer
                     return $r;
                 }, $raw);
             } catch (Throwable $e2) {
-                error_log('[MenuRenderer] ' . $e2->getMessage());
-                return '';
+                // Last resort: bare minimum columns only (no open-mode at all)
+                try {
+                    $db  = NuDatabase::getInstance();
+                    $raw = $db->fetchAll(
+                        "SELECT menu_id, menu_label, menu_type,
+                                COALESCE(menu_target, '') AS menu_target,
+                                menu_parent_id, menu_order, menu_roles,
+                                menu_active, menu_icon
+                         FROM   nu_menus
+                         WHERE  menu_active = 1
+                         ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
+                    );
+                    $rows = array_map(static function (array $r): array {
+                        $r['menu_browse_mode']  = 'inline';
+                        $r['menu_preview_mode'] = 'inline';
+                        $r['menu_default_view'] = 'browse';
+                        return $r;
+                    }, $raw);
+                } catch (Throwable $e3) {
+                    error_log('[MenuRenderer] ' . $e3->getMessage());
+                    return '';
+                }
             }
         }
 
@@ -141,7 +159,6 @@ class NuMenuRenderer
         }
 
         $rawTarget = trim($item['menu_target'] ?? '');
-        $rawCode   = trim($item['menu_code']   ?? '');
 
         // ── Group: collapsible section, toggle only ───────────────────────────
         if (!empty($kids)) {
@@ -164,7 +181,7 @@ class NuMenuRenderer
 
         // ── URL item ──────────────────────────────────────────────────────────
         if ($type === 'url') {
-            $href = htmlspecialchars($rawTarget ?: $rawCode ?: '#', ENT_QUOTES, 'UTF-8');
+            $href = htmlspecialchars($rawTarget ?: '#', ENT_QUOTES, 'UTF-8');
             $out  = "<a href=\"{$href}\" class=\"nu-nav-item\" target=\"_blank\" rel=\"noopener noreferrer\">\n";
             $out .= self::svgIcon($svgBody);
             $out .= "  <span>{$label}</span>\n";
@@ -173,13 +190,12 @@ class NuMenuRenderer
         }
 
         // ── Standard leaf item (form / report / query / group-leaf) ───────────
-        $module = $rawTarget !== '' ? $rawTarget : $rawCode;
+        $module = $rawTarget;
         if ($module === '') {
-            return "<!-- nu_menus id={$item['menu_id']} skipped: no target or code -->\n";
+            return "<!-- nu_menus id={$item['menu_id']} skipped: no target -->\n";
         }
         $moduleSafe = htmlspecialchars($module, ENT_QUOTES, 'UTF-8');
 
-        // Sanitise the three open-mode values
         $browseMode  = self::sanitiseDisplay($item['menu_browse_mode']  ?? 'inline');
         $previewMode = self::sanitiseDisplay($item['menu_preview_mode'] ?? 'inline');
         $defaultView = self::sanitiseView($item['menu_default_view']    ?? 'browse');
