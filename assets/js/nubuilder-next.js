@@ -2,17 +2,16 @@
 (function () {
   'use strict';
 
-  /**
-   * Replace el with a fresh clone — this is the ONLY reliable way to sever
-   * ALL jQuery internal cache associations (both user and _data stores).
-   * Returns the new element.
-   */
   function _s2FreshClone(el) {
     var clone = el.cloneNode(true);
     clone.removeAttribute('data-select2-id');
     clone.removeAttribute('data-nu-s2');
+    // Delete jQuery expando property so no cache is inherited
+    if (typeof jQuery !== 'undefined' && jQuery.expando) {
+      try { delete clone[jQuery.expando]; } catch(e) {}
+    }
     el.parentNode.replaceChild(clone, el);
-    // Remove any orphaned Select2 DOM siblings that belonged to the old el
+    // Remove orphaned Select2 DOM siblings
     var next = clone.nextElementSibling;
     while (next && next.classList &&
            (next.classList.contains('select2') || next.classList.contains('select2-container'))) {
@@ -24,12 +23,11 @@
   function _s2InitOne(el) {
     if (typeof jQuery === 'undefined' || typeof jQuery.fn.select2 === 'undefined') return;
     var $ = jQuery;
-    // Replace with a clean clone — no jQuery history, no stale IDs
     var fresh = _s2FreshClone(el);
     var opts = {
       width: '100%',
       theme: (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
-      placeholder: fresh.dataset.placeholder || 'Select\u2026',
+      placeholder: fresh.dataset.placeholder || 'Select…',
       allowClear:  fresh.dataset.allowClear !== 'false',
       multiple:    fresh.dataset.selectMode === 'multiple' || fresh.hasAttribute('multiple'),
       dropdownParent: $(document.body),
@@ -181,6 +179,9 @@ window.NuApp = {
     });
   },
 
+  // NOTE: _initFormWidgets is called BEFORE _execModuleScripts in every form-open
+  // path. This ensures Select2 inits on a clean element before any inline <script>
+  // in the form HTML gets a chance to call select2() again.
   _initFormWidgets(scope) {
     if (scope) scope.dataset.nuS2Done = '1';
     if (typeof window.nuInitSelect2 === 'function') window.nuInitSelect2(scope);
@@ -388,8 +389,9 @@ window.NuApp = {
       applySize(currentSize);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      this._execModuleScripts(box);
+      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(box);
+      this._execModuleScripts(box);
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, true);
@@ -444,8 +446,9 @@ window.NuApp = {
       document.body.appendChild(overlay);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      this._execModuleScripts(box);
+      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(box);
+      this._execModuleScripts(box);
       this._dispatchFormOpened(box);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, false);
@@ -728,8 +731,9 @@ window.NuApp = {
       container.appendChild(formWrap);
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'inline';
-      this._execModuleScripts(container);
+      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(container);
+      this._execModuleScripts(container);
       this._dispatchFormOpened(container);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
@@ -762,8 +766,9 @@ window.NuApp = {
       container.appendChild(formWrap);
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'fullpage';
-      this._execModuleScripts(container);
+      // CRITICAL ORDER: Select2 init FIRST, then inline scripts, then event
       this._initFormWidgets(container);
+      this._execModuleScripts(container);
       this._dispatchFormOpened(container);
       if (window.nuForm && typeof window.nuForm.init === 'function') {
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
