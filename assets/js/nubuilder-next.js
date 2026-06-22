@@ -115,6 +115,32 @@ window.NuApp = {
     }, 4000);
   },
 
+  /**
+   * Strip stale data-select2-id from every <select> inside `container`
+   * and flush jQuery data for each, so Select2's constructor never finds
+   * a stale ID left over from a previous render or init cycle.
+   *
+   * Must be called BEFORE _execModuleScripts so that any inline <script>
+   * that calls select2() starts from a clean slate.
+   */
+  _preWipeSelect2(container) {
+    container.querySelectorAll('select[data-select2-id]').forEach(function (el) {
+      el.removeAttribute('data-select2-id');
+      el.removeAttribute('data-nu-s2');
+      if (typeof jQuery !== 'undefined') {
+        try { jQuery.removeData(el); } catch (e) { /* ignore */ }
+      }
+      // Remove orphaned Select2 DOM siblings injected by a previous init
+      var next = el.nextElementSibling;
+      while (next && next.classList &&
+             (next.classList.contains('select2') || next.classList.contains('select2-container'))) {
+        var toRemove = next;
+        next = next.nextElementSibling;
+        toRemove.parentNode.removeChild(toRemove);
+      }
+    });
+  },
+
   _execModuleScripts(container) {
     container.querySelectorAll('script').forEach(function (oldScript) {
       const s = document.createElement('script');
@@ -402,13 +428,23 @@ window.NuApp = {
       applySize(currentSize);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
+      //    so any script that calls select2() starts from a clean slate.
+      this._preWipeSelect2(box);
+
       // ── Re-exec scripts NOW that box is in the live DOM so document.querySelector works
       this._execModuleScripts(box);
 
-      this._dispatchFormOpened(box);
-      if (window.nuForm && typeof window.nuForm.init === 'function') {
-        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, true);
-      }
+      // ── Defer dispatch so _execModuleScripts fully completes first,
+      //    preventing the nu:form:opened → nuInitSelect2 from racing with
+      //    any inline script that also calls select2().
+      const _self = this;
+      setTimeout(function () {
+        _self._dispatchFormOpened(box);
+        if (window.nuForm && typeof window.nuForm.init === 'function') {
+          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, true);
+        }
+      }, 0);
     } catch (err) {
       console.error('previewForm error', err);
       this.toast('Preview error: ' + err.message, 'error');
@@ -470,13 +506,20 @@ window.NuApp = {
       document.body.appendChild(overlay);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
+      this._preWipeSelect2(box);
+
       // ── Re-exec scripts NOW that box is in the live DOM so document.querySelector works
       this._execModuleScripts(box);
 
-      this._dispatchFormOpened(box);
-      if (window.nuForm && typeof window.nuForm.init === 'function') {
-        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, false);
-      }
+      // ── Defer dispatch so _execModuleScripts fully completes first
+      const _self = this;
+      setTimeout(function () {
+        _self._dispatchFormOpened(box);
+        if (window.nuForm && typeof window.nuForm.init === 'function') {
+          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, false);
+        }
+      }, 0);
     } catch (err) {
       console.error('editRecord error', err);
       this.toast('Error: ' + err.message, 'error');
@@ -831,13 +874,20 @@ window.NuApp = {
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'inline';
 
+      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
+      this._preWipeSelect2(container);
+
       // ── Re-exec scripts NOW that formWrap is in the live DOM so document.querySelector works
       this._execModuleScripts(container);
 
-      this._dispatchFormOpened(container);
-      if (window.nuForm && typeof window.nuForm.init === 'function') {
-        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
-      }
+      // ── Defer dispatch so _execModuleScripts fully completes first
+      const _self = this;
+      setTimeout(function () {
+        _self._dispatchFormOpened(container);
+        if (window.nuForm && typeof window.nuForm.init === 'function') {
+          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
+        }
+      }, 0);
     } catch (err) {
       console.error('_openFormInline error', err);
       this.toast('Error: ' + err.message, 'error');
@@ -881,13 +931,20 @@ window.NuApp = {
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'fullpage';
 
+      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
+      this._preWipeSelect2(container);
+
       // ── Re-exec scripts NOW that formWrap is in the live DOM so document.querySelector works
       this._execModuleScripts(container);
 
-      this._dispatchFormOpened(container);
-      if (window.nuForm && typeof window.nuForm.init === 'function') {
-        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
-      }
+      // ── Defer dispatch so _execModuleScripts fully completes first
+      const _self = this;
+      setTimeout(function () {
+        _self._dispatchFormOpened(container);
+        if (window.nuForm && typeof window.nuForm.init === 'function') {
+          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
+        }
+      }, 0);
     } catch (err) {
       console.error('_openFormFullPage error', err);
       this._exitFullPage();
