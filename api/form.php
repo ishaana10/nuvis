@@ -89,9 +89,24 @@ function nu_get_table_columns($table) {
     }
 }
 
+/** Bust the nu_get_table_columns() cache for a given table (call after ALTER TABLE). */
+function nu_bust_column_cache($table) {
+    static $cache = [];
+    // Access the static var inside nu_get_table_columns via a trick: just re-fetch
+    // We use a separate static array in this function as a flag, then force a re-fetch
+    // by temporarily removing the entry from nu_get_table_columns's cache via reflection.
+    // Simpler: just call DESCRIBE directly and rebuild.
+    $rows = nu_q("DESCRIBE `{$table}`")->fetchAll(PDO::FETCH_ASSOC);
+    $cols = [];
+    foreach ($rows as $row) $cols[$row['Field']] = true;
+    // We can't easily bust the static inside nu_get_table_columns, so we use a wrapper approach.
+    // The simplest reliable solution: store in a global so nu_get_table_columns checks it.
+    $GLOBALS['_nu_col_cache'][$table] = $cols;
+}
+
 /**
  * Filter a $save array so only columns that actually exist in $table are kept.
- * The PK is always kept if present (it may not be in DESCRIBE when autoincrement).
+ * The PK is always kept if present (it may not be in DESCRIBE when autoincrement)
  */
 function nu_filter_save_to_columns($save, $table, $pk) {
     $cols = nu_get_table_columns($table);
@@ -921,6 +936,110 @@ function nu_flatten_layout_for_grid($layout) {
     ));
 }
 
+/* ── Table / column DDL helpers ─────────────────────────────────── */
+
+/**
+ * Map a form field type to a MySQL column definition.
+ */
+function nu_field_type_to_sql($fieldType) {
+    switch ($fieldType) {
+        case 'number':     return 'DOUBLE NULL DEFAULT NULL';
+        case 'date':       return 'DATE NULL DEFAULT NULL';
+        case 'time':       return 'TIME NULL DEFAULT NULL';
+        case 'datetime':   return 'DATETIME NULL DEFAULT NULL';
+        case 'checkbox':   return 'TINYINT(1) NOT NULL DEFAULT 0';
+        case 'textarea':   return 'TEXT NULL DEFAULT NULL';
+        case 'uuid':       return 'VARCHAR(36) NULL DEFAULT NULL';
+        default:           return 'VARCHAR(255) NULL DEFAULT NULL';
+    }
+}
+
+/**
+ * Create the data table for a form if it does not already exist.
+ * Returns ['created' => bool, 'error' => string|null].
+ */
+function nu_create_form_table($tableName, $pkType, array $fields) {
+    $tableName = nu_safe_ident($tableName);
+    if ($tableName === '') return ['created' => false, 'error' => 'Empty table name'];
+
+    if (nu_table_exists($tableName)) return ['created' => false, 'error' => null];
+
+    // PK definition
+    if ($pkType === 'uuid') {
+        $pkDef = '`id` VARCHAR(36) NOT NULL PRIMARY KEY';
+    } else {
+        $pkDef = '`id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
+    }
+
+    $colDefs = [$pkDef];
+    $added   = ['id' => true];
+
+    foreach ($fields as $field) {
+        $name = nu_safe_ident(nu_field_name($field));
+        $type = nu_field_type($field);
+        if ($name === '' || isset($added[$name])) continue;
+        if (in_array($type, ['html','content','button','fieldset','subform','heading','divider'], true)) continue;
+
+        // For lookup fields use the store column name
+        if ($type === 'lookup') {
+            $dbCol = nu_safe_ident(nu_resolve_lookup_store_col($field));
+            if ($dbCol === '' || isset($added[$dbCol])) continue;
+            $name = $dbCol;
+        }
+
+        $colDefs[] = '`' . $name . '` ' . nu_field_type_to_sql($type);
+        $added[$name] = true;
+    }
+
+    $sql = 'CREATE TABLE `' . $tableName . '` (' . implode(', ', $colDefs) . ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+    try {
+        nu_db()->exec($sql);
+        return ['created' => true, 'error' => null];
+    } catch (Throwable $e) {
+        return ['created' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * For an existing table, ADD any columns that are in the layout but missing from the table.
+ * Returns list of columns added and any errors encountered.
+ */
+function nu_sync_form_table_columns($tableName, array $fields) {
+    $tableName = nu_safe_ident($tableName);
+    if ($tableName === '' || !nu_table_exists($tableName)) return ['added' => [], 'errors' => []];
+
+    $existing = nu_get_table_columns($tableName);
+    $added    = [];
+    $errors   = [];
+
+    foreach ($fields as $field) {
+        $name = nu_safe_ident(nu_field_name($field));
+        $type = nu_field_type($field);
+        if ($name === '') continue;
+        if (in_array($type, ['html','content','button','fieldset','subform','heading','divider'], true)) continue;
+
+        // For lookup fields use the store column name
+        if ($type === 'lookup') {
+            $dbCol = nu_safe_ident(nu_resolve_lookup_store_col($field));
+            if ($dbCol === '') continue;
+            $name = $dbCol;
+        }
+
+        if (isset($existing[$name])) continue; // already exists
+
+        $colSql = nu_field_type_to_sql($type);
+        try {
+            nu_db()->exec("ALTER TABLE `{$tableName}` ADD COLUMN `{$name}` {$colSql}");
+            $added[]          = $name;
+            $existing[$name]  = true; // update local cache so duplicates are skipped
+        } catch (Throwable $e) {
+            $errors[] = "Column {$name}: " . $e->getMessage();
+        }
+    }
+
+    return ['added' => $added, 'errors' => $errors];
+}
+
 /* ── Subform handlers ───────────────────────────────────────────── */
 
 function nu_handle_subform_fields() {
@@ -1243,6 +1362,7 @@ function nu_handle_save() {
 
 /**
  * Save (create or update) a form definition in nu_forms.
+ * Also creates the data table if it doesn't exist, and adds any missing columns.
  * Called by the builder's "Save Form" button via POST action=save_form.
  */
 function nu_handle_save_form() {
@@ -1253,10 +1373,12 @@ function nu_handle_save_form() {
     $ftable   = nu_form_table_name();
 
     // Required
-    $name   = trim((string)($data['form_name']   ?? ''));
-    $code   = trim((string)($data['form_code']   ?? ''));
-    $table  = trim((string)($data['form_table']  ?? ''));
-    $layout = $data['form_layout'] ?? [];
+    $name      = trim((string)($data['form_name']   ?? ''));
+    $code      = trim((string)($data['form_code']   ?? ''));
+    $table     = trim((string)($data['form_table']  ?? ''));
+    $layout    = $data['form_layout'] ?? [];
+    $tableMode = trim((string)($data['form_table_mode'] ?? 'new'));
+    $pkType    = trim((string)($data['form_pk_type']    ?? 'autoincrement'));
 
     if ($name === '') nu_json(['success' => false, 'error' => 'form_name is required'], 400);
 
@@ -1274,8 +1396,8 @@ function nu_handle_save_form() {
         $c['active']                  => 1,
         $c['type']                    => $data['form_type']        ?? 'main',
         $c['display_mode']            => $data['browse_display_mode'] ?? 'inline',
-        $c['pk_type']                 => $data['form_pk_type']     ?? 'autoincrement',
-        $c['table_mode']              => $data['form_table_mode']  ?? 'new',
+        $c['pk_type']                 => $pkType,
+        $c['table_mode']              => $tableMode,
         $c['custom_js']               => $data['form_custom_js']   ?? '',
         $c['js_before_save']          => $data['form_js_before_save'] ?? '',
         $c['js_after_save']           => $data['form_js_after_save']  ?? '',
@@ -1306,7 +1428,6 @@ function nu_handle_save_form() {
         $params[] = $formId;
         $pk = $c['id'];
         nu_q("UPDATE `{$ftable}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
-        nu_json(['success' => true, 'form_id' => $formId, 'form_code' => $code]);
     } else {
         // INSERT
         $cols         = array_keys($save);
@@ -1315,9 +1436,36 @@ function nu_handle_save_form() {
             "INSERT INTO `{$ftable}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")",
             array_values($save)
         );
-        $newId = (int)nu_db()->lastInsertId();
-        nu_json(['success' => true, 'form_id' => $newId, 'form_code' => $code]);
+        $formId = (int)nu_db()->lastInsertId();
     }
+
+    // ── DDL: create table or add missing columns ─────────────────────────
+    $ddlResult   = ['created' => false, 'added' => [], 'errors' => []];
+    $safeTable   = nu_safe_ident($table);
+    $flatFields  = nu_flatten_layout(is_array($layout) ? $layout : []);
+
+    if ($safeTable !== '' && $tableMode !== 'existing_no_sync') {
+        if (!nu_table_exists($safeTable)) {
+            // Table does not exist — create it (regardless of table_mode)
+            $createResult = nu_create_form_table($safeTable, $pkType, $flatFields);
+            $ddlResult['created'] = $createResult['created'];
+            if ($createResult['error']) $ddlResult['errors'][] = $createResult['error'];
+        } else {
+            // Table exists — add any missing columns
+            $syncResult = nu_sync_form_table_columns($safeTable, $flatFields);
+            $ddlResult['added']  = $syncResult['added'];
+            $ddlResult['errors'] = $syncResult['errors'];
+        }
+    }
+
+    nu_json([
+        'success'    => true,
+        'form_id'    => $formId,
+        'form_code'  => $code,
+        'table_created'       => $ddlResult['created'],
+        'columns_added'       => $ddlResult['added'],
+        'ddl_errors'          => $ddlResult['errors'],
+    ]);
 }
 
 /**
