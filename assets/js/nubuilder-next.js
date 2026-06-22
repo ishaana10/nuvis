@@ -1,10 +1,140 @@
+// ─── Select2 helpers ─────────────────────────────────────────────────────────
+// Merged from nu-select2-init.js so Select2 is initialised synchronously
+// inside each form-open method, eliminating the nu:form:opened → setTimeout
+// timing race that caused "r.GetData(...).destroy is not a function".
+
+(function () {
+  'use strict';
+
+  /**
+   * Atomically wipe ALL Select2 state from a single <select>.
+   * Removes attribute first (critical — Select2 reads it before $.data),
+   * then flushes both jQuery cache layers, then kills the expando bucket.
+   */
+  function _s2HardWipe(el) {
+    if (typeof jQuery === 'undefined') return;
+    var $ = jQuery;
+    el.removeAttribute('data-select2-id');
+    try { $.removeData(el); } catch (e) {/* ignore */}
+    try {
+      var expando = $.expando;
+      if (expando && el[expando]) {
+        var b = el[expando];
+        if (b && typeof b === 'object') {
+          if (b.data) b.data = {};
+          Object.keys(b).forEach(function (k) {
+            if (k.indexOf('select2') === 0) delete b[k];
+          });
+        }
+      }
+    } catch (e) {/* ignore */}
+  }
+
+  /**
+   * Fully destroy any (possibly corrupt) Select2 instance on el.
+   * Safe to call even if Select2 was never initialised.
+   */
+  function _s2Destroy(el) {
+    if (typeof jQuery === 'undefined') return;
+    var $ = jQuery;
+    el.removeAttribute('data-nu-s2');
+    _s2HardWipe(el);                         // wipe BEFORE polite destroy
+    try {
+      if (typeof $.fn.select2 !== 'undefined') {
+        var inst = $.data(el, 'select2');
+        if (inst && typeof inst.destroy === 'function') $(el).select2('destroy');
+      }
+    } catch (e) {/* ignore */}
+    _s2HardWipe(el);                         // wipe again after destroy
+    // Remove orphaned Select2 DOM siblings
+    var next = el.nextElementSibling;
+    while (next && next.classList &&
+           (next.classList.contains('select2') || next.classList.contains('select2-container'))) {
+      var rem = next; next = next.nextElementSibling; rem.parentNode.removeChild(rem);
+    }
+  }
+
+  /**
+   * Run select2() on one already-cleaned element.
+   * Hard-wipes before calling the constructor so even if _execModuleScripts
+   * stamped data-select2-id via an inline script, we start clean.
+   */
+  function _s2InitOne(el) {
+    var $ = jQuery;
+    var placeholder = el.dataset.placeholder || 'Select\u2026';
+    var allowClear  = el.dataset.allowClear !== 'false';
+    var isMultiple  = el.dataset.selectMode === 'multiple' || el.hasAttribute('multiple');
+    var opts = {
+      width: '100%',
+      theme: (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
+      placeholder: placeholder,
+      allowClear:  allowClear,
+      multiple:    isMultiple,
+      dropdownParent: $(document.body),
+    };
+    _s2HardWipe(el);
+    try {
+      $(el).select2(opts);
+      el.setAttribute('data-nu-s2', '1');
+      return true;
+    } catch (err) {
+      console.error('[nu-select2] init FAILED', err.message, el);
+      _s2HardWipe(el);
+      try {
+        $(el).select2(opts);
+        el.setAttribute('data-nu-s2', '1');
+        return true;
+      } catch (e2) {
+        console.error('[nu-select2] retry FAILED', e2.message, el);
+        return false;
+      }
+    }
+  }
+
+  /**
+   * Public: init all Select2 targets within scope (Element or document).
+   * Called directly — no setTimeout, no event listener.
+   */
+  function nuInitSelect2(scope) {
+    if (typeof jQuery === 'undefined' || typeof jQuery.fn.select2 === 'undefined') return;
+    var $ = jQuery;
+    var root = (scope instanceof Element) ? scope : document;
+    var $targets = $(root).find('select[data-select-type="select2"], select.nu-select2');
+    if (!$targets.length) return;
+    // Hard-wipe ALL targets first before touching any of them
+    $targets.each(function () { _s2HardWipe(this); });
+    $targets.each(function () { _s2Destroy(this); _s2InitOne(this); });
+  }
+
+  // Expose globals so external code (subforms, custom JS) can call them
+  window.nuInitSelect2   = nuInitSelect2;
+  window.nuDestroySelect2 = _s2Destroy;
+  window.nuReinitSelect2  = function (el) { if (!el) return; _s2Destroy(el); _s2InitOne(el); };
+
+  // Page-load init (for selects present on the initial page, not inside forms)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { nuInitSelect2(document); });
+  } else {
+    nuInitSelect2(document);
+  }
+
+  // Keep nu:form:opened listener ONLY as a safety net for third-party code
+  // that dispatches the event from outside NuApp. NuApp itself calls
+  // nuInitSelect2 directly and never relies on this path.
+  document.addEventListener('nu:form:opened', function (e) {
+    var scope = e.detail && e.detail.scope;
+    if (scope && scope.dataset && scope.dataset.nuS2Done) return; // already handled inline
+    nuInitSelect2(scope);
+  });
+
+}());
+
+
+// ─── NuApp ────────────────────────────────────────────────────────────────────
 window.NuApp = {
   currentModule: 'dashboard',
-  _previewModalSize: 'standard', // compact | standard | full
+  _previewModalSize: 'standard',
 
-  // ── System modules that always load their PHP shell directly ──────────────
-  // Everything NOT in this list that comes from a nav link is treated as a
-  // form/report/query and routed through the open-mode logic.
   _systemModules: new Set([
     'dashboard','forms','reports','queries','calendar','ai','integrations',
     'menus','users','roles','audit','files','workflow','inspector','errorlog',
@@ -17,7 +147,6 @@ window.NuApp = {
     this.initNavGroups();
   },
 
-  // ── Collapse all nav groups on load, then expand the active one ────────────
   initNavGroups() {
     document.querySelectorAll('.nu-nav-group').forEach((group) => {
       const btn = group.querySelector('.nu-nav-group-label');
@@ -30,17 +159,10 @@ window.NuApp = {
 
   bindEvents() {
     const themeToggle = document.getElementById('themeToggle');
-    if (themeToggle) {
-      themeToggle.addEventListener('click', () => this.toggleTheme());
-    }
+    if (themeToggle) themeToggle.addEventListener('click', () => this.toggleTheme());
     const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', () => this.logout());
-    }
+    if (logoutBtn) logoutBtn.addEventListener('click', () => this.logout());
 
-    // NOTE: No hashchange listener — nav is driven entirely by onclick.
-
-    // ── Collapsible nav groups ──────────────────────────────────────────────
     const nav = document.querySelector('.nu-nav');
     if (nav) {
       nav.addEventListener('click', (e) => {
@@ -56,7 +178,6 @@ window.NuApp = {
       });
     }
 
-    // ── Close any open nav form-mode dropdowns when clicking outside ────────
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.nu-nav-form-item')) {
         document.querySelectorAll('.nu-nav-form-dropdown').forEach(d => d.classList.remove('open'));
@@ -65,9 +186,7 @@ window.NuApp = {
   },
 
   async logout() {
-    try {
-      await fetch('api/auth.php?action=logout', { method: 'POST', credentials: 'same-origin' });
-    } catch (e) {}
+    try { await fetch('api/auth.php?action=logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) {}
     window.location.reload();
   },
 
@@ -110,160 +229,28 @@ window.NuApp = {
     toast.className = 'nu-toast ' + (type || 'success');
     toast.textContent = message;
     container.appendChild(toast);
-    setTimeout(() => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    }, 4000);
-  },
-
-  /**
-   * Strip stale data-select2-id from every <select> inside `container`
-   * and flush jQuery data for each, so Select2's constructor never finds
-   * a stale ID left over from a previous render or init cycle.
-   *
-   * Must be called BEFORE _execModuleScripts so that any inline <script>
-   * that calls select2() starts from a clean slate.
-   */
-  _preWipeSelect2(container) {
-    container.querySelectorAll('select[data-select2-id]').forEach(function (el) {
-      el.removeAttribute('data-select2-id');
-      el.removeAttribute('data-nu-s2');
-      if (typeof jQuery !== 'undefined') {
-        try { jQuery.removeData(el); } catch (e) { /* ignore */ }
-      }
-      // Remove orphaned Select2 DOM siblings injected by a previous init
-      var next = el.nextElementSibling;
-      while (next && next.classList &&
-             (next.classList.contains('select2') || next.classList.contains('select2-container'))) {
-        var toRemove = next;
-        next = next.nextElementSibling;
-        toRemove.parentNode.removeChild(toRemove);
-      }
-    });
+    setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 4000);
   },
 
   _execModuleScripts(container) {
     container.querySelectorAll('script').forEach(function (oldScript) {
       const s = document.createElement('script');
-      Array.from(oldScript.attributes).forEach(function (attr) {
-        s.setAttribute(attr.name, attr.value);
-      });
+      Array.from(oldScript.attributes).forEach(function (attr) { s.setAttribute(attr.name, attr.value); });
       s.textContent = oldScript.textContent;
       oldScript.parentNode.replaceChild(s, oldScript);
     });
   },
 
-  // ─── LOAD MODULE ─────────────────────────────────────────────────────────
-  //
-  // Signature (all params after `module` are optional, default to safe values):
-  //
-  //   NuApp.loadModule(module)
-  //   NuApp.loadModule(module, defaultView, browseMode, previewMode)
-  //
-  //   module       – module code or form/report/query code
-  //   defaultView  – 'browse' (default) | 'preview'
-  //                  Which view opens when the nav link is clicked.
-  //   browseMode   – 'inline' (default) | 'popup'
-  //                  How the browse/list view is displayed (only used when
-  //                  defaultView === 'browse').
-  //   previewMode  – 'inline' (default) | 'popup'
-  //                  How the preview/read-only form is displayed (only used
-  //                  when defaultView === 'preview').
-  //
-  // Rules:
-  //   • Only ONE view opens per click — either browse OR preview, never both.
-  //   • System modules (dashboard, forms, users …) always fetch their PHP
-  //     shell directly, ignoring the open-mode params.
-  //   • Any unrecognised module code is also treated as a system module
-  //     fallback (fetches the PHP shell).
-  //
-  async loadModule(module, defaultView, browseMode, previewMode) {
-    // Sanitise / default every argument
-    module      = (module      || 'dashboard').trim();
-    defaultView = ['browse','preview'].includes(defaultView) ? defaultView : 'browse';
-    browseMode  = ['inline','popup'].includes(browseMode)    ? browseMode  : 'inline';
-    previewMode = ['inline','popup'].includes(previewMode)   ? previewMode : 'inline';
-
-    this._exitFullPage();
-    this.currentModule = module;
-
-    const container = document.getElementById('contentArea');
-    const pageTitle  = document.getElementById('pageTitle');
-    if (!container) { console.error('contentArea not found'); return; }
-
-    if (pageTitle) {
-      pageTitle.textContent = module.charAt(0).toUpperCase() + module.slice(1);
-    }
-    this.setActiveNavByModule(module);
-
-    // ── System module → fetch PHP shell as before ───────────────────────────
-    if (this._systemModules.has(module)) {
-      container.innerHTML = '<div class="nu-spinner" style="margin:40px auto;"></div>';
-      try {
-        const res  = await fetch('modules/' + module + '/' + module + '.php', { credentials: 'same-origin' });
-        const html = await res.text();
-        if (!res.ok) {
-          container.innerHTML =
-            '<div style="padding:24px;border:2px solid red;background:#fee;">' +
-            '<h3>Module load failed</h3><p>Status: ' + res.status + '</p>' +
-            '<pre style="font-size:12px;overflow:auto;">' + html.substring(0, 2000) + '</pre></div>';
-          return;
-        }
-        container.innerHTML = html;
-        container.style.display     = 'block';
-        container.style.visibility  = 'visible';
-        container.style.opacity     = '1';
-        this._execModuleScripts(container);
-        this.initModuleScripts(module);
-      } catch (err) {
-        console.error('loadModule error', err);
-        container.innerHTML =
-          '<div style="padding:24px;border:2px solid red;background:#fee;">' +
-          '<h3>Error</h3><p>' + String(err.message || err) + '</p></div>';
-      }
-      return;
-    }
-
-    // ── Form / report / query module → open-mode routing ───────────────────
-    //
-    //  defaultView === 'preview'  → open the blank new-entry form directly
-    //    previewMode === 'popup'  → modal overlay
-    //    previewMode === 'inline' → inside the content area
-    //
-    //  defaultView === 'browse' (default) → open the record list first
-    //    browseMode === 'popup'   → modal overlay
-    //    browseMode === 'inline'  → inside the content area
-    //
-    if (defaultView === 'preview') {
-      if (previewMode === 'popup') {
-        return this.previewForm(module, module, 'modal');
-      } else {
-        return this._openFormInline(module, module, null, true);
-      }
-    } else {
-      // Browse (list) view
-      if (browseMode === 'popup') {
-        return this._browseModal(module, 1, '', module);
-      } else {
-        return this._browseInline(module, 1, '', module);
-      }
-    }
-  },
-
-  initModuleScripts(module) {
-    if (module === 'forms') {
-      if (window.nbFormBuilder && typeof window.nbFormBuilder._initAfterLoad === 'function') {
-        window.nbFormBuilder._initAfterLoad();
-      }
-    }
-  },
-
-  async apiJson(url, options) {
-    const res  = await fetch(url, options || {});
-    const text = await res.text();
-    console.log('api raw response:', url, text);
-    let json = null;
-    try { json = JSON.parse(text); } catch (e) { throw new Error('Invalid JSON response'); }
-    return json;
+  /**
+   * Called after HTML is injected and scripts re-executed.
+   * Runs Select2 init SYNCHRONOUSLY (no setTimeout) so there is exactly
+   * one init path and zero timing races.
+   * Marks the scope with data-nu-s2-done so the nu:form:opened safety-net
+   * listener skips it.
+   */
+  _initFormWidgets(scope) {
+    if (scope) scope.dataset.nuS2Done = '1';
+    if (typeof window.nuInitSelect2 === 'function') window.nuInitSelect2(scope);
   },
 
   _dispatchFormOpened(box) {
@@ -273,7 +260,6 @@ window.NuApp = {
     document.dispatchEvent(new CustomEvent('nu:form:opened', { detail: { scope: box } }));
   },
 
-  // ─── BREADCRUMB HELPER ────────────────────────────────────────────────
   _renderBreadcrumb(crumbs) {
     const nav = document.createElement('nav');
     nav.setAttribute('aria-label', 'breadcrumb');
@@ -304,7 +290,6 @@ window.NuApp = {
     return nav;
   },
 
-  // ─── FULL-PAGE MODE HELPERS ──────────────────────────────────────────────
   _enterFullPage() {
     const sidebar = document.querySelector('.nu-sidebar, #sidebar, [class*="sidebar"]');
     const header  = document.querySelector('.nu-header, #header, header');
@@ -329,18 +314,76 @@ window.NuApp = {
     delete document.body.dataset.nuFullPage;
   },
 
-  // ─── PREVIEW FORM — routes on displayMode, defaults to resizable modal ──────
+  async loadModule(module, defaultView, browseMode, previewMode) {
+    module      = (module      || 'dashboard').trim();
+    defaultView = ['browse','preview'].includes(defaultView) ? defaultView : 'browse';
+    browseMode  = ['inline','popup'].includes(browseMode)    ? browseMode  : 'inline';
+    previewMode = ['inline','popup'].includes(previewMode)   ? previewMode : 'inline';
+
+    this._exitFullPage();
+    this.currentModule = module;
+
+    const container = document.getElementById('contentArea');
+    const pageTitle  = document.getElementById('pageTitle');
+    if (!container) { console.error('contentArea not found'); return; }
+    if (pageTitle) pageTitle.textContent = module.charAt(0).toUpperCase() + module.slice(1);
+    this.setActiveNavByModule(module);
+
+    if (this._systemModules.has(module)) {
+      container.innerHTML = '<div class="nu-spinner" style="margin:40px auto;"></div>';
+      try {
+        const res  = await fetch('modules/' + module + '/' + module + '.php', { credentials: 'same-origin' });
+        const html = await res.text();
+        if (!res.ok) {
+          container.innerHTML = '<div style="padding:24px;border:2px solid red;background:#fee;"><h3>Module load failed</h3><p>Status: ' + res.status + '</p><pre style="font-size:12px;overflow:auto;">' + html.substring(0, 2000) + '</pre></div>';
+          return;
+        }
+        container.innerHTML = html;
+        container.style.display    = 'block';
+        container.style.visibility = 'visible';
+        container.style.opacity    = '1';
+        this._execModuleScripts(container);
+        this.initModuleScripts(module);
+      } catch (err) {
+        console.error('loadModule error', err);
+        container.innerHTML = '<div style="padding:24px;border:2px solid red;background:#fee;"><h3>Error</h3><p>' + String(err.message || err) + '</p></div>';
+      }
+      return;
+    }
+
+    if (defaultView === 'preview') {
+      return previewMode === 'popup'
+        ? this.previewForm(module, module, 'modal')
+        : this._openFormInline(module, module, null, true);
+    } else {
+      return browseMode === 'popup'
+        ? this._browseModal(module, 1, '', module)
+        : this._browseInline(module, 1, '', module);
+    }
+  },
+
+  initModuleScripts(module) {
+    if (module === 'forms' && window.nbFormBuilder && typeof window.nbFormBuilder._initAfterLoad === 'function') {
+      window.nbFormBuilder._initAfterLoad();
+    }
+  },
+
+  async apiJson(url, options) {
+    const res  = await fetch(url, options || {});
+    const text = await res.text();
+    console.log('api raw response:', url, text);
+    let json = null;
+    try { json = JSON.parse(text); } catch (e) { throw new Error('Invalid JSON response'); }
+    return json;
+  },
+
   async previewForm(code, formLabel, displayMode) {
     const mode = (displayMode || 'modal').toLowerCase();
     if (mode === 'inline')   return this._openFormInline(code, formLabel, null, true);
     if (mode === 'fullpage') return this._openFormFullPage(code, formLabel, null, true);
 
-    // ── modal (default) ──────────────────────────────────────────────────────
     try {
-      const json = await this.apiJson(
-        'api/form.php?action=render&code=' + encodeURIComponent(code),
-        { credentials: 'same-origin' }
-      );
+      const json = await this.apiJson('api/form.php?action=render&code=' + encodeURIComponent(code), { credentials: 'same-origin' });
       if (!json.success) { this.toast(json.error || 'Preview failed', 'error'); return; }
 
       const label = formLabel || code;
@@ -353,17 +396,13 @@ window.NuApp = {
 
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
-      overlay.style.cssText =
-        'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
 
       const box = document.createElement('div');
-      box.style.cssText =
-        'background:var(--card-bg,#fff);border-radius:12px;padding:24px;width:92%;overflow-y:auto;transition:max-width 0.2s,max-height 0.2s;' +
-        'max-width:' + sizes[currentSize].maxWidth + ';max-height:' + sizes[currentSize].maxHeight + ';';
+      box.style.cssText = 'background:var(--card-bg,#fff);border-radius:12px;padding:24px;width:92%;overflow-y:auto;transition:max-width 0.2s,max-height 0.2s;max-width:' + sizes[currentSize].maxWidth + ';max-height:' + sizes[currentSize].maxHeight + ';';
 
       const applySize = (s) => {
-        currentSize = s;
-        this._previewModalSize = s;
+        currentSize = s; this._previewModalSize = s;
         box.style.maxWidth  = sizes[s].maxWidth;
         box.style.maxHeight = sizes[s].maxHeight;
         box.querySelectorAll('.nu-size-btn').forEach(b => {
@@ -375,7 +414,6 @@ window.NuApp = {
 
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;';
-
       const titleWrap = document.createElement('div');
       titleWrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;min-width:0;';
       const bc = this._renderBreadcrumb([
@@ -388,29 +426,20 @@ window.NuApp = {
 
       const controls = document.createElement('div');
       controls.style.cssText = 'display:flex;align-items:center;gap:4px;flex-shrink:0;';
-
       ['compact','standard','full'].forEach(s => {
         const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'nu-size-btn';
-        btn.dataset.size = s;
-        btn.textContent = s === 'compact' ? '▣ Sm' : s === 'standard' ? '▣ Md' : '⛶ Lg';
+        btn.type = 'button'; btn.className = 'nu-size-btn'; btn.dataset.size = s;
+        btn.textContent = s === 'compact' ? '\u25a3 Sm' : s === 'standard' ? '\u25a3 Md' : '\u26f6 Lg';
         btn.title = s.charAt(0).toUpperCase() + s.slice(1);
-        btn.style.cssText =
-          'border:1px solid var(--border-color,#ddd);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;' +
-          'background:transparent;color:var(--text,#333);transition:all 0.15s;';
+        btn.style.cssText = 'border:1px solid var(--border-color,#ddd);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;background:transparent;color:var(--text,#333);transition:all 0.15s;';
         btn.addEventListener('click', () => applySize(s));
         controls.appendChild(btn);
       });
-
       const closeBtn = document.createElement('button');
-      closeBtn.type = 'button';
-      closeBtn.innerHTML = '&times;';
-      closeBtn.style.cssText =
-        'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);margin-left:4px;';
+      closeBtn.type = 'button'; closeBtn.innerHTML = '&times;';
+      closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);margin-left:4px;';
       closeBtn.addEventListener('click', () => overlay.remove());
       controls.appendChild(closeBtn);
-
       header.appendChild(controls);
       box.appendChild(header);
 
@@ -418,8 +447,6 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       box.appendChild(formWrap);
 
-      // ── Stamp display-mode on the generated form so submitNuForm knows
-      //    to open a modal browse after save, not an inline one.
       const formEl = box.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'modal';
 
@@ -428,56 +455,38 @@ window.NuApp = {
       applySize(currentSize);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
-      //    so any script that calls select2() starts from a clean slate.
-      this._preWipeSelect2(box);
-
-      // ── Re-exec scripts NOW that box is in the live DOM so document.querySelector works
+      // Scripts run first, then Select2 init — synchronous, no setTimeout
       this._execModuleScripts(box);
-
-      // ── Defer dispatch so _execModuleScripts fully completes first,
-      //    preventing the nu:form:opened → nuInitSelect2 from racing with
-      //    any inline script that also calls select2().
-      const _self = this;
-      setTimeout(function () {
-        _self._dispatchFormOpened(box);
-        if (window.nuForm && typeof window.nuForm.init === 'function') {
-          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, true);
-        }
-      }, 0);
+      this._initFormWidgets(box);
+      this._dispatchFormOpened(box);
+      if (window.nuForm && typeof window.nuForm.init === 'function') {
+        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, true);
+      }
     } catch (err) {
       console.error('previewForm error', err);
       this.toast('Preview error: ' + err.message, 'error');
     }
   },
 
-  // ─── EDIT RECORD — routes on displayMode, defaults to modal ─────────────
   async editRecord(code, id, fromBrowseLabel, displayMode) {
     const mode        = (displayMode || 'modal').toLowerCase();
     const browseLabel = fromBrowseLabel || code;
-
     if (mode === 'inline')   return this._openFormInline(code, browseLabel, id, false);
     if (mode === 'fullpage') return this._openFormFullPage(code, browseLabel, id, false);
 
     try {
-      const json = await this.apiJson(
-        'api/form.php?action=render&code=' + encodeURIComponent(code) + '&id=' + encodeURIComponent(id),
-        { credentials: 'same-origin' }
-      );
+      const json = await this.apiJson('api/form.php?action=render&code=' + encodeURIComponent(code) + '&id=' + encodeURIComponent(id), { credentials: 'same-origin' });
       if (!json.success) { this.toast(json.error || 'Failed', 'error'); return; }
 
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
-      overlay.style.cssText =
-        'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
 
       const box = document.createElement('div');
-      box.style.cssText =
-        'background:var(--card-bg,#fff);border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
+      box.style.cssText = 'background:var(--card-bg,#fff);border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
 
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;';
-
       const bc = this._renderBreadcrumb([
         { label: 'Forms',     action: () => { overlay.remove(); this.loadModule('forms'); } },
         { label: browseLabel, action: () => { overlay.remove(); this.browseForm(code, 1, '', browseLabel, mode); } },
@@ -485,20 +494,17 @@ window.NuApp = {
       ]);
       bc.style.marginBottom = '0';
       header.appendChild(bc);
-
       const closeBtn = document.createElement('button');
-      closeBtn.type = 'button';
-      closeBtn.innerHTML = '&times;';
+      closeBtn.type = 'button'; closeBtn.innerHTML = '&times;';
       closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);';
       closeBtn.addEventListener('click', () => overlay.remove());
       header.appendChild(closeBtn);
-
       box.appendChild(header);
+
       const formWrap = document.createElement('div');
       formWrap.innerHTML = json.html;
       box.appendChild(formWrap);
 
-      // ── Stamp display-mode so submitNuForm routes back correctly
       const formEl = box.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'modal';
 
@@ -506,20 +512,12 @@ window.NuApp = {
       document.body.appendChild(overlay);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
-      this._preWipeSelect2(box);
-
-      // ── Re-exec scripts NOW that box is in the live DOM so document.querySelector works
       this._execModuleScripts(box);
-
-      // ── Defer dispatch so _execModuleScripts fully completes first
-      const _self = this;
-      setTimeout(function () {
-        _self._dispatchFormOpened(box);
-        if (window.nuForm && typeof window.nuForm.init === 'function') {
-          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, false);
-        }
-      }, 0);
+      this._initFormWidgets(box);
+      this._dispatchFormOpened(box);
+      if (window.nuForm && typeof window.nuForm.init === 'function') {
+        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, false);
+      }
     } catch (err) {
       console.error('editRecord error', err);
       this.toast('Error: ' + err.message, 'error');
@@ -530,16 +528,11 @@ window.NuApp = {
     return this.previewForm(code, formLabel, displayMode);
   },
 
-  // ─── BROWSE FORM — dispatches to inline / modal / fullpage ───────────────────
   async browseForm(code, page, query, formLabel, displayMode) {
     const mode = (displayMode || 'inline').toLowerCase();
-    if (mode === 'modal') {
-      return this._browseModal(code, page, query, formLabel);
-    } else if (mode === 'fullpage') {
-      return this._browseFullPage(code, page, query, formLabel);
-    } else {
-      return this._browseInline(code, page, query, formLabel);
-    }
+    if (mode === 'modal')    return this._browseModal(code, page, query, formLabel);
+    if (mode === 'fullpage') return this._browseFullPage(code, page, query, formLabel);
+    return this._browseInline(code, page, query, formLabel);
   },
 
   async _fetchBrowseData(code, page, query) {
@@ -547,8 +540,7 @@ window.NuApp = {
     query = query || '';
     const json = await this.apiJson(
       'api/form.php?action=list&code=' + encodeURIComponent(code) +
-      '&page=' + encodeURIComponent(page) +
-      '&q='    + encodeURIComponent(query),
+      '&page=' + encodeURIComponent(page) + '&q=' + encodeURIComponent(query),
       { credentials: 'same-origin' }
     );
     if (!json.success) throw new Error(json.error || 'Browse failed');
@@ -569,25 +561,19 @@ window.NuApp = {
       const searchWrap = document.createElement('div');
       searchWrap.style.cssText = 'margin-bottom:16px;display:flex;gap:8px;';
       const searchInput = document.createElement('input');
-      searchInput.type = 'text';
-      searchInput.className = 'nu-input';
-      searchInput.placeholder = searchPlaceholder;
-      searchInput.value = currentQuery;
+      searchInput.type = 'text'; searchInput.className = 'nu-input';
+      searchInput.placeholder = searchPlaceholder; searchInput.value = currentQuery;
       searchInput.style.flex = '1';
       const searchBtn = document.createElement('button');
-      searchBtn.className = 'nu-btn nu-btn-primary';
-      searchBtn.textContent = 'Search';
+      searchBtn.className = 'nu-btn nu-btn-primary'; searchBtn.textContent = 'Search';
       searchBtn.onclick = () => this.browseForm(code, 1, searchInput.value.trim(), label, displayMode);
       const clearBtn = document.createElement('button');
-      clearBtn.className = 'nu-btn nu-btn-ghost';
-      clearBtn.textContent = 'Clear';
+      clearBtn.className = 'nu-btn nu-btn-ghost'; clearBtn.textContent = 'Clear';
       clearBtn.onclick = () => this.browseForm(code, 1, '', label, displayMode);
       searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') this.browseForm(code, 1, searchInput.value.trim(), label, displayMode);
       });
-      searchWrap.appendChild(searchInput);
-      searchWrap.appendChild(searchBtn);
-      searchWrap.appendChild(clearBtn);
+      searchWrap.appendChild(searchInput); searchWrap.appendChild(searchBtn); searchWrap.appendChild(clearBtn);
       container.appendChild(searchWrap);
     }
 
@@ -608,8 +594,7 @@ window.NuApp = {
     actionTh.textContent = 'Actions';
     actionTh.style.cssText = 'padding:12px;text-align:left;font-size:13px;font-weight:600;';
     headRow.appendChild(actionTh);
-    thead.appendChild(headRow);
-    table.appendChild(thead);
+    thead.appendChild(headRow); table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
     if (!records.length) {
@@ -618,8 +603,7 @@ window.NuApp = {
       td.colSpan = layout.length + 1;
       td.style.cssText = 'padding:40px;text-align:center;color:#666;';
       td.textContent = currentQuery ? 'No matching records' : 'No records found';
-      tr.appendChild(td);
-      tbody.appendChild(tr);
+      tr.appendChild(td); tbody.appendChild(tr);
     } else {
       records.forEach((row) => {
         const tr = document.createElement('tr');
@@ -632,35 +616,26 @@ window.NuApp = {
           const fieldName  = f.fieldname || f.name;
           const displayKey = fieldName + '_display';
           let value = '';
-          if ((f.fieldtype || f.type) === 'lookup' && row[displayKey] !== undefined && row[displayKey] !== null) {
-            value = row[displayKey];
-          } else if (row[fieldName] !== undefined && row[fieldName] !== null) {
-            value = row[fieldName];
-          }
+          if ((f.fieldtype || f.type) === 'lookup' && row[displayKey] != null) value = row[displayKey];
+          else if (row[fieldName] != null) value = row[fieldName];
           td.textContent = String(value);
           tr.appendChild(td);
         });
         const actionTd = document.createElement('td');
         actionTd.style.cssText = 'padding:12px;display:flex;gap:8px;';
         const editBtn = document.createElement('button');
-        editBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-        editBtn.textContent = 'Edit';
+        editBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; editBtn.textContent = 'Edit';
         editBtn.onclick = () => (onEdit ? onEdit(row) : this.editRecord(code, row.id, label, displayMode));
-        actionTd.appendChild(editBtn);
-        tr.appendChild(actionTd);
-        tbody.appendChild(tr);
+        actionTd.appendChild(editBtn); tr.appendChild(actionTd); tbody.appendChild(tr);
       });
     }
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
-    container.appendChild(tableWrap);
+    table.appendChild(tbody); tableWrap.appendChild(table); container.appendChild(tableWrap);
 
     if ((data.pages || 1) > 1) {
       const pagination = document.createElement('div');
       pagination.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:16px;';
       const prevBtn = document.createElement('button');
-      prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-      prevBtn.textContent = '← Prev';
+      prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; prevBtn.textContent = '\u2190 Prev';
       prevBtn.disabled = (data.page || 1) <= 1;
       prevBtn.onclick = () => this.browseForm(code, (data.page || 1) - 1, currentQuery, label, displayMode);
       pagination.appendChild(prevBtn);
@@ -672,16 +647,14 @@ window.NuApp = {
         pagination.appendChild(pageBtn);
       }
       const nextBtn = document.createElement('button');
-      nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-      nextBtn.textContent = 'Next →';
+      nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; nextBtn.textContent = 'Next \u2192';
       nextBtn.disabled = (data.page || 1) >= (data.pages || 1);
       nextBtn.onclick = () => this.browseForm(code, (data.page || 1) + 1, currentQuery, label, displayMode);
       pagination.appendChild(nextBtn);
       const meta = document.createElement('span');
       meta.style.cssText = 'margin-left:8px;color:#666;font-size:13px;';
       meta.textContent = 'Total: ' + (data.total || 0) + ' records';
-      pagination.appendChild(meta);
-      container.appendChild(pagination);
+      pagination.appendChild(meta); container.appendChild(pagination);
     }
   },
 
@@ -690,49 +663,37 @@ window.NuApp = {
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
-
       const container = document.getElementById('contentArea');
       if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
-
       const bc = this._renderBreadcrumb([
         { label: 'Forms', action: () => this.loadModule('forms') },
         { label: label,   action: () => this._browseInline(code, 1, '', label) },
         { label: 'Browse' }
       ]);
       container.appendChild(bc);
-
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
       const h3 = document.createElement('h3');
-      h3.style.cssText = 'margin:0;font-size:18px;';
-      h3.textContent = label;
+      h3.style.cssText = 'margin:0;font-size:18px;'; h3.textContent = label;
       header.appendChild(h3);
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;';
       const addBtn = document.createElement('button');
-      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
-      addBtn.textContent = '+ Add Record';
+      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add Record';
       addBtn.onclick = () => this.addRecord(code, label, 'inline');
       btnGroup.appendChild(addBtn);
       const previewBtn = document.createElement('button');
-      previewBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-      previewBtn.textContent = '⊞ Preview Form';
+      previewBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; previewBtn.textContent = '\u229e Preview Form';
       previewBtn.onclick = () => this.previewForm(code, label);
       btnGroup.appendChild(previewBtn);
       const backBtn = document.createElement('button');
-      backBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-      backBtn.textContent = '← Forms';
+      backBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; backBtn.textContent = '\u2190 Forms';
       backBtn.onclick = () => this.loadModule('forms');
       btnGroup.appendChild(backBtn);
-      header.appendChild(btnGroup);
-      container.appendChild(header);
-
+      header.appendChild(btnGroup); container.appendChild(header);
       this._buildBrowseTable(json, code, page, query, label, 'inline', container);
-    } catch (err) {
-      console.error('_browseInline error', err);
-      this.toast('Error: ' + err.message, 'error');
-    }
+    } catch (err) { console.error('_browseInline error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
   async _browseModal(code, page, query, formLabel) {
@@ -740,63 +701,45 @@ window.NuApp = {
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
-
       let overlay = document.querySelector('.nu-browse-overlay');
-      let isNew   = false;
+      let isNew = false;
       if (!overlay) {
-        isNew   = true;
+        isNew = true;
         overlay = document.createElement('div');
         overlay.className = 'nu-browse-overlay nu-form-overlay';
-        overlay.style.cssText =
-          'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
       }
-
       const box = document.createElement('div');
-      box.style.cssText =
-        'background:var(--card-bg,#fff);border-radius:12px;padding:24px;width:96%;max-width:1100px;max-height:92vh;overflow-y:auto;';
-
+      box.style.cssText = 'background:var(--card-bg,#fff);border-radius:12px;padding:24px;width:96%;max-width:1100px;max-height:92vh;overflow-y:auto;';
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;';
-
       const bc = this._renderBreadcrumb([
         { label: 'Forms', action: () => { overlay.remove(); this.loadModule('forms'); } },
         { label: label,   action: () => this._browseModal(code, 1, '', label) },
         { label: 'Browse' }
       ]);
-      bc.style.marginBottom = '0';
-      header.appendChild(bc);
-
+      bc.style.marginBottom = '0'; header.appendChild(bc);
       const rightBtns = document.createElement('div');
       rightBtns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;align-items:center;';
       const addBtn = document.createElement('button');
-      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
-      addBtn.textContent = '+ Add';
+      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add';
       addBtn.onclick = () => this.addRecord(code, label, 'modal');
       rightBtns.appendChild(addBtn);
       const closeBtn = document.createElement('button');
-      closeBtn.type = 'button';
-      closeBtn.innerHTML = '&times;';
+      closeBtn.type = 'button'; closeBtn.innerHTML = '&times;';
       closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);';
       closeBtn.addEventListener('click', () => overlay.remove());
-      rightBtns.appendChild(closeBtn);
-      header.appendChild(rightBtns);
-
+      rightBtns.appendChild(closeBtn); header.appendChild(rightBtns);
       box.appendChild(header);
       const tableContainer = document.createElement('div');
       this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer);
       box.appendChild(tableContainer);
-
-      overlay.innerHTML = '';
-      overlay.appendChild(box);
-
+      overlay.innerHTML = ''; overlay.appendChild(box);
       if (isNew) {
         document.body.appendChild(overlay);
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
       }
-    } catch (err) {
-      console.error('_browseModal error', err);
-      this.toast('Error: ' + err.message, 'error');
-    }
+    } catch (err) { console.error('_browseModal error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
   async _browseFullPage(code, page, query, formLabel) {
@@ -804,156 +747,99 @@ window.NuApp = {
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
-
       this._enterFullPage();
-
       const container = document.getElementById('contentArea');
       if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
-
       const bc = this._renderBreadcrumb([
         { label: 'Forms', action: () => { this._exitFullPage(); this.loadModule('forms'); } },
         { label: label,   action: () => this._browseFullPage(code, 1, '', label) },
         { label: 'Browse' }
       ]);
       container.appendChild(bc);
-
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
       const h3 = document.createElement('h3');
-      h3.style.cssText = 'margin:0;font-size:20px;';
-      h3.textContent = label;
+      h3.style.cssText = 'margin:0;font-size:20px;'; h3.textContent = label;
       header.appendChild(h3);
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;';
       const addBtn = document.createElement('button');
-      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
-      addBtn.textContent = '+ Add Record';
+      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add Record';
       addBtn.onclick = () => this.addRecord(code, label, 'fullpage');
       btnGroup.appendChild(addBtn);
       const exitBtn = document.createElement('button');
-      exitBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-      exitBtn.textContent = '✕ Exit Full Page';
+      exitBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; exitBtn.textContent = '\u2715 Exit Full Page';
       exitBtn.onclick = () => { this._exitFullPage(); this.loadModule('forms'); };
-      btnGroup.appendChild(exitBtn);
-      header.appendChild(btnGroup);
-      container.appendChild(header);
-
+      btnGroup.appendChild(exitBtn); header.appendChild(btnGroup); container.appendChild(header);
       this._buildBrowseTable(json, code, page, query, label, 'fullpage', container);
-    } catch (err) {
-      console.error('_browseFullPage error', err);
-      this._exitFullPage();
-      this.toast('Error: ' + err.message, 'error');
-    }
+    } catch (err) { this._exitFullPage(); console.error('_browseFullPage error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
   async _openFormInline(code, formLabel, id, isPreview) {
     try {
-      const url = 'api/form.php?action=render&code=' + encodeURIComponent(code)
-                + (id ? '&id=' + encodeURIComponent(id) : '');
+      const url = 'api/form.php?action=render&code=' + encodeURIComponent(code) + (id ? '&id=' + encodeURIComponent(id) : '');
       const json = await this.apiJson(url, { credentials: 'same-origin' });
       if (!json.success) { this.toast(json.error || 'Failed', 'error'); return; }
-
       const label     = formLabel || code;
       const container = document.getElementById('contentArea');
       if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
-
       const crumbs = [
         { label: 'Forms', action: () => this.loadModule('forms') },
         { label: label,   action: () => this.browseForm(code, 1, '', label, 'inline') },
+        { label: isPreview ? 'Preview' : (id ? 'Edit #' + id : 'New Record') }
       ];
-      crumbs.push({ label: isPreview ? 'Preview' : (id ? 'Edit #' + id : 'New Record') });
       container.appendChild(this._renderBreadcrumb(crumbs));
-
       const formWrap = document.createElement('div');
       formWrap.innerHTML = json.html;
       container.appendChild(formWrap);
-
-      // ── Stamp display-mode so submitNuForm routes back to inline browse
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'inline';
-
-      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
-      this._preWipeSelect2(container);
-
-      // ── Re-exec scripts NOW that formWrap is in the live DOM so document.querySelector works
       this._execModuleScripts(container);
-
-      // ── Defer dispatch so _execModuleScripts fully completes first
-      const _self = this;
-      setTimeout(function () {
-        _self._dispatchFormOpened(container);
-        if (window.nuForm && typeof window.nuForm.init === 'function') {
-          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
-        }
-      }, 0);
-    } catch (err) {
-      console.error('_openFormInline error', err);
-      this.toast('Error: ' + err.message, 'error');
-    }
+      this._initFormWidgets(container);
+      this._dispatchFormOpened(container);
+      if (window.nuForm && typeof window.nuForm.init === 'function') {
+        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
+      }
+    } catch (err) { console.error('_openFormInline error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
   async _openFormFullPage(code, formLabel, id, isPreview) {
     try {
-      const url = 'api/form.php?action=render&code=' + encodeURIComponent(code)
-                + (id ? '&id=' + encodeURIComponent(id) : '');
+      const url = 'api/form.php?action=render&code=' + encodeURIComponent(code) + (id ? '&id=' + encodeURIComponent(id) : '');
       const json = await this.apiJson(url, { credentials: 'same-origin' });
       if (!json.success) { this.toast(json.error || 'Failed', 'error'); return; }
-
       const label = formLabel || code;
       this._enterFullPage();
-
       const container = document.getElementById('contentArea');
       if (!container) { this.toast('Content area not found', 'error'); return; }
       container.innerHTML = '';
-
       const exitAction = () => { this._exitFullPage(); this.loadModule('forms'); };
-      const crumbs = [
+      container.appendChild(this._renderBreadcrumb([
         { label: 'Forms', action: exitAction },
         { label: label,   action: () => { this._exitFullPage(); this.browseForm(code, 1, '', label, 'fullpage'); } },
         { label: isPreview ? 'Preview' : (id ? 'Edit #' + id : 'New Record') }
-      ];
-      container.appendChild(this._renderBreadcrumb(crumbs));
-
+      ]));
       const exitBtn = document.createElement('button');
-      exitBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-      exitBtn.style.cssText = 'margin-bottom:12px;';
-      exitBtn.textContent = '✕ Exit Full Page';
-      exitBtn.onclick = exitAction;
+      exitBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; exitBtn.style.cssText = 'margin-bottom:12px;';
+      exitBtn.textContent = '\u2715 Exit Full Page'; exitBtn.onclick = exitAction;
       container.appendChild(exitBtn);
-
       const formWrap = document.createElement('div');
       formWrap.innerHTML = json.html;
       container.appendChild(formWrap);
-
-      // ── Stamp display-mode so submitNuForm routes back to fullpage browse
       const formEl = container.querySelector('.nu-generated-form');
       if (formEl) formEl.dataset.displayMode = 'fullpage';
-
-      // ── FIX: wipe stale data-select2-id BEFORE re-running inline scripts
-      this._preWipeSelect2(container);
-
-      // ── Re-exec scripts NOW that formWrap is in the live DOM so document.querySelector works
       this._execModuleScripts(container);
-
-      // ── Defer dispatch so _execModuleScripts fully completes first
-      const _self = this;
-      setTimeout(function () {
-        _self._dispatchFormOpened(container);
-        if (window.nuForm && typeof window.nuForm.init === 'function') {
-          if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
-        }
-      }, 0);
-    } catch (err) {
-      console.error('_openFormFullPage error', err);
-      this._exitFullPage();
-      this.toast('Error: ' + err.message, 'error');
-    }
+      this._initFormWidgets(container);
+      this._dispatchFormOpened(container);
+      if (window.nuForm && typeof window.nuForm.init === 'function') {
+        if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
+      }
+    } catch (err) { this._exitFullPage(); console.error('_openFormFullPage error', err); this.toast('Error: ' + err.message, 'error'); }
   }
 };
 
-// ── Safe init: works whether DOMContentLoaded has already fired or not ────────
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function () { NuApp.init(); });
 } else {
@@ -986,32 +872,24 @@ window.submitNuForm = async function (formElement) {
   formElement.querySelectorAll('input[type="checkbox"]').forEach((el) => {
     if (!Object.prototype.hasOwnProperty.call(data, el.name)) data[el.name] = '';
   });
-
-  // ── Before-save hook ──────────────────────────────────────────────────────
   if (window._nuFormBeforeSave && typeof window._nuFormBeforeSave[formCode] === 'function') {
     const result = window._nuFormBeforeSave[formCode](formElement, data);
-    // Hook may return false (or a rejected promise) to abort the save
     if (result === false) return;
     if (result && typeof result.then === 'function') {
       try { const v = await result; if (v === false) return; } catch (e) { return; }
     }
   }
-
   try {
     const json = await NuApp.apiJson(url, {
-      method: 'POST',
-      credentials: 'same-origin',
+      method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!json.success) { NuApp.toast(json.error || 'Save failed', 'error'); return; }
     NuApp.toast(recordId ? 'Updated' : 'Saved');
-
-    // ── After-save hook ──────────────────────────────────────────────────────
     if (window._nuFormAfterSave && typeof window._nuFormAfterSave[formCode] === 'function') {
       window._nuFormAfterSave[formCode](formElement, json);
     }
-
     const overlay = formElement.closest('.nu-form-overlay');
     if (overlay) overlay.remove();
     if (typeof NuApp.browseForm === 'function' && formCode) {
@@ -1019,13 +897,9 @@ window.submitNuForm = async function (formElement) {
     } else {
       NuApp.loadModule('forms');
     }
-  } catch (e) {
-    console.error('submitNuForm error', e);
-    NuApp.toast('Error: ' + e.message, 'error');
-  }
+  } catch (e) { console.error('submitNuForm error', e); NuApp.toast('Error: ' + e.message, 'error'); }
 };
 
-// ─── Global window aliases ────────────────────────────────────────────────
 window.openFormBuilder = function ()                               { return NuApp.openFormBuilder ? NuApp.openFormBuilder() : (window.nbFormBuilder ? window.nbFormBuilder.open() : null); };
 window.previewForm     = function (code, label, mode)              { return NuApp.previewForm(code, label, mode); };
 window.editForm        = function (id)                             { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
