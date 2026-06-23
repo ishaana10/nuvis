@@ -32,7 +32,7 @@ function nu_menu_mode_label(array $m): string {
     // Legacy fallback
     if (!$bm && !$pm) {
         $old = $m['menu_open_mode'] ?? 'inline|browse';
-        [$bm, $dv] = array_pad(explode('|', $old, 2), 2, '');
+        list($bm, $dv) = array_pad(explode('|', $old, 2), 2, '');
         $pm = 'inline'; if (!$dv) $dv = 'browse';
     }
     $bm = $bm ?: 'inline'; $pm = $pm ?: 'inline'; $dv = $dv ?: 'browse';
@@ -91,7 +91,6 @@ function nu_menu_mode_label(array $m): string {
 
 #menuBuilderCard .nb-fp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
 #menuBuilderCard .nb-fp { display:flex; flex-direction:column; gap:4px; }
-#menuBuilderCard .nb-fp label { font-size:11px; font-weight:600; color:var(--text-secondary); }
 #menuBuilderCard .nb-fp-full { grid-column:1/-1; }
 
 .nb-mtype-cards { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:0; }
@@ -213,6 +212,25 @@ function nu_menu_mode_label(array $m): string {
 
 .nb-menu-empty { text-align:center; padding:56px 24px; color:var(--text-tertiary); font-size:13px; }
 .nb-menu-empty svg { margin:0 auto 12px; color:var(--text-tertiary); }
+
+/* Select2 overrides to match nu-input style */
+.nb-roles-select2 .select2-container { width:100% !important; }
+.nb-roles-select2 .select2-selection--multiple {
+  border:1px solid var(--border-color) !important;
+  border-radius:6px !important;
+  background:var(--bg-surface) !important;
+  min-height:36px !important;
+  padding:2px 6px !important;
+}
+.nb-roles-select2 .select2-selection__choice {
+  background:color-mix(in oklch,var(--color-primary) 12%,transparent) !important;
+  border:1px solid color-mix(in oklch,var(--color-primary) 30%,transparent) !important;
+  color:var(--color-primary) !important;
+  border-radius:4px !important;
+  font-size:11px !important;
+}
+.nb-roles-select2 .select2-selection__choice__remove { color:var(--color-primary) !important; }
+.nb-roles-select2 .select2-selection__placeholder { color:var(--text-tertiary) !important; font-size:12px; }
 </style>
 
 <div class="nu-menus">
@@ -250,10 +268,9 @@ function nu_menu_mode_label(array $m): string {
             $dv     = htmlspecialchars($m['menu_default_view'] ?? 'browse', ENT_QUOTES);
             $isDivider = $type === 'divider';
             $childCls  = $isChild ? ' is-child' : '';
-            $pid       = $isChild ? ' data-parent="' . $mid . '"' : '';
             $supportsModes = in_array($type, ['form','report','query']);
             ?>
-            <div class="nb-menu-item<?= $isDivider ? ' is-divider' : '' ?><?= $childCls ?>" data-id="<?= $mid ?>"<?= $pid ?> draggable="true">
+            <div class="nb-menu-item<?= $isDivider ? ' is-divider' : '' ?><?= $childCls ?>" data-id="<?= $mid ?>" draggable="true">
               <span class="nb-menu-drag-handle" title="Drag to reorder">&#9776;</span>
               <div class="nb-menu-icon-preview" title="icon: <?= $icon ?>">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -403,9 +420,12 @@ function nu_menu_mode_label(array $m): string {
         <input type="number" id="menuOrder" class="nu-input" value="0" min="0">
       </div>
 
-      <div class="nb-fp">
-        <label>Role Visibility <span style="font-weight:400;color:var(--text-tertiary);">(blank&nbsp;=&nbsp;all)</span></label>
-        <input type="text" id="menuRoles" class="nu-input" placeholder="admin,manager">
+      <!-- Role Visibility: Select2 multiselect loaded from nu_roles -->
+      <div class="nb-fp nb-roles-select2">
+        <label>Role Visibility <span style="font-weight:400;color:var(--text-tertiary);">(blank&nbsp;=&nbsp;all roles)</span></label>
+        <select id="menuRoles" multiple style="width:100%;">
+          <!-- options populated by JS from API -->
+        </select>
       </div>
 
       <div class="nb-fp">
@@ -414,15 +434,12 @@ function nu_menu_mode_label(array $m): string {
         </label>
       </div>
 
-      <!-- ══════════════════════════════════════════════════════════
-           Open Mode Section  (form / report / query only)
-      ══════════════════════════════════════════════════════════ -->
+      <!-- Open Mode Section  (form / report / query only) -->
       <div class="nb-open-mode-section" id="nbOpenModeSection">
         <p class="nb-open-mode-section-title">&#x2699;&#xFE0F; Open Mode Settings</p>
 
         <div class="nb-open-mode-grid">
 
-          <!-- 1. Default View -->
           <div class="nb-open-mode-field">
             <label>
               Default View
@@ -442,7 +459,6 @@ function nu_menu_mode_label(array $m): string {
             </div>
           </div>
 
-          <!-- 2. Browse Mode -->
           <div class="nb-open-mode-field">
             <label>
               Browse Opens As
@@ -462,7 +478,6 @@ function nu_menu_mode_label(array $m): string {
             </div>
           </div>
 
-          <!-- 3. Preview Mode -->
           <div class="nb-open-mode-field">
             <label>
               Preview Opens As
@@ -482,10 +497,10 @@ function nu_menu_mode_label(array $m): string {
             </div>
           </div>
 
-        </div><!-- end open-mode-grid -->
-      </div><!-- end open-mode-section -->
+        </div>
+      </div>
 
-      <!-- ── Icon Picker ── -->
+      <!-- Icon Picker -->
       <div class="nb-fp nb-fp-full">
         <label>Icon</label>
 
@@ -495,7 +510,6 @@ function nu_menu_mode_label(array $m): string {
           <button type="button" class="nb-icon-tab" onclick="nuMenuBuilder.switchIconTab('emoji',this)">Emoji / Custom</button>
         </div>
 
-        <!-- Tab: built-in -->
         <div class="nb-icon-tab-pane active" id="nbIconPaneBuiltin">
           <div class="nb-icon-grid" id="iconGrid">
             <?php
@@ -539,7 +553,6 @@ function nu_menu_mode_label(array $m): string {
           </div>
         </div>
 
-        <!-- Tab: external URL -->
         <div class="nb-icon-tab-pane" id="nbIconPaneExternal">
           <p style="font-size:11px;color:var(--text-tertiary);margin:0 0 6px;">Paste a URL to any <strong>.svg</strong>, <strong>.png</strong> or <strong>.ico</strong> image.</p>
           <input type="text" id="menuIconExtUrl" class="nu-input"
@@ -551,7 +564,6 @@ function nu_menu_mode_label(array $m): string {
           </div>
         </div>
 
-        <!-- Tab: emoji / custom text -->
         <div class="nb-icon-tab-pane" id="nbIconPaneEmoji">
           <p style="font-size:11px;color:var(--text-tertiary);margin:0 0 6px;">Type any emoji or short text.</p>
           <input type="text" id="menuIconCustom" class="nu-input" placeholder="e.g. &#x1F4CA; or &#x2605;"
@@ -620,16 +632,53 @@ if (!window._nbMenusModuleInit) {
 
   var NB_OPEN_MODE_TYPES = ['form', 'report', 'query'];
 
-  // Internal state for the three open-mode fields
-  var _nbDefaultView  = 'browse';   // 'browse' | 'preview'
-  var _nbBrowseMode   = 'inline';   // 'inline' | 'popup'
-  var _nbPreviewMode  = 'inline';   // 'inline' | 'popup'
+  var _nbDefaultView  = 'browse';
+  var _nbBrowseMode   = 'inline';
+  var _nbPreviewMode  = 'inline';
+
+  // ── Select2 role picker init ────────────────────────────────────
+  var _nbRolesLoaded = false;
+
+  function nbInitRolesPicker(selectedRoles) {
+    selectedRoles = selectedRoles || [];
+    var $sel = $('#menuRoles');
+
+    function _activate() {
+      $sel.empty();
+      fetch(NU_MENUS_API + '?action=roles')
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+          if (!d.success) return;
+          d.roles.forEach(function(r) {
+            var opt = new Option(r.text, r.id, false, selectedRoles.indexOf(r.id) !== -1);
+            $sel.append(opt);
+          });
+          $sel.val(selectedRoles).trigger('change');
+          _nbRolesLoaded = true;
+        })
+        .catch(function(e){ console.warn('roles load:', e); });
+    }
+
+    if ($sel.hasClass('select2-hidden-accessible')) {
+      // Already initialised — just reload options
+      _activate();
+    } else if (typeof $.fn.select2 !== 'undefined') {
+      $sel.select2({
+        placeholder: 'All roles (leave blank for everyone)',
+        allowClear: true,
+        width: '100%'
+      });
+      _activate();
+    } else {
+      // Select2 not loaded yet — fallback plain select
+      _activate();
+    }
+  }
 
   window.nuMenuBuilder = {
 
     _currentIconMode: 'builtin',
 
-    // ── Open mode pill setters ────────────────────────────────────
     setDefaultView: function(val) {
       _nbDefaultView = val;
       document.getElementById('pillDefaultBrowse').classList.toggle('selected', val === 'browse');
@@ -649,7 +698,6 @@ if (!window._nbMenusModuleInit) {
       this.updatePreview();
     },
 
-    // ── Restore all three fields from saved values ────────────────
     _restoreOpenModes: function(browseMode, previewMode, defaultView) {
       _nbBrowseMode  = ['inline','popup'].indexOf(browseMode)  !== -1 ? browseMode  : 'inline';
       _nbPreviewMode = ['inline','popup'].indexOf(previewMode) !== -1 ? previewMode : 'inline';
@@ -666,7 +714,6 @@ if (!window._nbMenusModuleInit) {
         parentId ? ('New Item under \u201c' + (parentLabel || '#' + parentId) + '\u201d') : 'New Menu Item';
       document.getElementById('menuLabel').value    = '';
       document.getElementById('menuOrder').value    = 0;
-      document.getElementById('menuRoles').value    = '';
       document.getElementById('menuActive').checked = true;
       document.getElementById('editMenuIcon').value = 'default';
       document.getElementById('menuIconCustom').value  = '';
@@ -681,6 +728,7 @@ if (!window._nbMenusModuleInit) {
       document.querySelectorAll('.nb-icon-btn').forEach(function(b){ b.classList.remove('selected'); });
       var defBtn = document.querySelector('.nb-icon-btn[data-icon="default"]');
       if (defBtn) defBtn.classList.add('selected');
+      nbInitRolesPicker([]);
       document.getElementById('menuListSection').style.display  = 'none';
       document.getElementById('menuBuilderCard').style.display  = '';
       this.updatePreview();
@@ -708,7 +756,6 @@ if (!window._nbMenusModuleInit) {
           document.getElementById('menuBuilderTitle').textContent = 'Edit: ' + m.menu_label;
           document.getElementById('menuLabel').value    = m.menu_label  || '';
           document.getElementById('menuOrder').value    = m.menu_order  || 0;
-          document.getElementById('menuRoles').value    = m.menu_role_access || '';
           document.getElementById('menuActive').checked = (m.menu_active == 1);
           document.getElementById('menuParent').value   = m.menu_parent_id || 0;
 
@@ -720,12 +767,15 @@ if (!window._nbMenusModuleInit) {
           else if (type === 'query') document.getElementById('menuTargetCode').value   = target;
           else                       document.getElementById('menuTargetSelect').value = target;
 
-          // Restore three open-mode fields
           self._restoreOpenModes(
             m.menu_browse_mode  || 'inline',
             m.menu_preview_mode || 'inline',
             m.menu_default_view || 'browse'
           );
+
+          // Restore roles as array (API returns menu_role_access_array)
+          var rolesArr = m.menu_role_access_array || [];
+          nbInitRolesPicker(rolesArr);
 
           document.getElementById('editMenuIcon').value = icon;
           var isExternal = icon.indexOf('http://') === 0 || icon.indexOf('https://') === 0;
@@ -850,13 +900,10 @@ if (!window._nbMenusModuleInit) {
 
       if (NB_OPEN_MODE_TYPES.indexOf(type) !== -1) {
         modeTagsEl.style.display = '';
-        // Default view tag
         defaultTagEl.className   = 'nb-mode-tag ' + _nbDefaultView;
         defaultTagEl.textContent = (_nbDefaultView === 'browse' ? '\uD83D\uDDC2' : '\uD83D\uDC41') + ' ' + _nbDefaultView;
-        // Browse mode tag
         browseTagEl.className    = 'nb-mode-tag ' + _nbBrowseMode;
         browseTagEl.textContent  = (_nbBrowseMode === 'inline' ? '\uD83D\uDCF0' : '\uD83D\uDDD4') + ' browse';
-        // Preview mode tag
         previewTagEl.className   = 'nb-mode-tag ' + _nbPreviewMode;
         previewTagEl.textContent = (_nbPreviewMode === 'inline' ? '\uD83D\uDCF0' : '\uD83D\uDDD4') + ' preview';
       } else {
@@ -880,9 +927,11 @@ if (!window._nbMenusModuleInit) {
       var label  = document.getElementById('menuLabel').value.trim();
       var order  = parseInt(document.getElementById('menuOrder').value, 10) || 0;
       var parent = parseInt(document.getElementById('menuParent').value, 10) || 0;
-      var roles  = document.getElementById('menuRoles').value.trim();
       var active = document.getElementById('menuActive').checked ? 1 : 0;
       var icon   = document.getElementById('editMenuIcon').value || 'default';
+
+      // Collect selected role codes from Select2 (or plain select)
+      var rolesVal = $('#menuRoles').val() || [];
 
       var target = '';
       if (type === 'url')        target = document.getElementById('menuTargetUrl').value.trim();
@@ -893,7 +942,7 @@ if (!window._nbMenusModuleInit) {
 
       var payload = {
         id: id, type: type, label: label, target: target,
-        parent: parent, order: order, roles: roles, active: active, icon: icon,
+        parent: parent, order: order, roles: rolesVal, active: active, icon: icon,
         browse_mode:  _nbBrowseMode,
         preview_mode: _nbPreviewMode,
         default_view: _nbDefaultView

@@ -5,6 +5,7 @@ declare(strict_types=1);
  * REST API for Menu Builder CRUD.
  *
  * GET  ?action=get&id=N   — fetch a single menu item
+ * GET  ?action=roles       — return all active role codes+names for Select2
  * POST action=create      — create
  * POST action=update      — update
  * POST action=delete      — hard-delete item + its children
@@ -41,12 +42,55 @@ function mu_sanitise_view(string $raw, string $default = 'browse'): string {
     return in_array($v, ['browse', 'preview'], true) ? $v : $default;
 }
 
-// ── AUTO-MIGRATE: ensure all three new columns exist ────────────────────────
+/**
+ * Normalise incoming roles value to a JSON array string for storage.
+ * Accepts: array, JSON string, or comma-separated string.
+ * Returns: JSON string e.g. '["admin","manager"]' or NULL if empty/all.
+ */
+function mu_roles_to_json($raw): ?string {
+    if ($raw === null || $raw === '' || $raw === '[]') return null;
+    if (is_array($raw)) {
+        $clean = array_values(array_filter(array_map('trim', $raw)));
+        return empty($clean) ? null : json_encode($clean, JSON_UNESCAPED_UNICODE);
+    }
+    if (is_string($raw)) {
+        // Already a JSON array?
+        if (substr(trim($raw), 0, 1) === '[') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $clean = array_values(array_filter(array_map('trim', $decoded)));
+                return empty($clean) ? null : json_encode($clean, JSON_UNESCAPED_UNICODE);
+            }
+        }
+        // Comma-separated fallback
+        $parts = array_values(array_filter(array_map('trim', explode(',', $raw))));
+        return empty($parts) ? null : json_encode($parts, JSON_UNESCAPED_UNICODE);
+    }
+    return null;
+}
+
+/**
+ * Decode a stored roles value back to an array for the API response.
+ * Handles JSON array, comma-separated string, or NULL.
+ */
+function mu_roles_to_array($stored): array {
+    if ($stored === null || $stored === '') return [];
+    if (substr(trim($stored), 0, 1) === '[') {
+        $decoded = json_decode($stored, true);
+        if (is_array($decoded)) return $decoded;
+    }
+    // Legacy comma-separated
+    return array_values(array_filter(array_map('trim', explode(',', $stored))));
+}
+
+// ── AUTO-MIGRATE: ensure all columns exist ───────────────────────────────────
 $autoMigrations = [
-    "ALTER TABLE nu_menus ADD COLUMN menu_open_mode    VARCHAR(30) NOT NULL DEFAULT 'inline|browse'",
-    "ALTER TABLE nu_menus ADD COLUMN menu_browse_mode  VARCHAR(10) NOT NULL DEFAULT 'inline'",
-    "ALTER TABLE nu_menus ADD COLUMN menu_preview_mode VARCHAR(10) NOT NULL DEFAULT 'inline'",
-    "ALTER TABLE nu_menus ADD COLUMN menu_default_view VARCHAR(10) NOT NULL DEFAULT 'browse'",
+    "ALTER TABLE nu_menus ADD COLUMN menu_open_mode    VARCHAR(30)  NOT NULL DEFAULT 'inline|browse'",
+    "ALTER TABLE nu_menus ADD COLUMN menu_browse_mode  VARCHAR(10)  NOT NULL DEFAULT 'inline'",
+    "ALTER TABLE nu_menus ADD COLUMN menu_preview_mode VARCHAR(10)  NOT NULL DEFAULT 'inline'",
+    "ALTER TABLE nu_menus ADD COLUMN menu_default_view VARCHAR(10)  NOT NULL DEFAULT 'browse'",
+    // Ensure role_access is VARCHAR, not JSON type
+    "ALTER TABLE nu_menus MODIFY COLUMN menu_role_access VARCHAR(512) DEFAULT NULL",
 ];
 foreach ($autoMigrations as $sql) {
     try { $db->query($sql); } catch (Throwable $ignored) {}
@@ -60,17 +104,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($body)) $body = $_POST;
 }
 
-// ── GET single item ─────────────────────────────────────────────────────────
+// ── GET roles list (for Select2) ─────────────────────────────────────────────
+if ($action === 'roles') {
+    $rows = $db->fetchAll("SELECT role_code, role_name FROM nu_roles WHERE role_active = 1 ORDER BY role_name");
+    $out  = [];
+    foreach ($rows as $r) {
+        $out[] = ['id' => $r['role_code'], 'text' => $r['role_name'] . ' (' . $r['role_code'] . ')'];
+    }
+    mu_json(['success' => true, 'roles' => $out]);
+}
+
+// ── GET single item ──────────────────────────────────────────────────────────
 if ($action === 'get') {
     $id  = (int)($_GET['id'] ?? 0);
     $row = $db->fetchOne("SELECT * FROM nu_menus WHERE menu_id = ?", [$id]);
     if (!$row) mu_json(['success' => false, 'message' => 'Not found']);
 
-    // Backfill if new columns are missing/empty (legacy rows)
+    // Backfill open-mode columns for legacy rows
     if (empty($row['menu_browse_mode']) || empty($row['menu_preview_mode'])) {
         $old = $row['menu_open_mode'] ?? 'inline|browse';
         if (strpos($old, '|') !== false) {
-            [$disp, $view] = explode('|', $old, 2);
+            list($disp, $view) = explode('|', $old, 2);
         } else {
             $disp = 'inline'; $view = 'browse';
         }
@@ -79,23 +133,25 @@ if ($action === 'get') {
         $row['menu_default_view'] = mu_sanitise_view($view);
     }
 
+    // Decode roles to array for JS
+    $row['menu_role_access_array'] = mu_roles_to_array($row['menu_role_access'] ?? null);
+
     mu_json(['success' => true, 'menu' => $row]);
 }
 
-// ── CREATE ──────────────────────────────────────────────────────────────────
+// ── CREATE ───────────────────────────────────────────────────────────────────
 if ($action === 'create') {
-    $label       = substr(trim((string)($body['label']        ?? '')), 0, 120);
+    $label       = substr(trim((string)($body['label']       ?? '')), 0, 120);
     $type        = preg_replace('/[^a-z_]/', '', (string)($body['type'] ?? 'form'));
-    $target      = substr(trim((string)($body['target']       ?? '')), 0, 200);
-    $icon        = substr(trim((string)($body['icon']         ?? 'default')), 0, 60);
+    $target      = substr(trim((string)($body['target']      ?? '')), 0, 200);
+    $icon        = substr(trim((string)($body['icon']        ?? 'default')), 0, 60);
     $parent      = (int)($body['parent'] ?? 0);
     $order       = (int)($body['order']  ?? 0);
-    $roles       = substr(trim((string)($body['roles']        ?? '')), 0, 255);
+    $rolesJson   = mu_roles_to_json($body['roles'] ?? null);
     $active      = isset($body['active']) ? (int)$body['active'] : 1;
     $browseMode  = mu_sanitise_display((string)($body['browse_mode']  ?? 'inline'));
     $previewMode = mu_sanitise_display((string)($body['preview_mode'] ?? 'inline'));
     $defaultView = mu_sanitise_view((string)($body['default_view']    ?? 'browse'));
-    // Keep legacy column in sync
     $openMode    = $browseMode . '|' . $defaultView;
 
     if (!$label && $type !== 'divider') {
@@ -113,7 +169,7 @@ if ($action === 'create') {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $code, $label, $type, $target, $icon, $order,
-                $parent ?: null, $roles ?: null, $active,
+                $parent ?: null, $rolesJson, $active,
                 $openMode, $browseMode, $previewMode, $defaultView
             ]
         );
@@ -124,16 +180,16 @@ if ($action === 'create') {
     }
 }
 
-// ── UPDATE ──────────────────────────────────────────────────────────────────
+// ── UPDATE ───────────────────────────────────────────────────────────────────
 if ($action === 'update') {
-    $id          = (int)($body['id']    ?? 0);
-    $label       = substr(trim((string)($body['label']        ?? '')), 0, 120);
+    $id          = (int)($body['id']   ?? 0);
+    $label       = substr(trim((string)($body['label']       ?? '')), 0, 120);
     $type        = preg_replace('/[^a-z_]/', '', (string)($body['type'] ?? 'form'));
-    $target      = substr(trim((string)($body['target']       ?? '')), 0, 200);
-    $icon        = substr(trim((string)($body['icon']         ?? 'default')), 0, 60);
+    $target      = substr(trim((string)($body['target']      ?? '')), 0, 200);
+    $icon        = substr(trim((string)($body['icon']        ?? 'default')), 0, 60);
     $parent      = (int)($body['parent'] ?? 0);
     $order       = (int)($body['order']  ?? 0);
-    $roles       = substr(trim((string)($body['roles']        ?? '')), 0, 255);
+    $rolesJson   = mu_roles_to_json($body['roles'] ?? null);
     $active      = isset($body['active']) ? (int)$body['active'] : 1;
     $browseMode  = mu_sanitise_display((string)($body['browse_mode']  ?? 'inline'));
     $previewMode = mu_sanitise_display((string)($body['preview_mode'] ?? 'inline'));
@@ -160,7 +216,7 @@ if ($action === 'update') {
              WHERE menu_id = ?",
             [
                 $label, $type, $target, $icon, $order,
-                $parent ?: null, $roles ?: null, $active,
+                $parent ?: null, $rolesJson, $active,
                 $openMode, $browseMode, $previewMode, $defaultView,
                 $id
             ]
@@ -172,7 +228,7 @@ if ($action === 'update') {
     }
 }
 
-// ── DELETE ──────────────────────────────────────────────────────────────────
+// ── DELETE ───────────────────────────────────────────────────────────────────
 if ($action === 'delete') {
     $id = (int)($body['id'] ?? 0);
     if (!$id) mu_json(['success' => false, 'message' => 'Invalid ID']);
@@ -185,7 +241,7 @@ if ($action === 'delete') {
     }
 }
 
-// ── REORDER ─────────────────────────────────────────────────────────────────
+// ── REORDER ──────────────────────────────────────────────────────────────────
 if ($action === 'reorder') {
     $items = (array)($body['items'] ?? []);
     try {
