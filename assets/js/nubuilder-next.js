@@ -70,10 +70,6 @@
 
 
 // ─── Permission helpers ───────────────────────────────────────────────────────
-// window.nuUserRole  is injected by index.php (e.g. 'globeadmin', 'admin', 'viewer')
-// window.nuUserPerms is injected by index.php with per-action flags from the
-//   role's wildcard row in nu_role_form_permissions, e.g.
-//   { canAdd: true, canEdit: false, canDelete: false }
 window.NuPerms = {
   _editRoles: new Set(['globeadmin', 'admin']),
 
@@ -483,7 +479,6 @@ window.NuApp = {
     }
   },
 
-  // View-only record — opens form but form fields are read-only
   async viewRecord(code, id, fromBrowseLabel, displayMode) {
     const mode        = (displayMode || 'modal').toLowerCase();
     const browseLabel = fromBrowseLabel || code;
@@ -511,7 +506,6 @@ window.NuApp = {
       bc.style.marginBottom = '0';
       header.appendChild(bc);
 
-      // "View Only" badge
       const badge = document.createElement('span');
       badge.textContent = '\uD83D\uDD12 View Only';
       badge.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:10px;background:var(--bg-elevated,#f0f0f0);color:var(--text-muted,#888);margin-right:8px;';
@@ -528,14 +522,12 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       box.appendChild(formWrap);
 
-      // Disable all inputs and hide the Save button
       box.querySelectorAll('input, textarea, select, button[type="submit"]').forEach(el => {
         if (el.type === 'submit') { el.style.display = 'none'; return; }
         el.setAttribute('disabled', 'disabled');
         el.style.opacity = '0.7';
         el.style.cursor  = 'default';
       });
-      // Rename Cancel → Close
       box.querySelectorAll('button.nu-btn-ghost').forEach(el => {
         if (el.textContent.trim() === 'Cancel') el.textContent = 'Close';
       });
@@ -560,7 +552,8 @@ window.NuApp = {
   },
 
   addRecord(code, formLabel, displayMode) {
-    return this.previewForm(code, formLabel, displayMode);
+    // Always open new-record form inline so breadcrumb + save-back works
+    return this._openFormInline(code, formLabel, null, false);
   },
 
   async browseForm(code, page, query, formLabel, displayMode) {
@@ -583,9 +576,9 @@ window.NuApp = {
   },
 
   // ── Browse table builder ─────────────────────────────────────────────────
-  // canEdit: passed in from the calling browse method (derived from NuPerms)
-  _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit, canEdit) {
+  _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit, canEdit, canAdd) {
     const _canEdit          = (canEdit !== undefined) ? canEdit : NuPerms.canEdit();
+    const _canAdd           = (canAdd  !== undefined) ? canAdd  : NuPerms.canAdd();
     const data              = json.data || {};
     const layout            = Array.isArray(data.layout)  ? data.layout  : [];
     const records           = Array.isArray(data.records) ? data.records : [];
@@ -595,23 +588,43 @@ window.NuApp = {
 
     container.innerHTML = '';
 
-    if (searchEnabled) {
+    // ── Search bar row (always shown when search is enabled, plus Add New) ──
+    if (searchEnabled || _canAdd) {
       const searchWrap = document.createElement('div');
-      searchWrap.style.cssText = 'margin-bottom:16px;display:flex;gap:8px;';
-      const searchInput = document.createElement('input');
-      searchInput.type = 'text'; searchInput.className = 'nu-input';
-      searchInput.placeholder = searchPlaceholder; searchInput.value = currentQuery;
-      searchInput.style.flex = '1';
-      const searchBtn = document.createElement('button');
-      searchBtn.className = 'nu-btn nu-btn-primary'; searchBtn.textContent = 'Search';
-      searchBtn.onclick = () => this.browseForm(code, 1, searchInput.value.trim(), label, displayMode);
-      const clearBtn = document.createElement('button');
-      clearBtn.className = 'nu-btn nu-btn-ghost'; clearBtn.textContent = 'Clear';
-      clearBtn.onclick = () => this.browseForm(code, 1, '', label, displayMode);
-      searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') this.browseForm(code, 1, searchInput.value.trim(), label, displayMode);
-      });
-      searchWrap.appendChild(searchInput); searchWrap.appendChild(searchBtn); searchWrap.appendChild(clearBtn);
+      searchWrap.style.cssText = 'margin-bottom:16px;display:flex;gap:8px;align-items:center;';
+
+      if (searchEnabled) {
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text'; searchInput.className = 'nu-input';
+        searchInput.placeholder = searchPlaceholder; searchInput.value = currentQuery;
+        searchInput.style.flex = '1';
+        const searchBtn = document.createElement('button');
+        searchBtn.className = 'nu-btn nu-btn-primary'; searchBtn.textContent = 'Search';
+        searchBtn.onclick = () => this.browseForm(code, 1, searchInput.value.trim(), label, displayMode);
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'nu-btn nu-btn-ghost'; clearBtn.textContent = 'Clear';
+        clearBtn.onclick = () => this.browseForm(code, 1, '', label, displayMode);
+        searchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') this.browseForm(code, 1, searchInput.value.trim(), label, displayMode);
+        });
+        searchWrap.appendChild(searchInput);
+        searchWrap.appendChild(searchBtn);
+        searchWrap.appendChild(clearBtn);
+      } else {
+        // No search — push Add New to the right
+        const spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        searchWrap.appendChild(spacer);
+      }
+
+      if (_canAdd) {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
+        addBtn.textContent = '+ Add New Record';
+        addBtn.onclick = () => this.addRecord(code, label, displayMode);
+        searchWrap.appendChild(addBtn);
+      }
+
       container.appendChild(searchWrap);
     }
 
@@ -664,14 +677,12 @@ window.NuApp = {
         actionTd.style.cssText = 'padding:12px;display:flex;gap:8px;align-items:center;';
 
         if (_canEdit) {
-          // Full edit access
           const editBtn = document.createElement('button');
           editBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
           editBtn.textContent = '\u270E Edit';
           editBtn.onclick = () => (onEdit ? onEdit(row) : this.editRecord(code, row.id, label, displayMode));
           actionTd.appendChild(editBtn);
         } else {
-          // View-only access
           const viewBtn = document.createElement('button');
           viewBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
           viewBtn.style.cssText = 'color:var(--text-muted,#666);';
@@ -735,16 +746,6 @@ window.NuApp = {
       header.appendChild(h3);
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;align-items:center;';
-
-      // Only show Add New for users with add permission
-      if (_canAdd) {
-        const addBtn = document.createElement('button');
-        addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
-        addBtn.textContent = '+ Add New Record';
-        addBtn.onclick = () => this.addRecord(code, label, 'inline');
-        btnGroup.appendChild(addBtn);
-      }
-
       const previewBtn = document.createElement('button');
       previewBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; previewBtn.textContent = '\u229e Preview Form';
       previewBtn.onclick = () => this.previewForm(code, label);
@@ -754,7 +755,7 @@ window.NuApp = {
       backBtn.onclick = () => this.loadModule('forms');
       btnGroup.appendChild(backBtn);
       header.appendChild(btnGroup); container.appendChild(header);
-      this._buildBrowseTable(json, code, page, query, label, 'inline', container, null, _canEdit);
+      this._buildBrowseTable(json, code, page, query, label, 'inline', container, null, _canEdit, _canAdd);
     } catch (err) { console.error('_browseInline error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
@@ -785,15 +786,6 @@ window.NuApp = {
       bc.style.marginBottom = '0'; header.appendChild(bc);
       const rightBtns = document.createElement('div');
       rightBtns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;align-items:center;';
-
-      // Only show Add for users with add permission
-      if (_canAdd) {
-        const addBtn = document.createElement('button');
-        addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add New';
-        addBtn.onclick = () => this.addRecord(code, label, 'modal');
-        rightBtns.appendChild(addBtn);
-      }
-
       const closeBtn = document.createElement('button');
       closeBtn.type = 'button'; closeBtn.innerHTML = '&times;';
       closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);';
@@ -801,7 +793,7 @@ window.NuApp = {
       rightBtns.appendChild(closeBtn); header.appendChild(rightBtns);
       box.appendChild(header);
       const tableContainer = document.createElement('div');
-      this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer, null, _canEdit);
+      this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer, null, _canEdit, _canAdd);
       box.appendChild(tableContainer);
       overlay.innerHTML = ''; overlay.appendChild(box);
       if (isNew) {
@@ -835,20 +827,11 @@ window.NuApp = {
       header.appendChild(h3);
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;';
-
-      // Only show Add New for users with add permission
-      if (_canAdd) {
-        const addBtn = document.createElement('button');
-        addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add New Record';
-        addBtn.onclick = () => this.addRecord(code, label, 'fullpage');
-        btnGroup.appendChild(addBtn);
-      }
-
       const exitBtn = document.createElement('button');
       exitBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; exitBtn.textContent = '\u2715 Exit Full Page';
       exitBtn.onclick = () => { this._exitFullPage(); this.loadModule('forms'); };
       btnGroup.appendChild(exitBtn); header.appendChild(btnGroup); container.appendChild(header);
-      this._buildBrowseTable(json, code, page, query, label, 'fullpage', container, null, _canEdit);
+      this._buildBrowseTable(json, code, page, query, label, 'fullpage', container, null, _canEdit, _canAdd);
     } catch (err) { this._exitFullPage(); console.error('_browseFullPage error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
@@ -871,7 +854,10 @@ window.NuApp = {
       formWrap.innerHTML = json.html;
       container.appendChild(formWrap);
       const formEl = container.querySelector('.nu-generated-form');
-      if (formEl) formEl.dataset.displayMode = 'inline';
+      if (formEl) {
+        formEl.dataset.displayMode = 'inline';
+        formEl.dataset.fromBrowse  = label;
+      }
       this._initFormWidgets(container);
       this._execModuleScripts(container);
       this._dispatchFormOpened(container);
@@ -931,12 +917,12 @@ window.closeNuForm = function (btn) {
 window.submitNuForm = async function (formElement) {
   if (!formElement) { NuApp.toast('Form element not found', 'error'); return; }
 
-  // Block submission for view-only forms
-  if (formElement.dataset.viewOnly === '1') { NuApp.toast('View only — saving is disabled', 'error'); return; }
+  if (formElement.dataset.viewOnly === '1') { NuApp.toast('View only \u2014 saving is disabled', 'error'); return; }
 
   const formCode    = formElement.dataset.formCode;
   const recordId    = formElement.dataset.recordId;
   const displayMode = formElement.dataset.displayMode || 'inline';
+  const fromBrowse  = formElement.dataset.fromBrowse  || null;
   const url = 'api/form.php?action=save&code=' + encodeURIComponent(formCode) +
     (recordId ? '&id=' + encodeURIComponent(recordId) : '');
 
@@ -989,8 +975,9 @@ window.submitNuForm = async function (formElement) {
     }
     const overlay = formElement.closest('.nu-form-overlay');
     if (overlay) overlay.remove();
+    // After save, always return to the browse view inline
     if (typeof NuApp.browseForm === 'function' && formCode) {
-      NuApp.browseForm(formCode, 1, '', null, displayMode);
+      NuApp.browseForm(formCode, 1, '', fromBrowse || null, 'inline');
     } else {
       NuApp.loadModule('forms');
     }
