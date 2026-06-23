@@ -2,33 +2,21 @@
 (function () {
   'use strict';
 
-  /**
-   * Build a brand-new <select> from scratch — copies attributes and <option>
-   * elements manually so there is ZERO jQuery cache, ZERO expando, ZERO
-   * data-select2-id. No cloneNode, no destroy() call needed ever.
-   */
   function _s2BuildFresh(el) {
     var fresh = document.createElement('select');
-
-    // Copy all attributes except ones Select2 stamps
     var skip = { 'data-select2-id': 1, 'data-nu-s2': 1 };
     for (var i = 0; i < el.attributes.length; i++) {
       var attr = el.attributes[i];
       if (!skip[attr.name]) fresh.setAttribute(attr.name, attr.value);
     }
-
-    // Copy <option> and <optgroup> children
     for (var j = 0; j < el.childNodes.length; j++) {
       fresh.appendChild(el.childNodes[j].cloneNode(true));
     }
-
-    // Remove orphaned Select2 UI siblings from a previous init
     var next = el.nextElementSibling;
     while (next && next.classList &&
            (next.classList.contains('select2') || next.classList.contains('select2-container'))) {
       var rem = next; next = next.nextElementSibling; rem.parentNode.removeChild(rem);
     }
-
     el.parentNode.replaceChild(fresh, el);
     return fresh;
   }
@@ -40,7 +28,7 @@
     var opts = {
       width: '100%',
       theme: (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
-      placeholder: fresh.dataset.placeholder || 'Select…',
+      placeholder: fresh.dataset.placeholder || 'Select\u2026',
       allowClear:  fresh.dataset.allowClear !== 'false',
       multiple:    fresh.dataset.selectMode === 'multiple' || fresh.hasAttribute('multiple'),
       dropdownParent: $(document.body),
@@ -79,6 +67,26 @@
   });
 
 }());
+
+
+// ─── Permission helpers ───────────────────────────────────────────────────────
+// window.nuUserRole is injected by index.php (e.g. 'globeadmin', 'admin', 'user')
+window.NuPerms = {
+  _editRoles: new Set(['globeadmin', 'admin']),
+
+  canEdit() {
+    const role = (window.nuUserRole || '').toLowerCase();
+    return this._editRoles.has(role);
+  },
+
+  canAdd() {
+    return this.canEdit();
+  },
+
+  canDelete() {
+    return this.canEdit();
+  }
+};
 
 
 // ─── NuApp ────────────────────────────────────────────────────────────────────
@@ -340,7 +348,6 @@ window.NuApp = {
 
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
-      // z-index 1000: sits below Select2 dropdown (1051) so dropdowns are always visible
       overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;';
 
       const box = document.createElement('div');
@@ -424,7 +431,6 @@ window.NuApp = {
 
       const overlay = document.createElement('div');
       overlay.className = 'nu-form-overlay';
-      // z-index 1000: sits below Select2 dropdown (1051) so dropdowns are always visible
       overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;';
 
       const box = document.createElement('div');
@@ -469,6 +475,82 @@ window.NuApp = {
     }
   },
 
+  // View-only record — opens form but form fields are read-only
+  async viewRecord(code, id, fromBrowseLabel, displayMode) {
+    const mode        = (displayMode || 'modal').toLowerCase();
+    const browseLabel = fromBrowseLabel || code;
+
+    try {
+      const json = await this.apiJson(
+        'api/form.php?action=render&code=' + encodeURIComponent(code) + '&id=' + encodeURIComponent(id),
+        { credentials: 'same-origin' }
+      );
+      if (!json.success) { this.toast(json.error || 'Failed', 'error'); return; }
+
+      const overlay = document.createElement('div');
+      overlay.className = 'nu-form-overlay';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;';
+
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--card-bg,#fff);border-radius:12px;padding:24px;max-width:900px;max-height:90vh;overflow-y:auto;width:92%;';
+
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;';
+      const bc = this._renderBreadcrumb([
+        { label: browseLabel, action: () => { overlay.remove(); this.browseForm(code, 1, '', browseLabel, mode); } },
+        { label: 'View #' + id }
+      ]);
+      bc.style.marginBottom = '0';
+      header.appendChild(bc);
+
+      // "View Only" badge
+      const badge = document.createElement('span');
+      badge.textContent = '\uD83D\uDD12 View Only';
+      badge.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:10px;background:var(--bg-elevated,#f0f0f0);color:var(--text-muted,#888);margin-right:8px;';
+      header.appendChild(badge);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button'; closeBtn.innerHTML = '&times;';
+      closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);';
+      closeBtn.addEventListener('click', () => overlay.remove());
+      header.appendChild(closeBtn);
+      box.appendChild(header);
+
+      const formWrap = document.createElement('div');
+      formWrap.innerHTML = json.html;
+      box.appendChild(formWrap);
+
+      // Disable all inputs and hide the Save button
+      box.querySelectorAll('input, textarea, select, button[type="submit"]').forEach(el => {
+        if (el.type === 'submit') { el.style.display = 'none'; return; }
+        el.setAttribute('disabled', 'disabled');
+        el.style.opacity = '0.7';
+        el.style.cursor  = 'default';
+      });
+      // Rename Cancel → Close
+      box.querySelectorAll('button.nu-btn-ghost').forEach(el => {
+        if (el.textContent.trim() === 'Cancel') el.textContent = 'Close';
+      });
+
+      const formEl = box.querySelector('.nu-generated-form');
+      if (formEl) {
+        formEl.dataset.displayMode = 'modal';
+        formEl.dataset.viewOnly    = '1';
+      }
+
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      this._initFormWidgets(box);
+      this._execModuleScripts(box);
+      this._dispatchFormOpened(box);
+    } catch (err) {
+      console.error('viewRecord error', err);
+      this.toast('Error: ' + err.message, 'error');
+    }
+  },
+
   addRecord(code, formLabel, displayMode) {
     return this.previewForm(code, formLabel, displayMode);
   },
@@ -492,7 +574,10 @@ window.NuApp = {
     return json;
   },
 
-  _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit) {
+  // ── Browse table builder ─────────────────────────────────────────────────
+  // canEdit: passed in from the calling browse method (derived from NuPerms)
+  _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit, canEdit) {
+    const _canEdit          = (canEdit !== undefined) ? canEdit : NuPerms.canEdit();
     const data              = json.data || {};
     const layout            = Array.isArray(data.layout)  ? data.layout  : [];
     const records           = Array.isArray(data.records) ? data.records : [];
@@ -566,12 +651,28 @@ window.NuApp = {
           td.textContent = String(value);
           tr.appendChild(td);
         });
+
         const actionTd = document.createElement('td');
-        actionTd.style.cssText = 'padding:12px;display:flex;gap:8px;';
-        const editBtn = document.createElement('button');
-        editBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; editBtn.textContent = 'Edit';
-        editBtn.onclick = () => (onEdit ? onEdit(row) : this.editRecord(code, row.id, label, displayMode));
-        actionTd.appendChild(editBtn); tr.appendChild(actionTd); tbody.appendChild(tr);
+        actionTd.style.cssText = 'padding:12px;display:flex;gap:8px;align-items:center;';
+
+        if (_canEdit) {
+          // Full edit access
+          const editBtn = document.createElement('button');
+          editBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+          editBtn.textContent = '\u270E Edit';
+          editBtn.onclick = () => (onEdit ? onEdit(row) : this.editRecord(code, row.id, label, displayMode));
+          actionTd.appendChild(editBtn);
+        } else {
+          // View-only access
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+          viewBtn.style.cssText = 'color:var(--text-muted,#666);';
+          viewBtn.textContent = '\uD83D\uDC41 View';
+          viewBtn.onclick = () => this.viewRecord(code, row.id, label, displayMode);
+          actionTd.appendChild(viewBtn);
+        }
+
+        tr.appendChild(actionTd); tbody.appendChild(tr);
       });
     }
     table.appendChild(tbody); tableWrap.appendChild(table); container.appendChild(tableWrap);
@@ -605,6 +706,7 @@ window.NuApp = {
 
   async _browseInline(code, page, query, formLabel) {
     try {
+      const _canEdit = NuPerms.canEdit();
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
@@ -623,11 +725,17 @@ window.NuApp = {
       h3.style.cssText = 'margin:0;font-size:18px;'; h3.textContent = label;
       header.appendChild(h3);
       const btnGroup = document.createElement('div');
-      btnGroup.style.cssText = 'display:flex;gap:8px;';
-      const addBtn = document.createElement('button');
-      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add Record';
-      addBtn.onclick = () => this.addRecord(code, label, 'inline');
-      btnGroup.appendChild(addBtn);
+      btnGroup.style.cssText = 'display:flex;gap:8px;align-items:center;';
+
+      // Only show Add New for users with edit permission
+      if (_canEdit) {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
+        addBtn.textContent = '+ Add New Record';
+        addBtn.onclick = () => this.addRecord(code, label, 'inline');
+        btnGroup.appendChild(addBtn);
+      }
+
       const previewBtn = document.createElement('button');
       previewBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; previewBtn.textContent = '\u229e Preview Form';
       previewBtn.onclick = () => this.previewForm(code, label);
@@ -637,12 +745,13 @@ window.NuApp = {
       backBtn.onclick = () => this.loadModule('forms');
       btnGroup.appendChild(backBtn);
       header.appendChild(btnGroup); container.appendChild(header);
-      this._buildBrowseTable(json, code, page, query, label, 'inline', container);
+      this._buildBrowseTable(json, code, page, query, label, 'inline', container, null, _canEdit);
     } catch (err) { console.error('_browseInline error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
   async _browseModal(code, page, query, formLabel) {
     try {
+      const _canEdit = NuPerms.canEdit();
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
@@ -652,7 +761,6 @@ window.NuApp = {
         isNew = true;
         overlay = document.createElement('div');
         overlay.className = 'nu-browse-overlay nu-form-overlay';
-        // z-index 1000: sits below Select2 dropdown (1051) so dropdowns are always visible
         overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;';
       }
       const box = document.createElement('div');
@@ -667,10 +775,15 @@ window.NuApp = {
       bc.style.marginBottom = '0'; header.appendChild(bc);
       const rightBtns = document.createElement('div');
       rightBtns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;align-items:center;';
-      const addBtn = document.createElement('button');
-      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add';
-      addBtn.onclick = () => this.addRecord(code, label, 'modal');
-      rightBtns.appendChild(addBtn);
+
+      // Only show Add for users with edit permission
+      if (_canEdit) {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add New';
+        addBtn.onclick = () => this.addRecord(code, label, 'modal');
+        rightBtns.appendChild(addBtn);
+      }
+
       const closeBtn = document.createElement('button');
       closeBtn.type = 'button'; closeBtn.innerHTML = '&times;';
       closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;color:var(--text,#333);';
@@ -678,7 +791,7 @@ window.NuApp = {
       rightBtns.appendChild(closeBtn); header.appendChild(rightBtns);
       box.appendChild(header);
       const tableContainer = document.createElement('div');
-      this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer);
+      this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer, null, _canEdit);
       box.appendChild(tableContainer);
       overlay.innerHTML = ''; overlay.appendChild(box);
       if (isNew) {
@@ -690,6 +803,7 @@ window.NuApp = {
 
   async _browseFullPage(code, page, query, formLabel) {
     try {
+      const _canEdit = NuPerms.canEdit();
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
@@ -710,15 +824,20 @@ window.NuApp = {
       header.appendChild(h3);
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;';
-      const addBtn = document.createElement('button');
-      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add Record';
-      addBtn.onclick = () => this.addRecord(code, label, 'fullpage');
-      btnGroup.appendChild(addBtn);
+
+      // Only show Add New for users with edit permission
+      if (_canEdit) {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add New Record';
+        addBtn.onclick = () => this.addRecord(code, label, 'fullpage');
+        btnGroup.appendChild(addBtn);
+      }
+
       const exitBtn = document.createElement('button');
       exitBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; exitBtn.textContent = '\u2715 Exit Full Page';
       exitBtn.onclick = () => { this._exitFullPage(); this.loadModule('forms'); };
       btnGroup.appendChild(exitBtn); header.appendChild(btnGroup); container.appendChild(header);
-      this._buildBrowseTable(json, code, page, query, label, 'fullpage', container);
+      this._buildBrowseTable(json, code, page, query, label, 'fullpage', container, null, _canEdit);
     } catch (err) { this._exitFullPage(); console.error('_browseFullPage error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
@@ -800,21 +919,19 @@ window.closeNuForm = function (btn) {
 
 window.submitNuForm = async function (formElement) {
   if (!formElement) { NuApp.toast('Form element not found', 'error'); return; }
+
+  // Block submission for view-only forms
+  if (formElement.dataset.viewOnly === '1') { NuApp.toast('View only — saving is disabled', 'error'); return; }
+
   const formCode    = formElement.dataset.formCode;
   const recordId    = formElement.dataset.recordId;
   const displayMode = formElement.dataset.displayMode || 'inline';
   const url = 'api/form.php?action=save&code=' + encodeURIComponent(formCode) +
     (recordId ? '&id=' + encodeURIComponent(recordId) : '');
 
-  // ── Collect form data ────────────────────────────────────────────────────
-  // Use FormData as the base, then explicitly overwrite every <select> value
-  // (single and multiple) by reading the DOM directly. This is necessary
-  // because Select2 rebuilds the native <select> element and the values it
-  // syncs back may not survive a FormData snapshot reliably.
   const formData = new FormData(formElement);
   const data = {};
 
-  // 1. Seed from FormData (covers all non-select inputs)
   formData.forEach((value, key) => {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
       if (!Array.isArray(data[key])) data[key] = [data[key]];
@@ -824,7 +941,6 @@ window.submitNuForm = async function (formElement) {
     }
   });
 
-  // 2. Overwrite ALL <select> values from live DOM (fixes Select2 single + multi)
   formElement.querySelectorAll('select[name]').forEach((sel) => {
     const name = sel.name;
     if (!name) return;
@@ -832,15 +948,12 @@ window.submitNuForm = async function (formElement) {
       .filter(function (o) { return o.selected; })
       .map(function (o) { return o.value; });
     if (sel.multiple) {
-      // multi: always store as array (empty array if nothing chosen)
       data[name] = selected;
     } else {
-      // single: store as scalar string
       data[name] = selected.length ? selected[0] : '';
     }
   });
 
-  // 3. Ensure unchecked checkboxes are present
   formElement.querySelectorAll('input[type="checkbox"]').forEach((el) => {
     if (!Object.prototype.hasOwnProperty.call(data, el.name)) data[el.name] = '';
   });
@@ -878,6 +991,7 @@ window.previewForm     = function (code, label, mode)              { return NuAp
 window.editForm        = function (id)                             { return window.nbFormBuilder ? window.nbFormBuilder.edit(id) : null; };
 window.addRecord       = function (code, label, mode)              { return NuApp.addRecord(code, label, mode); };
 window.editRecord      = function (code, id, label, mode)          { return NuApp.editRecord(code, id, label, mode); };
+window.viewRecord      = function (code, id, label, mode)          { return NuApp.viewRecord(code, id, label, mode); };
 window.browseForm      = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
 window.browseFormPage  = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
 window.deleteForm      = function (id, name) {
