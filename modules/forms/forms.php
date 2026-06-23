@@ -722,13 +722,14 @@ foreach ($forms as $f) {
             </div>
             <div id="existingTableWrap" style="display:none;">
               <label class="nu-label">Select Existing Table</label>
-              <select id="builderFormTableExisting" class="nu-input" onchange="document.getElementById('builderFormTable').value=this.value">
+              <select id="builderFormTableExisting" class="nu-input" onchange="nbFormBuilder.onExistingTableChange(this.value)">
                 <option value="">-- choose a table --</option>
                 <?php foreach ($userTables as $tbl): ?>
                 <option value="<?= htmlspecialchars($tbl, ENT_QUOTES) ?>"><?= htmlspecialchars($tbl) ?></option>
                 <?php endforeach; ?>
               </select>
               <p style="font-size:11px;color:var(--text-tertiary);margin-top:6px;">NuBuilder will read this table's columns and <strong>not</strong> alter its structure unless you explicitly add new fields.</p>
+              <div id="existingTableColsStatus" style="display:none;font-size:11px;margin-top:6px;padding:6px 10px;border-radius:6px;"></div>
             </div>
           </div>
         </div>
@@ -1285,6 +1286,91 @@ if (!window._nbFormsModuleInit) {
     if (typeof _origSelectPkType === 'function') _origSelectPkType.call(nbFormBuilder, type, card);
     const pill = document.getElementById('optValPk');
     if (pill) pill.textContent = type === 'uuid' ? 'NuBuilder UUID' : 'Auto-increment INT';
+  };
+
+  // ── Load columns from an existing table and populate the canvas ───
+  nbFormBuilder.onExistingTableChange = async function(tableName) {
+    // Always sync the hidden table name input
+    const tableInput = document.getElementById('builderFormTable');
+    if (tableInput) tableInput.value = tableName;
+
+    const statusEl = document.getElementById('existingTableColsStatus');
+    if (!tableName) {
+      if (statusEl) statusEl.style.display = 'none';
+      return;
+    }
+
+    // Show loading indicator
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'color-mix(in oklch,var(--color-primary) 8%,var(--bg-surface))';
+      statusEl.style.color = 'var(--text-secondary)';
+      statusEl.style.border = '1px solid var(--border-color)';
+      statusEl.textContent = '⏳ Loading columns from ' + tableName + '…';
+    }
+
+    let cols = [];
+    try {
+      const res  = await fetch('api/inspector.php?action=columns&table=' + encodeURIComponent(tableName));
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Unknown error');
+      cols = data.columns; // [{Field, Type, Null, Key, Default, Extra}]
+    } catch (err) {
+      console.error('[nub5] Failed to fetch columns:', err);
+      if (statusEl) {
+        statusEl.style.background = 'color-mix(in oklch,#ef4444 8%,var(--bg-surface))';
+        statusEl.style.color = '#b91c1c';
+        statusEl.style.border = '1px solid color-mix(in oklch,#ef4444 30%,transparent)';
+        statusEl.textContent = '✗ Could not load columns: ' + err.message;
+      }
+      return;
+    }
+
+    // Map DB column types → builder field types
+    const mapType = t => {
+      t = (t || '').toLowerCase();
+      if (/tinyint\(1\)/.test(t))                          return 'checkbox';
+      if (/int/.test(t))                                    return 'number';
+      if (/decimal|float|double|numeric/.test(t))          return 'number';
+      if (t === 'date')                                     return 'date';
+      if (/datetime|timestamp/.test(t))                    return 'datetime';
+      if (/^time/.test(t))                                  return 'time';
+      if (/text|blob|mediumtext|longtext/.test(t))         return 'textarea';
+      return 'text';
+    };
+
+    // System/meta columns to skip
+    const skip = new Set(['id','created_at','updated_at','created_by','updated_by','deleted_at']);
+
+    const userCols = cols.filter(c => !skip.has(c.Field));
+
+    // Clear current canvas fields and rebuild from table columns
+    if (typeof nbFormBuilder.clearCanvas === 'function') {
+      nbFormBuilder.clearCanvas();
+    }
+
+    userCols.forEach(col => {
+      if (typeof nbFormBuilder.addField === 'function') {
+        nbFormBuilder.addField({
+          name:  col.Field,
+          label: col.Field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          type:  mapType(col.Type),
+          span:  6,
+        });
+      }
+    });
+
+    // Show success status
+    if (statusEl) {
+      statusEl.style.background = 'color-mix(in oklch,#22c55e 8%,var(--bg-surface))';
+      statusEl.style.color = '#15803d';
+      statusEl.style.border = '1px solid color-mix(in oklch,#22c55e 30%,transparent)';
+      statusEl.textContent = '✓ Loaded ' + userCols.length + ' field' + (userCols.length !== 1 ? 's' : '') + ' from ' + tableName;
+    }
+
+    // Switch to Fields tab so user sees the populated canvas
+    const fieldsTab = document.querySelector('.nb-tab[data-panel="panelFields"]');
+    if (fieldsTab) fieldsTab.click();
   };
 
 } // end _nbFormsModuleInit guard
