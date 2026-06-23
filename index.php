@@ -431,6 +431,9 @@ if ($isLoggedIn && $currentUser) {
 <script src="<?= nu_asset('assets/js/nu-errorlogger.js') ?>"></script>
 <script>
 (function () {
+    // ── Inject server-side user role so NuPerms can evaluate access ──────────
+    window.nuUserRole = <?= json_encode($_role) ?>;
+
     // Restore theme
     try {
         var t = localStorage.getItem('nu-theme');
