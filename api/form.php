@@ -77,13 +77,8 @@ function nu_table_exists($table) {
     catch (Throwable $e) { return false; }
 }
 
-/**
- * Returns a set (keyed by column name => true) of real columns for $table.
- * Results are cached per-request. Cache can be busted via $GLOBALS['_nu_col_cache'].
- */
 function nu_get_table_columns($table) {
     static $cache = [];
-    // Allow external cache bust (e.g. after ALTER TABLE)
     if (isset($GLOBALS['_nu_col_cache'][$table])) {
         $cache[$table] = $GLOBALS['_nu_col_cache'][$table];
         unset($GLOBALS['_nu_col_cache'][$table]);
@@ -101,10 +96,6 @@ function nu_get_table_columns($table) {
     }
 }
 
-/**
- * Filter a $save array so only columns that actually exist in $table are kept.
- * The PK is always kept if present.
- */
 function nu_filter_save_to_columns($save, $table, $pk) {
     $cols = nu_get_table_columns($table);
     if (empty($cols)) return $save;
@@ -115,10 +106,6 @@ function nu_filter_save_to_columns($save, $table, $pk) {
     return $out;
 }
 
-/**
- * Coerce a value coming from the JSON body so it is safe to pass to PDO.
- * Arrays (checkbox_group, select[multiple]) are joined to a comma-separated string.
- */
 function nu_coerce_save_value($value) {
     if (is_array($value)) {
         return implode(',', array_map('strval', $value));
@@ -143,7 +130,8 @@ function nu_form_columns() {
             'browse_page_size'=>'browsepagesize','browse_default_sort'=>'browsedefaultsort',
             'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode',
             'type'=>'form_type','display_mode'=>'browse_display_mode',
-            'js_before_save'=>'formjsbeforesave','js_after_save'=>'formjsaftersave'];
+            'js_before_save'=>'formjsbeforesave','js_after_save'=>'formjsaftersave',
+            'browse_php'=>'browsephp'];
     }
     return ['id'=>'form_id','name'=>'form_name','code'=>'form_code','table'=>'form_table',
         'layout'=>'form_layout','active'=>'form_active','custom_js'=>'form_custom_js',
@@ -153,7 +141,8 @@ function nu_form_columns() {
         'browse_page_size'=>'browse_page_size','browse_default_sort'=>'browse_default_sort',
         'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode',
         'type'=>'form_type','display_mode'=>'browse_display_mode',
-        'js_before_save'=>'form_js_before_save','js_after_save'=>'form_js_after_save'];
+        'js_before_save'=>'form_js_before_save','js_after_save'=>'form_js_after_save',
+        'browse_php'=>'browse_php'];
 }
 
 function nu_get_form($code) {
@@ -241,9 +230,6 @@ function nu_form_pk_type($form) {
     return strtolower(trim((string)($form[$c['pk_type']] ?? 'auto')));
 }
 
-/**
- * Render <option> tags for select / radio / checkbox_group fields.
- */
 function nu_render_options($field, $selectedValue = null) {
     $options   = [];
     $optSource = $field['options_source'] ?? ($field['source_type'] ?? 'manual');
@@ -325,9 +311,6 @@ function nu_field_is_fk($field)           { return !empty($field['is_fk']); }
 function nu_field_hide_in_grid($field)     { return !empty($field['hide_in_grid']); }
 function nu_field_server_readonly($field)  { return !empty($field['server_readonly']); }
 
-/**
- * Render a single field using a label-left inline layout that mirrors the form editor.
- */
 function nu_render_field($field, $value = '', $record = []) {
     $type  = nu_field_type($field);
     $name  = nu_field_name($field);
@@ -356,7 +339,6 @@ function nu_render_field($field, $value = '', $record = []) {
         ? '<div style="font-size:11px;color:#999;margin-top:3px;">' . nu_html($helpText) . '</div>'
         : '';
 
-    // ── Full-width types — no label column ──────────────────────────────
     $fullWidthTypes = ['subform', 'html', 'content', 'button', 'fieldset', 'checkbox'];
 
     if (in_array($type, $fullWidthTypes, true)) {
@@ -425,7 +407,6 @@ function nu_render_field($field, $value = '', $record = []) {
         }
     }
 
-    // ── Hidden / UUID ──────────────────────────────────────────────────
     if ($type === 'hidden') {
         return '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '">';
     }
@@ -438,7 +419,6 @@ function nu_render_field($field, $value = '', $record = []) {
             return '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="">';
         }
     } else {
-        // ── Build the input control ──────────────────────────────────────
         switch ($type) {
 
             case 'textarea':
@@ -591,7 +571,6 @@ function nu_render_field($field, $value = '', $record = []) {
         }
     }
 
-    // ── Label-left inline wrapper ────────────────────────────────────────
     $labelHtml = '<label for="nuf_' . nu_attr($name) . '"'
                . ' style="display:block;font-weight:600;font-size:13px;color:#555;'
                . 'text-align:right;padding-right:10px;padding-top:7px;'
@@ -904,18 +883,12 @@ function nu_flatten_layout($layout) {
 }
 
 function nu_flatten_layout_for_grid($layout) {
-    // Explicit closure instead of arrow function for PHP 7.4 compatibility
     return array_values(array_filter(
         nu_flatten_layout($layout),
         function ($f) { return !nu_field_hide_in_grid($f); }
     ));
 }
 
-/* ── Table / column DDL helpers ─────────────────────────────────── */
-
-/**
- * Map a form field type to a MySQL column definition.
- */
 function nu_field_type_to_sql($fieldType) {
     switch ($fieldType) {
         case 'number':     return 'DOUBLE NULL DEFAULT NULL';
@@ -929,10 +902,6 @@ function nu_field_type_to_sql($fieldType) {
     }
 }
 
-/**
- * Create the data table for a form if it does not already exist.
- * Returns ['created' => bool, 'error' => string|null].
- */
 function nu_create_form_table($tableName, $pkType, array $fields) {
     $tableName = nu_safe_ident($tableName);
     if ($tableName === '') {
@@ -945,12 +914,10 @@ function nu_create_form_table($tableName, $pkType, array $fields) {
         return ['created' => false, 'error' => null];
     }
 
-    // PK definition — normalise common variants
     $pkTypeLower = strtolower(trim($pkType));
     if ($pkTypeLower === 'uuid') {
         $pkDef = '`id` VARCHAR(36) NOT NULL PRIMARY KEY';
     } else {
-        // autoincrement / auto / int / anything else → AUTO_INCREMENT
         $pkDef = '`id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
     }
 
@@ -986,10 +953,6 @@ function nu_create_form_table($tableName, $pkType, array $fields) {
     }
 }
 
-/**
- * For an existing table, ADD any columns that are in the layout but missing from the table.
- * Returns list of columns added and any errors encountered.
- */
 function nu_sync_form_table_columns($tableName, array $fields) {
     $tableName = nu_safe_ident($tableName);
     if ($tableName === '' || !nu_table_exists($tableName)) {
@@ -1034,7 +997,60 @@ function nu_sync_form_table_columns($tableName, array $fields) {
     return ['added' => $added, 'errors' => $errors];
 }
 
-/* ── Subform handlers ───────────────────────────────────────────── */
+/* ── nuHash equivalent — session context for browse_php scripts ─── */
+
+/**
+ * Returns an associative array of current-user context, mirroring the old
+ * nuHash() function. Keys match the old constants for easy migration.
+ *
+ * Available keys:
+ *   USER_ID          — numeric or string user PK
+ *   USERNAME         — login name
+ *   USER_NAME        — display name
+ *   ACCESS_LEVEL_CODE — role string (e.g. 'admin', 'SC', 'BSO')
+ *   station          — usr_station column if it exists
+ *   usr_*            — every column from the user row
+ */
+function nu_get_hash() {
+    static $cached = null;
+    if ($cached !== null) return $cached;
+
+    $hash = [
+        'USER_ID'           => '',
+        'USERNAME'          => '',
+        'USER_NAME'         => '',
+        'ACCESS_LEVEL_CODE' => '',
+        'station'           => '',
+    ];
+
+    try {
+        if (!class_exists('NuAuth')) { $cached = $hash; return $hash; }
+        $auth = NuAuth::getInstance();
+        if (!$auth->checkAuth()) { $cached = $hash; return $hash; }
+        $user = $auth->getCurrentUser();
+        if (!is_array($user)) { $cached = $hash; return $hash; }
+
+        // Merge every column from the user row into the hash
+        foreach ($user as $k => $v) {
+            $hash[$k] = $v;
+        }
+
+        // Normalised shortcuts
+        $hash['USER_ID']           = $user['usr_id']       ?? ($user['zzzzsys_user_id'] ?? ($user['id'] ?? ''));
+        $hash['USERNAME']          = $user['usr_username'] ?? ($user['username'] ?? '');
+        $hash['USER_NAME']         = $user['usr_name']     ?? ($user['name']     ?? '');
+        $hash['ACCESS_LEVEL_CODE'] = $user['usr_role']     ?? ($user['role']     ?? ($user['access_level'] ?? ''));
+        $hash['station']           = $user['usr_station']  ?? ($user['station']  ?? '');
+
+    } catch (Throwable $e) {
+        nu_log('nu_get_hash error: ' . $e->getMessage(), 'hash');
+    }
+
+    $cached = $hash;
+    return $hash;
+}
+
+/* ── Subform handlers ─────────────────────────────────────────────── */
 
 function nu_handle_subform_fields() {
     $code = $_GET['code'] ?? '';
@@ -1156,7 +1172,6 @@ function nu_handle_subform_save() {
 
     $save = nu_filter_save_to_columns($save, $table, $pk);
 
-    // PHP 7.4 compatible — explicit closure instead of arrow function
     $saveWithoutPk = array_filter($save, function ($v, $k) use ($pk) { return $k !== $pk; }, ARRAY_FILTER_USE_BOTH);
     if (!$id && !$saveWithoutPk && !($pkType === 'uuid')) {
         nu_json(['success' => false, 'error' => 'No fields to save'], 400);
@@ -1198,7 +1213,7 @@ function nu_handle_subform_delete() {
     nu_json(['success' => true]);
 }
 
-/* ── Standard handlers ───────────────────────────────────────────── */
+/* ── Standard handlers ────────────────────────────────────────────── */
 
 function nu_handle_render() {
     $code = $_GET['code'] ?? '';
@@ -1236,6 +1251,19 @@ function nu_handle_events() {
     nu_json(['success' => true, 'code' => '']);
 }
 
+/**
+ * nu_handle_list — browse query with optional role-based browse_php override.
+ *
+ * browse_php is a PHP snippet stored on the form that can set $nuSql to
+ * override the default SELECT, and $nuParams for bound parameters.
+ *
+ * Available variables inside browse_php:
+ *   $nuHash   — array from nu_get_hash() (USER_ID, ACCESS_LEVEL_CODE, station …)
+ *   $nuSql    — set this to override the query entirely
+ *   $nuParams — array of PDO bound values matching $nuSql placeholders
+ *   $nuWhere  — set this to append a WHERE clause to the default query
+ *   $nuOrder  — set this to override ORDER BY
+ */
 function nu_handle_list() {
     $code = $_GET['code'] ?? '';
     $page = max(1, (int)($_GET['page'] ?? 1));
@@ -1243,33 +1271,117 @@ function nu_handle_list() {
     if ($code === '') nu_json(['success' => false, 'error' => 'Missing code'], 400);
     $form   = nu_get_form($code);
     if (!$form) nu_json(['success' => false, 'error' => 'Form not found'], 404);
+
     $c      = nu_form_columns();
     $table  = nu_safe_ident($form[$c['table']] ?? '');
     $layout = nu_decode_layout($form);
+
     if ($table === '') {
-        nu_json(['success' => true, 'data' => ['layout'=>$layout,'records'=>[],'page'=>1,'pages'=>1,'total'=>0,'query'=>$q,'browsesearchenabled'=>0,'browsesearchplaceholder'=>'Search...']]);
+        nu_json(['success' => true, 'data' => [
+            'layout'=>$layout,'records'=>[],'page'=>1,'pages'=>1,'total'=>0,
+            'query'=>$q,'browsesearchenabled'=>0,'browsesearchplaceholder'=>'Search...'
+        ]]);
     }
+
     $pageSize = (int)($form[$c['browse_page_size']] ?? 20);
     if ($pageSize < 1) $pageSize = 20;
-    $where = []; $params = [];
+
+    $pk         = nu_get_pk($table);
+    $sortSql    = trim((string)($form[$c['browse_default_sort']] ?? ''));
+    $defaultOrder = $sortSql !== '' ? $sortSql : "`{$pk}` DESC";
+
+    // ── browse_php: let form developer override the query ─────────────────
+    $browsePhp = trim((string)($form[$c['browse_php']] ?? ''));
+    $nuHash    = nu_get_hash();
+    $nuSql     = null;   // full SQL override
+    $nuParams  = [];     // bound params for $nuSql
+    $nuWhere   = '';     // extra WHERE clause appended to default query
+    $nuOrder   = '';     // ORDER BY override
+
+    if ($browsePhp !== '') {
+        try {
+            eval($browsePhp);
+        } catch (Throwable $e) {
+            nu_log('browse_php error in form ' . $code . ': ' . $e->getMessage(), 'list');
+            // Fall through to default query on error
+        }
+    }
+
+    // ── Build query ──────────────────────────────────────────────────────
     $searchEnabled = (int)($form[$c['browse_search_enabled']] ?? 0);
     $searchFields  = trim((string)($form[$c['browse_search_fields']] ?? ''));
-    if ($searchEnabled && $q !== '') {
-        $fields = array_filter(array_map('trim', explode(',', $searchFields)));
-        if (!$fields) { foreach (nu_flatten_layout($layout) as $field) { $fname = nu_safe_ident(nu_field_name($field)); if ($fname !== '') $fields[] = $fname; } }
-        $likes = [];
-        foreach ($fields as $fieldName) { $fieldName = nu_safe_ident($fieldName); if ($fieldName === '') continue; $likes[] = "`{$fieldName}` LIKE ?"; $params[] = '%' . $q . '%'; }
-        if ($likes) $where[] = '(' . implode(' OR ', $likes) . ')';
+
+    if ($nuSql !== null) {
+        // Full override — developer controls everything
+        $baseSql    = $nuSql;
+        $baseParams = $nuParams;
+
+        // Apply search filter on top of the custom query by wrapping it
+        if ($searchEnabled && $q !== '') {
+            $fields = array_filter(array_map('trim', explode(',', $searchFields)));
+            if (!$fields) {
+                foreach (nu_flatten_layout($layout) as $field) {
+                    $fname = nu_safe_ident(nu_field_name($field));
+                    if ($fname !== '') $fields[] = $fname;
+                }
+            }
+            $likes = [];
+            foreach ($fields as $fn) {
+                $fn = nu_safe_ident($fn);
+                if ($fn === '') continue;
+                $likes[] = "`{$fn}` LIKE ?";
+                $baseParams[] = '%' . $q . '%';
+            }
+            if ($likes) {
+                $baseSql = "SELECT * FROM ({$baseSql}) _nu_browse WHERE (" . implode(' OR ', $likes) . ")";
+            }
+        }
+
+        $orderClause = $nuOrder !== '' ? $nuOrder : $defaultOrder;
+        $total  = (int)nu_q("SELECT COUNT(*) FROM ({$baseSql}) _nu_cnt", $baseParams)->fetchColumn();
+        $pages  = max(1, (int)ceil($total / $pageSize));
+        if ($page > $pages) $page = $pages;
+        $offset = ($page - 1) * $pageSize;
+        $records = nu_q($baseSql . " ORDER BY {$orderClause} LIMIT {$pageSize} OFFSET {$offset}", $baseParams)
+                       ->fetchAll(PDO::FETCH_ASSOC);
+
+    } else {
+        // Default: SELECT * FROM table [WHERE …]
+        $where = []; $params = [];
+
+        if ($nuWhere !== '') {
+            $where[]  = '(' . $nuWhere . ')';
+            $params   = array_merge($params, $nuParams);
+        }
+
+        if ($searchEnabled && $q !== '') {
+            $fields = array_filter(array_map('trim', explode(',', $searchFields)));
+            if (!$fields) {
+                foreach (nu_flatten_layout($layout) as $field) {
+                    $fname = nu_safe_ident(nu_field_name($field));
+                    if ($fname !== '') $fields[] = $fname;
+                }
+            }
+            $likes = [];
+            foreach ($fields as $fn) {
+                $fn = nu_safe_ident($fn);
+                if ($fn === '') continue;
+                $likes[] = "`{$fn}` LIKE ?";
+                $params[] = '%' . $q . '%';
+            }
+            if ($likes) $where[] = '(' . implode(' OR ', $likes) . ')';
+        }
+
+        $whereSql    = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
+        $orderClause = $nuOrder !== '' ? $nuOrder : $defaultOrder;
+        $total       = (int)nu_q("SELECT COUNT(*) FROM `{$table}`" . $whereSql, $params)->fetchColumn();
+        $pages       = max(1, (int)ceil($total / $pageSize));
+        if ($page > $pages) $page = $pages;
+        $offset      = ($page - 1) * $pageSize;
+        $records     = nu_q("SELECT * FROM `{$table}`" . $whereSql . " ORDER BY {$orderClause} LIMIT {$pageSize} OFFSET {$offset}", $params)
+                           ->fetchAll(PDO::FETCH_ASSOC);
     }
-    $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
-    $total    = (int)nu_q("SELECT COUNT(*) FROM `{$table}`" . $whereSql, $params)->fetchColumn();
-    $pages    = max(1, (int)ceil($total / $pageSize));
-    if ($page > $pages) $page = $pages;
-    $offset   = ($page - 1) * $pageSize;
-    $pk       = nu_get_pk($table);
-    $sortSql  = trim((string)($form[$c['browse_default_sort']] ?? ''));
-    $orderSql = $sortSql !== '' ? " ORDER BY {$sortSql}" : " ORDER BY `{$pk}` DESC";
-    $records  = nu_q("SELECT * FROM `{$table}`" . $whereSql . $orderSql . " LIMIT {$pageSize} OFFSET {$offset}", $params)->fetchAll(PDO::FETCH_ASSOC);
+
     nu_json(['success' => true, 'data' => [
         'layout'  => $layout, 'records' => $records,
         'page'    => $page,   'pages'   => $pages,   'total' => $total,
@@ -1331,7 +1443,6 @@ function nu_handle_save() {
 
     $save = nu_filter_save_to_columns($save, $table, $pk);
 
-    // PHP 7.4 compatible — explicit closure instead of arrow function
     $saveWithoutPk = array_filter($save, function ($v, $k) use ($pk) { return $k !== $pk; }, ARRAY_FILTER_USE_BOTH);
     if (!$id && empty($saveWithoutPk) && $pkType !== 'uuid') {
         nu_json(['success' => false, 'error' => 'No fields to save'], 400);
@@ -1356,11 +1467,6 @@ function nu_handle_save() {
     }
 }
 
-/**
- * Save (create or update) a form definition in nu_forms.
- * Also creates the data table if it doesn't exist, and adds any missing columns.
- * Called by the builder's "Save Form" button via POST action=save_form.
- */
 function nu_handle_save_form() {
     $data = nu_request_json();
 
@@ -1370,11 +1476,9 @@ function nu_handle_save_form() {
 
     $name      = trim((string)($data['form_name']   ?? ''));
     $code      = trim((string)($data['form_code']   ?? ''));
-    // Read table BEFORE any array_intersect_key strip so it is always available for DDL
     $table     = trim((string)($data['form_table']  ?? ''));
     $layout    = $data['form_layout'] ?? [];
     $tableMode = trim((string)($data['form_table_mode'] ?? 'new'));
-    // Normalise pk_type — accept 'autoincrement', 'auto', 'int', or 'uuid'
     $pkType    = trim((string)($data['form_pk_type'] ?? 'autoincrement'));
 
     nu_log('save_form called — name="' . $name . '" code="' . $code . '" table="' . $table . '" table_mode="' . $tableMode . '" pk_type="' . $pkType . '"', 'save_form');
@@ -1408,9 +1512,9 @@ function nu_handle_save_form() {
         $c['browse_search_fields']     => $data['browse_search_fields']     ?? '',
         $c['browse_page_size']         => (int)($data['browse_page_size']   ?? 20),
         $c['browse_default_sort']      => $data['browse_default_sort']      ?? '',
+        $c['browse_php']               => $data['browse_php']               ?? '',
     ];
 
-    // Strip columns that don't exist yet in nu_forms (graceful degradation)
     $formTableCols = nu_get_table_columns($ftable);
     if (!empty($formTableCols)) {
         $save = array_intersect_key($save, $formTableCols);
@@ -1437,7 +1541,6 @@ function nu_handle_save_form() {
         nu_log('Inserted form row id=' . $formId, 'save_form');
     }
 
-    // ── DDL: create table or sync missing columns ────────────────────────
     $ddlResult  = ['created' => false, 'added' => [], 'errors' => []];
     $safeTable  = nu_safe_ident($table);
     $flatFields = nu_flatten_layout(is_array($layout) ? $layout : []);
@@ -1447,7 +1550,6 @@ function nu_handle_save_form() {
     } elseif ($tableMode === 'existing_no_sync') {
         nu_log('table_mode=existing_no_sync — skipping DDL for table ' . $safeTable, 'save_form');
     } elseif (!nu_table_exists($safeTable)) {
-        // Table does not exist — create it
         nu_log('Table does not exist, will CREATE: ' . $safeTable, 'save_form');
         $createResult = nu_create_form_table($safeTable, $pkType, $flatFields);
         $ddlResult['created'] = $createResult['created'];
@@ -1456,7 +1558,6 @@ function nu_handle_save_form() {
             nu_log('Table creation error for ' . $safeTable . ': ' . $createResult['error'], 'save_form');
         }
     } else {
-        // Table exists — sync missing columns
         nu_log('Table exists, syncing columns for: ' . $safeTable, 'save_form');
         $syncResult = nu_sync_form_table_columns($safeTable, $flatFields);
         $ddlResult['added']  = $syncResult['added'];
@@ -1476,9 +1577,6 @@ function nu_handle_save_form() {
     ]);
 }
 
-/**
- * Load a form definition for the builder editor.
- */
 function nu_handle_load_form() {
     $formId = (int)($_GET['form_id'] ?? 0);
     if ($formId <= 0) nu_json(['success' => false, 'error' => 'Missing form_id'], 400);
@@ -1514,10 +1612,11 @@ function nu_handle_load_form() {
         'browse_search_fields'     => $form[$c['browse_search_fields']]      ?? '',
         'browse_page_size'         => (int)($form[$c['browse_page_size']]    ?? 20),
         'browse_default_sort'      => $form[$c['browse_default_sort']]       ?? '',
+        'browse_php'               => $form[$c['browse_php']]                ?? '',
     ]]);
 }
 
-/* ── Router ────────────────────────────────────────── */
+/* ── Router ─────────────────────────────────────────── */
 try {
     $action = $_GET['action'] ?? '';
     nu_log('action=' . $action, 'router');
