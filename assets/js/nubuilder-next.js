@@ -70,21 +70,29 @@
 
 
 // ─── Permission helpers ───────────────────────────────────────────────────────
-// window.nuUserRole is injected by index.php (e.g. 'globeadmin', 'admin', 'user')
+// window.nuUserRole  is injected by index.php (e.g. 'globeadmin', 'admin', 'viewer')
+// window.nuUserPerms is injected by index.php with per-action flags from the
+//   role's wildcard row in nu_role_form_permissions, e.g.
+//   { canAdd: true, canEdit: false, canDelete: false }
 window.NuPerms = {
   _editRoles: new Set(['globeadmin', 'admin']),
 
   canEdit() {
     const role = (window.nuUserRole || '').toLowerCase();
-    return this._editRoles.has(role);
+    if (this._editRoles.has(role)) return true;
+    return !!(window.nuUserPerms && window.nuUserPerms.canEdit);
   },
 
   canAdd() {
-    return this.canEdit();
+    const role = (window.nuUserRole || '').toLowerCase();
+    if (this._editRoles.has(role)) return true;
+    return !!(window.nuUserPerms && window.nuUserPerms.canAdd);
   },
 
   canDelete() {
-    return this.canEdit();
+    const role = (window.nuUserRole || '').toLowerCase();
+    if (this._editRoles.has(role)) return true;
+    return !!(window.nuUserPerms && window.nuUserPerms.canDelete);
   }
 };
 
@@ -706,6 +714,7 @@ window.NuApp = {
 
   async _browseInline(code, page, query, formLabel) {
     try {
+      const _canAdd  = NuPerms.canAdd();
       const _canEdit = NuPerms.canEdit();
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
@@ -727,8 +736,8 @@ window.NuApp = {
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;align-items:center;';
 
-      // Only show Add New for users with edit permission
-      if (_canEdit) {
+      // Only show Add New for users with add permission
+      if (_canAdd) {
         const addBtn = document.createElement('button');
         addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
         addBtn.textContent = '+ Add New Record';
@@ -751,6 +760,7 @@ window.NuApp = {
 
   async _browseModal(code, page, query, formLabel) {
     try {
+      const _canAdd  = NuPerms.canAdd();
       const _canEdit = NuPerms.canEdit();
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
@@ -776,8 +786,8 @@ window.NuApp = {
       const rightBtns = document.createElement('div');
       rightBtns.style.cssText = 'display:flex;gap:6px;flex-shrink:0;align-items:center;';
 
-      // Only show Add for users with edit permission
-      if (_canEdit) {
+      // Only show Add for users with add permission
+      if (_canAdd) {
         const addBtn = document.createElement('button');
         addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add New';
         addBtn.onclick = () => this.addRecord(code, label, 'modal');
@@ -803,6 +813,7 @@ window.NuApp = {
 
   async _browseFullPage(code, page, query, formLabel) {
     try {
+      const _canAdd  = NuPerms.canAdd();
       const _canEdit = NuPerms.canEdit();
       const json  = await this._fetchBrowseData(code, page, query);
       const data  = json.data || {};
@@ -825,8 +836,8 @@ window.NuApp = {
       const btnGroup = document.createElement('div');
       btnGroup.style.cssText = 'display:flex;gap:8px;';
 
-      // Only show Add New for users with edit permission
-      if (_canEdit) {
+      // Only show Add New for users with add permission
+      if (_canAdd) {
         const addBtn = document.createElement('button');
         addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm'; addBtn.textContent = '+ Add New Record';
         addBtn.onclick = () => this.addRecord(code, label, 'fullpage');

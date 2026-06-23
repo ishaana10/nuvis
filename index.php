@@ -80,6 +80,26 @@ if (is_array($currentUser)) {
 $_role   = strtolower((string)($currentUser['usr_role'] ?? ''));
 $isAdmin = ($_role === 'globeadmin' || $_role === 'admin');
 
+// ── Resolve global (wildcard) form permissions for this role ─────────────────
+// Used to inject nuUserPerms into JS so NuPerms can evaluate canAdd/canEdit/canDelete
+$_nuUserPerms = ['canAdd' => false, 'canEdit' => false, 'canDelete' => false];
+if ($isLoggedIn && $auth) {
+    if ($isAdmin) {
+        $_nuUserPerms = ['canAdd' => true, 'canEdit' => true, 'canDelete' => true];
+    } else {
+        try {
+            $wildcardPerms = $auth->formPerms('*');
+            $_nuUserPerms = [
+                'canAdd'    => !empty($wildcardPerms['add']),
+                'canEdit'   => !empty($wildcardPerms['edit']),
+                'canDelete' => !empty($wildcardPerms['delete']),
+            ];
+        } catch (Throwable $e) {
+            error_log('[index.php perms] ' . $e->getMessage());
+        }
+    }
+}
+
 // ─── Asset helpers ────────────────────────────────────────────────────────────
 function nu_asset(string $path): string {
     $full = __DIR__ . '/' . ltrim($path, '/');
@@ -432,7 +452,9 @@ if ($isLoggedIn && $currentUser) {
 <script>
 (function () {
     // ── Inject server-side user role so NuPerms can evaluate access ──────────
-    window.nuUserRole = <?= json_encode($_role) ?>;
+    window.nuUserRole  = <?= json_encode($_role) ?>;
+    // ── Inject per-action permission flags derived from role's wildcard row ──
+    window.nuUserPerms = <?= json_encode($_nuUserPerms) ?>;
 
     // Restore theme
     try {
