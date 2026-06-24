@@ -1,15 +1,13 @@
 <?php
-declare(strict_types=1);
 /**
  * NuMenuRenderer
  * Renders the sidebar <nav> from nu_menus, filtered by the current user's role.
- *
- * Each navigable leaf link calls:
- *   NuApp.loadModule(module, defaultView, browseMode, previewMode)
+ * PHP 7.4 compatible — no typed class properties, no str_contains, no array_is_list.
  */
 class NuMenuRenderer
 {
-    private static array $icons = [
+    // No typed property declarations (PHP 8.0+ only) — use plain assignments
+    private static $icons = array(
         'dashboard'  => '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
         'forms'      => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
         'file-text'  => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
@@ -33,35 +31,34 @@ class NuMenuRenderer
         'lock'       => '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
         'alert'      => '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
         'copy'       => '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-        'inspector'  => '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><line x1="19" y1="19" x2="23" y2="23"/><circle cx="19" cy="19" r="3"/>',
+        'inspector'  => '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
         'layout'     => '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
         'divider'    => '',
         'group'      => '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
         'default'    => '<circle cx="12" cy="12" r="9"/>',
-    ];
+    );
 
-    // Types that support open-mode
-    private static array $openModeTypes = ['form', 'report', 'query'];
+    // Types that support open-mode (no typed property — PHP 7.4 compatible)
+    private static $openModeTypes = array('form', 'report', 'query');
 
     /**
      * Check whether a menu row is accessible by the given role.
-     * Reads from menu_role_access (JSON array or comma-separated string) and also
-     * falls back to the legacy menu_roles column if present.
+     * PHP 7.4 safe: no str_contains, no match expression.
      */
-    private static function isAccessible(array $item, string $userRole, bool $isAdmin): bool
+    private static function isAccessible(array $item, $userRole, $isAdmin)
     {
         if ($isAdmin) return true;
 
-        // Prefer menu_role_access (new column, JSON array stored as string).
-        // Fall back to menu_roles (old plain-text column).
-        $raw = $item['menu_role_access'] ?? $item['menu_roles'] ?? '';
+        $raw = isset($item['menu_role_access']) ? $item['menu_role_access'] : '';
+        if ($raw === '') {
+            $raw = isset($item['menu_roles']) ? $item['menu_roles'] : '';
+        }
         $raw = trim((string)$raw);
 
-        // Empty = visible to all
         if ($raw === '' || $raw === '[]' || $raw === 'null') return true;
 
         // JSON array format  e.g. ["admin","globeadmin"]
-        if ($raw[0] === '[') {
+        if (isset($raw[0]) && $raw[0] === '[') {
             $decoded = json_decode($raw, true);
             if (is_array($decoded)) {
                 $allowed = array_map('strtolower', array_map('trim', $decoded));
@@ -74,15 +71,14 @@ class NuMenuRenderer
         return in_array($userRole, $allowed, true);
     }
 
-    public static function render(?array $currentUser): string
+    public static function render($currentUser)
     {
-        $userRole = strtolower((string)($currentUser['usr_role'] ?? ''));
+        $userRole = strtolower((string)(isset($currentUser['usr_role']) ? $currentUser['usr_role'] : ''));
         $isAdmin  = ($userRole === 'globeadmin' || $userRole === 'admin');
 
-        $rows = [];
+        $rows = array();
         try {
             $db   = NuDatabase::getInstance();
-            // Fetch both role columns so isAccessible() always has what it needs.
             $rows = $db->fetchAll(
                 "SELECT menu_id, menu_label, menu_type,
                         COALESCE(menu_target, '') AS menu_target,
@@ -97,8 +93,8 @@ class NuMenuRenderer
                  WHERE  menu_active = 1
                  ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
             );
-        } catch (Throwable $e) {
-            // open-mode columns not yet migrated — fall back to legacy menu_open_mode
+        } catch (Exception $e) {
+            // New open-mode columns not yet added — try legacy menu_open_mode
             try {
                 $db  = NuDatabase::getInstance();
                 $raw = $db->fetchAll(
@@ -113,17 +109,18 @@ class NuMenuRenderer
                      WHERE  menu_active = 1
                      ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
                 );
-                $rows = array_map(static function (array $r): array {
-                    $parts = explode('|', $r['menu_open_mode'] ?? 'inline|browse', 2);
-                    $bm    = in_array($parts[0] ?? '', ['inline','popup'])   ? $parts[0] : 'inline';
-                    $dv    = in_array($parts[1] ?? '', ['browse','preview']) ? $parts[1] : 'browse';
+                $rows = array();
+                foreach ($raw as $r) {
+                    $parts = explode('|', isset($r['menu_open_mode']) ? $r['menu_open_mode'] : 'inline|browse', 2);
+                    $bm    = in_array(isset($parts[0]) ? $parts[0] : '', array('inline', 'popup'))   ? $parts[0] : 'inline';
+                    $dv    = in_array(isset($parts[1]) ? $parts[1] : '', array('browse', 'preview')) ? $parts[1] : 'browse';
                     $r['menu_browse_mode']  = $bm;
                     $r['menu_preview_mode'] = 'inline';
                     $r['menu_default_view'] = $dv;
-                    return $r;
-                }, $raw);
-            } catch (Throwable $e2) {
-                // Last resort: bare minimum columns only
+                    $rows[] = $r;
+                }
+            } catch (Exception $e2) {
+                // Last resort: bare minimum columns
                 try {
                     $db  = NuDatabase::getInstance();
                     $raw = $db->fetchAll(
@@ -137,13 +134,14 @@ class NuMenuRenderer
                          WHERE  menu_active = 1
                          ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
                     );
-                    $rows = array_map(static function (array $r): array {
+                    $rows = array();
+                    foreach ($raw as $r) {
                         $r['menu_browse_mode']  = 'inline';
                         $r['menu_preview_mode'] = 'inline';
                         $r['menu_default_view'] = 'browse';
-                        return $r;
-                    }, $raw);
-                } catch (Throwable $e3) {
+                        $rows[] = $r;
+                    }
+                } catch (Exception $e3) {
                     error_log('[MenuRenderer] ' . $e3->getMessage());
                     return '';
                 }
@@ -152,18 +150,16 @@ class NuMenuRenderer
 
         if (empty($rows)) return '';
 
-        // ── Role filtering (applied to ALL rows — parent AND children) ────────
-        // Index ALL rows by id first so we can look up parents.
-        $byId = [];
+        // ── Role filtering (ALL rows — parent AND children) ───────────────────
+        $byId = array();
         foreach ($rows as $row) {
             $byId[(int)$row['menu_id']] = $row;
         }
 
-        $visible = [];
+        $visible = array();
         foreach ($rows as $item) {
             if (!self::isAccessible($item, $userRole, $isAdmin)) continue;
 
-            // If the item is a child, also verify the parent is accessible.
             $pid = (int)$item['menu_parent_id'];
             if ($pid > 0 && isset($byId[$pid])) {
                 if (!self::isAccessible($byId[$pid], $userRole, $isAdmin)) continue;
@@ -173,8 +169,8 @@ class NuMenuRenderer
         }
 
         // ── Build tree ────────────────────────────────────────────────────────
-        $topLevel = [];
-        $children = [];
+        $topLevel = array();
+        $children = array();
         foreach ($visible as $item) {
             $pid = (int)$item['menu_parent_id'];
             if ($pid === 0) {
@@ -188,26 +184,26 @@ class NuMenuRenderer
 
         $html = "\n<nav class=\"nu-nav\" id=\"nuDynNav\">\n";
         foreach ($topLevel as $item) {
-            $html .= self::renderItem($item, $children[$item['menu_id']] ?? []);
+            $html .= self::renderItem($item, isset($children[$item['menu_id']]) ? $children[$item['menu_id']] : array());
         }
         $html .= "</nav>\n";
         return $html;
     }
 
-    private static function renderItem(array $item, array $kids): string
+    private static function renderItem(array $item, array $kids)
     {
         $type    = $item['menu_type'];
         $label   = htmlspecialchars((string)$item['menu_label'], ENT_QUOTES, 'UTF-8');
-        $iconKey = strtolower(trim($item['menu_icon'] ?? 'default'));
-        $svgBody = self::$icons[$iconKey] ?? self::$icons['default'];
+        $iconKey = strtolower(trim(isset($item['menu_icon']) ? $item['menu_icon'] : 'default'));
+        $svgBody = isset(self::$icons[$iconKey]) ? self::$icons[$iconKey] : self::$icons['default'];
 
         if ($type === 'divider') {
             return "<hr class=\"nu-nav-divider\">\n";
         }
 
-        $rawTarget = trim($item['menu_target'] ?? '');
+        $rawTarget = trim(isset($item['menu_target']) ? $item['menu_target'] : '');
 
-        // ── Group: collapsible section, toggle only ───────────────────────────
+        // ── Group: collapsible section ────────────────────────────────────────
         if (!empty($kids)) {
             $groupId = 'nu-group-' . (int)$item['menu_id'];
             $out  = "<div class=\"nu-nav-group\">\n";
@@ -219,7 +215,7 @@ class NuMenuRenderer
             $out .= "</button>\n";
             $out .= "  <ul class=\"nu-nav-children\" id=\"{$groupId}\">\n";
             foreach ($kids as $child) {
-                $out .= "    <li>" . self::renderItem($child, []) . "</li>\n";
+                $out .= "    <li>" . self::renderItem($child, array()) . "</li>\n";
             }
             $out .= "  </ul>\n";
             $out .= "</div>\n";
@@ -228,7 +224,7 @@ class NuMenuRenderer
 
         // ── URL item ──────────────────────────────────────────────────────────
         if ($type === 'url') {
-            $href = htmlspecialchars($rawTarget ?: '#', ENT_QUOTES, 'UTF-8');
+            $href = htmlspecialchars($rawTarget ? $rawTarget : '#', ENT_QUOTES, 'UTF-8');
             $out  = "<a href=\"{$href}\" class=\"nu-nav-item\" target=\"_blank\" rel=\"noopener noreferrer\">\n";
             $out .= self::svgIcon($svgBody);
             $out .= "  <span>{$label}</span>\n";
@@ -236,16 +232,16 @@ class NuMenuRenderer
             return $out;
         }
 
-        // ── Standard leaf item (form / report / query / group-leaf) ───────────
+        // ── Standard leaf item ────────────────────────────────────────────────
         $module = $rawTarget;
         if ($module === '') {
             return "<!-- nu_menus id={$item['menu_id']} skipped: no target -->\n";
         }
         $moduleSafe = htmlspecialchars($module, ENT_QUOTES, 'UTF-8');
 
-        $browseMode  = self::sanitiseDisplay($item['menu_browse_mode']  ?? 'inline');
-        $previewMode = self::sanitiseDisplay($item['menu_preview_mode'] ?? 'inline');
-        $defaultView = self::sanitiseView($item['menu_default_view']    ?? 'browse');
+        $browseMode  = self::sanitiseDisplay(isset($item['menu_browse_mode'])  ? $item['menu_browse_mode']  : 'inline');
+        $previewMode = self::sanitiseDisplay(isset($item['menu_preview_mode']) ? $item['menu_preview_mode'] : 'inline');
+        $defaultView = self::sanitiseView(isset($item['menu_default_view'])    ? $item['menu_default_view']    : 'browse');
 
         $openAttrs = '';
         if (in_array($type, self::$openModeTypes, true)) {
@@ -264,21 +260,21 @@ class NuMenuRenderer
         return $out;
     }
 
-    private static function svgIcon(string $body): string
+    private static function svgIcon($body)
     {
         if ($body === '') return '';
         return "  <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\">\n    {$body}\n  </svg>\n";
     }
 
-    private static function sanitiseDisplay(string $v): string
+    private static function sanitiseDisplay($v)
     {
-        $v = strtolower(trim($v));
-        return in_array($v, ['inline', 'popup'], true) ? $v : 'inline';
+        $v = strtolower(trim((string)$v));
+        return in_array($v, array('inline', 'popup'), true) ? $v : 'inline';
     }
 
-    private static function sanitiseView(string $v): string
+    private static function sanitiseView($v)
     {
-        $v = strtolower(trim($v));
-        return in_array($v, ['browse', 'preview'], true) ? $v : 'browse';
+        $v = strtolower(trim((string)$v));
+        return in_array($v, array('browse', 'preview'), true) ? $v : 'browse';
     }
 }
