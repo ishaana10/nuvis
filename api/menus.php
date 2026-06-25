@@ -29,6 +29,29 @@ switch ($action) {
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . htmlspecialchars($action)]);
 }
 
+// ── Normalise roles input → JSON array string (or '' for "all roles") ─────────
+// Accepts: '', 'admin,globeadmin', '["admin"]', ['admin','globeadmin']
+function normaliseRoles($raw)
+{
+    if (is_array($raw)) {
+        $arr = array_values(array_filter(array_map('trim', $raw), 'strlen'));
+        return $arr ? json_encode($arr) : '';
+    }
+    $raw = trim((string)$raw);
+    if ($raw === '' || $raw === '[]' || $raw === 'null') return '';
+    // Already a JSON array
+    if (isset($raw[0]) && $raw[0] === '[') {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $arr = array_values(array_filter(array_map('trim', $decoded), 'strlen'));
+            return $arr ? json_encode($arr) : '';
+        }
+    }
+    // Comma-separated
+    $arr = array_values(array_filter(array_map('trim', explode(',', $raw)), 'strlen'));
+    return $arr ? json_encode($arr) : '';
+}
+
 // ── GET single ────────────────────────────────────────────────────────────────
 function actionGet($db, $auth) {
     if (!$auth->hasPermission('menus.view')) {
@@ -64,7 +87,7 @@ function actionCreate($db, $auth) {
     $target = trim($data['target'] ?? '');
     $parent = (int)($data['parent'] ?? 0);
     $order  = (int)($data['order']  ?? 0);
-    $roles  = trim($data['roles']  ?? '');
+    $roles  = normaliseRoles($data['roles'] ?? '');
     $active = isset($data['active']) ? (int)$data['active'] : 1;
     $icon   = trim($data['icon']   ?? '☰');
 
@@ -86,14 +109,15 @@ function actionCreate($db, $auth) {
     }
 
     $row = [
-        'menu_label'     => $label,
-        'menu_type'      => $type,
-        'menu_target'    => $target,
-        'menu_parent_id' => $parent,
-        'menu_order'     => $order,
-        'menu_roles'     => $roles,
-        'menu_active'    => $active,
-        'menu_icon'      => $icon,
+        'menu_label'       => $label,
+        'menu_type'        => $type,
+        'menu_target'      => $target,
+        'menu_parent_id'   => $parent,
+        'menu_order'       => $order,
+        'menu_role_access' => $roles,   // canonical column
+        'menu_roles'       => $roles,   // legacy column kept in sync
+        'menu_active'      => $active,
+        'menu_icon'        => $icon,
     ];
 
     try {
@@ -121,7 +145,7 @@ function actionUpdate($db, $auth) {
     $target = trim($data['target']  ?? '');
     $parent = (int)($data['parent'] ?? 0);
     $order  = (int)($data['order']  ?? 0);
-    $roles  = trim($data['roles']   ?? '');
+    $roles  = normaliseRoles($data['roles'] ?? '');
     $active = isset($data['active']) ? (int)$data['active'] : 1;
     $icon   = trim($data['icon']    ?? '☰');
 
@@ -149,14 +173,15 @@ function actionUpdate($db, $auth) {
     }
 
     $row = [
-        'menu_label'     => $label,
-        'menu_type'      => $type,
-        'menu_target'    => $target,
-        'menu_parent_id' => $parent,
-        'menu_order'     => $order,
-        'menu_roles'     => $roles,
-        'menu_active'    => $active,
-        'menu_icon'      => $icon,
+        'menu_label'       => $label,
+        'menu_type'        => $type,
+        'menu_target'      => $target,
+        'menu_parent_id'   => $parent,
+        'menu_order'       => $order,
+        'menu_role_access' => $roles,   // canonical column
+        'menu_roles'       => $roles,   // legacy column kept in sync
+        'menu_active'      => $active,
+        'menu_icon'        => $icon,
     ];
 
     try {
