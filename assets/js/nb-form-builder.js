@@ -213,11 +213,9 @@
       + ' <span class="nb-tab-nav-del" style="font-size:10px;cursor:pointer;color:var(--text-tertiary);margin-left:2px;" title="Remove tab">×</span>';
     navItem.addEventListener('click', function (e) {
       if (e.target.classList.contains('nb-tab-nav-del')) {
-        // Remove this tab
         var panel = document.getElementById(panelId);
         if (panel) panel.remove();
         navItem.remove();
-        // Activate first remaining tab
         var firstNav = nav.querySelector('.nb-cfield-tab-nav-item');
         if (firstNav) {
           firstNav.classList.add('active');
@@ -232,7 +230,6 @@
       var tp = document.getElementById(panelId);
       if (tp) tp.classList.add('active');
     });
-    // Insert before Add Tab button
     var addBtn = nav.querySelector('.nb-cfield-tab-add-btn');
     if (addBtn) nav.insertBefore(navItem, addBtn);
     else nav.appendChild(navItem);
@@ -265,7 +262,6 @@
      target = .nb-container-group-body  or  .nb-tab-panel-rows  or  .nb-cfield-tab-panel
   ─────────────────────────────────────────────────────────────── */
   function _addRowToContainer(target, fields) {
-    // Resolve the actual rows wrapper
     var rowsWrap = target;
     if (target && target.classList.contains('nb-cfield-tab-panel')) {
       rowsWrap = target.querySelector('.nb-tab-panel-rows');
@@ -275,7 +271,6 @@
     }
     if (!rowsWrap) return null;
 
-    // Remove the placeholder hint once a real row is added
     var hint = rowsWrap.querySelector('.nb-row-drop-hint');
     if (hint) hint.remove();
 
@@ -286,7 +281,7 @@
         + '<span class="nb-row-drag" title="Drag row">⠇</span>'
         + '<span class="nb-row-label">Row</span>'
         + '<span class="nb-row-actions">'
-          + '<button class="nb-row-btn del" onclick="var r=this.closest(\'.nb-row\');var p=r.parentNode;r.remove();if(!p.querySelector(\'.nb-row\')){p.innerHTML=\'<div class=\\"nb-row-drop-hint\\" style=\\"grid-column:1/-1;\\">Add a row, then drop fields in</div>\'}; window.nbFormBuilder._updateEmptyState();">✕</button>'
+          + '<button class="nb-row-btn del" onclick="var r=this.closest(\'.nb-row\');var p=r.parentNode;r.remove();if(!p.querySelector(\'.nb-row\')){p.innerHTML=\'<div class=\\\"nb-row-drop-hint\\\" style=\\\"grid-column:1/-1;\\\">Add a row, then drop fields in</div>\'}; window.nbFormBuilder._updateEmptyState();">✕</button>'
         + '</span>'
       + '</div>'
       + '<div class="nb-row-body">'
@@ -297,7 +292,6 @@
     var body = row.querySelector('.nb-row-body');
     if (body) _attachRowBodyDrop(body);
 
-    // Populate with fields if restoring
     if (fields && fields.length) {
       fields.forEach(function (f) {
         var type = f.type || 'text';
@@ -452,7 +446,6 @@
       if (!canvas) return null;
       var extra = extraData || {};
 
-      // Group and Tab are canvas-level containers, not field cards
       if (type === 'group') {
         var grp = _makeGroupContainer(extra);
         canvas.appendChild(grp);
@@ -515,7 +508,6 @@
         canvasType = 'select2';
       }
 
-      // Group and Tab are not field cards — return null to signal caller
       if (type === 'group' || type === 'tab') return null;
 
       var spanBtns = [3,4,6,8,12].map(function (n) {
@@ -845,10 +837,8 @@
       if (!canvas) return [];
       var layout = [];
 
-      // Walk top-level children: .nb-row and .nb-container
       Array.prototype.forEach.call(canvas.children, function (el) {
         if (el.classList.contains('nb-row')) {
-          // Plain row → collect its fields
           var rowFields = _collectRowFields(el);
           rowFields.forEach(function (f) { layout.push(f); });
 
@@ -871,480 +861,4 @@
 
           } else if (ctype === 'tab') {
             var tabsData = [];
-            var nav = el.querySelector('[id$="-nav"]');
-            if (nav) {
-              Array.prototype.forEach.call(nav.querySelectorAll('.nb-cfield-tab-nav-item'), function (navItem) {
-                var panelId = navItem.dataset.panelTarget;
-                var panel   = panelId ? document.getElementById(panelId) : null;
-                var tabName = '';
-                var nameInput = navItem.querySelector('.nb-tab-name-input');
-                if (nameInput) tabName = nameInput.value || '';
-                var rows = panel ? _collectContainerRows(panel.querySelector('.nb-tab-panel-rows')) : [];
-                tabsData.push({ name: tabName, rows: rows });
-              });
-            }
-            layout.push({
-              type:      'tab',
-              label:     'Tab Container',
-              name:      'tab_' + Date.now(),
-              tabs:      tabsData,
-              col:       12,
-              row_index: -1
-            });
-          }
-        }
-      });
-
-      if (typeof window._nbSfAugmentLayout === 'function') {
-        layout = window._nbSfAugmentLayout(layout);
-      }
-      return layout;
-    },
-
-    // ── saveForm ──────────────────────────────────────────
-    saveForm: async function () {
-      var nameEl  = document.getElementById('builderFormName');
-      var codeEl  = document.getElementById('builderFormCode');
-      var tableEl = document.getElementById('builderFormTable');
-      var editEl  = document.getElementById('editFormId');
-
-      var name   = nameEl  ? nameEl.value.trim()  : '';
-      var code   = codeEl  ? codeEl.value.trim()  : '';
-      var table  = tableEl ? tableEl.value.trim()  : '';
-      var editId = editEl  ? editEl.value.trim()   : '';
-
-      if (!name) { NuApp.toast('Form name is required', 'error'); return; }
-
-      var _r = function (n) { var e = document.querySelector('input[name="' + n + '"]:checked'); return e ? e.value : ''; };
-      var _v = function (id) { var e = document.getElementById(id); return e ? e.value : ''; };
-      var _c = function (id) { var e = document.getElementById(id); return !!(e && e.checked); };
-
-      var layout = this.getLayout();
-
-      var payload = {
-        form_name:       name,
-        form_code:       code,
-        form_table:      table,
-        form_type:       _r('formType')        || 'main',
-        form_table_mode: _r('formTableMode')   || 'new',
-        form_pk_type:    _r('formPkType')      || 'autoincrement',
-        form_layout:     JSON.stringify(layout),
-        browse_display_mode:       (function () { var e = document.getElementById('browseDisplayMode'); return e ? e.value : 'inline'; }()),
-        browse_sql:                _v('formBrowseSql'),
-        browse_columns:            _v('formBrowseColumns'),
-        browse_page_size:          _v('formBrowsePageSize'),
-        browse_default_sort:       _v('formBrowseDefaultSort'),
-        browse_search_enabled:     _c('formBrowseSearchEnabled') ? 1 : 0,
-        browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
-        browse_search_fields:      _v('formBrowseSearchFields'),
-        form_custom_js:            _v('formCustomJs'),
-        form_js_before_save:       _v('formJsBeforeSave'),
-        form_js_after_save:        _v('formJsAfterSave'),
-        form_custom_php:           _v('formCustomPhp'),
-        form_custom_css:           _v('formCustomCss')
-      };
-
-      if (editId) payload.form_id = editId;
-
-      try {
-        var res = await NuApp.apiJson('api/forms.php?action=save', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (res && res.success) {
-          NuApp.toast(editId ? 'Form updated!' : 'Form created!', 'success');
-          this.close();
-          NuApp.loadModule('forms');
-        } else {
-          NuApp.toast((res && res.error) || 'Save failed', 'error');
-        }
-      } catch (err) {
-        NuApp.toast('Save error: ' + err.message, 'error');
-      }
-    },
-
-    _initAfterLoad: function () {
-      _attachAllRowDrops();
-    }
-  };
-
-  window.saveForm = function () { return window.nbFormBuilder.saveForm(); };
-
-
-  /* ════════════════════════════════════════════════════════════════════
-     Helpers — collect rows/fields from a container for serialization
-  ═══════════════════════════════════════════════════════════════════ */
-
-  function _collectRowFields(rowEl) {
-    var rowIndex = -1;
-    // Determine row_index from position in parent
-    var parent = rowEl.parentNode;
-    if (parent) {
-      var siblings = Array.prototype.filter.call(parent.children, function (c) { return c.classList.contains('nb-row'); });
-      rowIndex = siblings.indexOf(rowEl);
-    }
-    var fields = [];
-    rowEl.querySelectorAll('.nb-cfield').forEach(function (card) {
-      var f = _readFieldCard(card);
-      f.row_index = rowIndex;
-      fields.push(f);
-    });
-    return fields;
-  }
-
-  function _collectContainerRows(rowsWrap) {
-    if (!rowsWrap) return [];
-    var rows = [];
-    Array.prototype.forEach.call(rowsWrap.querySelectorAll('.nb-row'), function (rowEl) {
-      var fields = [];
-      rowEl.querySelectorAll('.nb-cfield').forEach(function (card) {
-        fields.push(_readFieldCard(card));
-      });
-      rows.push({ fields: fields });
-    });
-    return rows;
-  }
-
-  function _readFieldCard(card) {
-    var canvasType = card.dataset.type || 'text';
-    var labelEl    = card.querySelector('.nu-field-label');
-    var nameEl     = card.querySelector('.nu-field-name');
-    var reqEl      = card.querySelector('.nu-field-required');
-    var noDupEl    = card.querySelector('.nu-field-no-duplicate');
-    var readonlyEl = card.querySelector('.nu-field-readonly');
-    var hiddenEl   = card.querySelector('.nu-field-hidden');
-    var hidNormEl  = card.querySelector('.nu-field-hidden-normal');
-    var phEl       = card.querySelector('.nu-field-placeholder');
-    var defEl      = card.querySelector('.nu-field-default');
-    var optsEl     = card.querySelector('.nu-field-options');
-    var helpEl     = card.querySelector('.nu-field-help');
-    var formulaEl  = card.querySelector('.nu-field-formula');
-
-    var lkTableEl  = card.querySelector('.nu-lookup-table');
-    var lkDispEl   = card.querySelector('.nu-lookup-display');
-    var lkStoreEl  = card.querySelector('.nu-lookup-store');
-    var lkFilterEl = card.querySelector('.nu-lookup-filter');
-    var lkExtraEl  = card.querySelector('.nu-lookup-extra');
-
-    var runtimeType = canvasType;
-    var isMultiSel  = false;
-    var selModeEl   = card.querySelector('.nu-field-select-mode');
-
-    if (canvasType === 'select' || canvasType === 'select2') {
-      isMultiSel = selModeEl && selModeEl.value === 'multi';
-    }
-
-    var field = {
-      type:                    runtimeType,
-      label:                   labelEl    ? labelEl.value    : '',
-      name:                    nameEl     ? nameEl.value     : '',
-      required:                reqEl      ? reqEl.checked    : false,
-      no_duplicate:            noDupEl    ? noDupEl.checked  : false,
-      readonly:                readonlyEl ? readonlyEl.checked : false,
-      hidden:                  hiddenEl   ? hiddenEl.checked : false,
-      hidden_for_normal_users: hidNormEl  ? hidNormEl.checked : false,
-      placeholder:             phEl       ? phEl.value       : '',
-      default_value:           defEl      ? defEl.value      : '',
-      help_text:               helpEl     ? helpEl.value     : '',
-      col:                     parseInt(card.dataset.col, 10) || 12
-    };
-
-    if (canvasType === 'select') {
-      field.multiple    = isMultiSel;
-      field.select2     = false;
-      field.select_type = isMultiSel ? 'multiselect' : 'select';
-    }
-
-    if (canvasType === 'select2') {
-      field.select2     = true;
-      field.multiple    = isMultiSel;
-      field.select_type = 'select2';
-      var allowClearEl  = card.querySelector('.nu-field-allow-clear');
-      field.allow_clear = allowClearEl ? allowClearEl.checked : true;
-    }
-
-    if (canvasType === 'select' || canvasType === 'select2' || canvasType === 'radio' || canvasType === 'checkbox_group') {
-      var optSrcEl  = card.querySelector('.nu-field-opt-src:checked');
-      var optSource = optSrcEl ? optSrcEl.value : 'manual';
-      field.options_source = optSource;
-
-      if (optSource === 'table') {
-        var otEl = card.querySelector('.nu-field-opt-table');
-        var ovEl = card.querySelector('.nu-field-opt-val-col');
-        var olEl = card.querySelector('.nu-field-opt-label-col');
-        var ofEl = card.querySelector('.nu-field-opt-filter');
-        field.options_table     = otEl ? otEl.value.trim() : '';
-        field.options_value_col = ovEl ? ovEl.value.trim() : '';
-        field.options_label_col = olEl ? olEl.value.trim() : '';
-        field.options_filter    = ofEl ? ofEl.value.trim() : '';
-        field.options = [];
-      } else if (optsEl) {
-        field.options = optsEl.value.split('\n').map(function (l) {
-          l = l.trim(); if (!l) return null;
-          var parts = l.split('|');
-          return parts.length >= 2
-            ? { value: parts[0].trim(), label: parts[1].trim() }
-            : { value: l, label: l };
-        }).filter(Boolean);
-      }
-    }
-
-    if (formulaEl) field.formula = formulaEl.value;
-
-    if (canvasType === 'lookup' && lkTableEl) {
-      field.lookup = {
-        table:          lkTableEl  ? lkTableEl.value.trim()  : '',
-        display_column: lkDispEl   ? (lkDispEl.value.trim()  || 'name') : 'name',
-        id_column:      lkStoreEl  ? (lkStoreEl.value.trim() || 'id')   : 'id',
-        filter:         lkFilterEl ? lkFilterEl.value.trim() : '',
-        extra:          lkExtraEl  ? lkExtraEl.value.trim()  : ''
-      };
-    }
-
-    if (canvasType === 'subform') field.subform = {};
-
-    return field;
-  }
-
-
-  /* ════════════════════════════════════════════════════════════════════
-     SECTION 3 — Row/span canvas patches
-  ═══════════════════════════════════════════════════════════════════ */
-
-  if (!window.nuToggleContainer) {
-    window.nuToggleContainer = function (btn) {
-      if (!btn) return;
-      var body = document.getElementById(btn.getAttribute('data-target'));
-      if (!body) return;
-      var hidden = body.style.display === 'none' || body.style.display === '';
-      body.style.display = hidden ? 'block' : 'none';
-      btn.innerHTML = hidden ? '&#9660;' : '&#9654;';
-    };
-  }
-
-  function _attachSelectOptionsToggle(card) {
-    var radios = card.querySelectorAll('.nu-field-opt-src');
-    var manualPanel    = card.querySelector('.nb-select-manual');
-    var fromTablePanel = card.querySelector('.nb-select-from-table');
-    if (!radios.length || !manualPanel || !fromTablePanel) return;
-    radios.forEach(function (r) {
-      r.addEventListener('change', function () {
-        var isTable = r.value === 'table' && r.checked;
-        manualPanel.style.display    = isTable ? 'none' : '';
-        fromTablePanel.style.display = isTable ? ''     : 'none';
-      });
-    });
-    var checked = card.querySelector('.nu-field-opt-src:checked');
-    if (checked) {
-      var isTable = checked.value === 'table';
-      manualPanel.style.display    = isTable ? 'none' : '';
-      fromTablePanel.style.display = isTable ? ''     : 'none';
-    }
-  }
-
-  function _attachRowBodyDrop(rowBody) {
-    if (rowBody._nuDropPatched) return;
-    rowBody._nuDropPatched = true;
-
-    rowBody.addEventListener('dragover', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      rowBody.classList.add('drag-col-over');
-    });
-    rowBody.addEventListener('dragleave', function (e) {
-      if (!rowBody.contains(e.relatedTarget)) rowBody.classList.remove('drag-col-over');
-    });
-    rowBody.addEventListener('drop', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      rowBody.classList.remove('drag-col-over');
-
-      var cardId = e.dataTransfer.getData('text/nb-card-id');
-      if (cardId) {
-        var existing = document.getElementById(cardId);
-        if (existing) {
-          var oldRow = existing.closest('.nb-row');
-          var hint = rowBody.querySelector('.nb-row-drop-hint');
-          if (hint) hint.remove();
-          rowBody.appendChild(existing);
-          window.nbFormBuilder._applyColSpan(existing, existing.dataset.col || 12);
-          if (oldRow && !oldRow.querySelector('.nb-cfield')) oldRow.remove();
-          window.nbFormBuilder._updateEmptyState();
-          return;
-        }
-      }
-      var dtype = e.dataTransfer.getData('text/nb-type') || e.dataTransfer.getData('text/plain');
-      if (dtype && dtype !== 'group' && dtype !== 'tab') {
-        var card = window.nbFormBuilder._makeFieldCard(dtype, '', dtype + '_' + (++_fieldCounter), false, { col: 6 });
-        if (card) {
-          var hint2 = rowBody.querySelector('.nb-row-drop-hint');
-          if (hint2) hint2.remove();
-          card.id = 'nb-card-' + Date.now() + '-' + Math.random().toString(36).slice(2,5);
-          card.setAttribute('draggable','true');
-          card.addEventListener('dragstart', function (ev) { ev.dataTransfer.setData('text/nb-card-id', card.id); card.classList.add('drag-source'); });
-          card.addEventListener('dragend',   function ()   { card.classList.remove('drag-source'); });
-          rowBody.appendChild(card);
-          window.nbFormBuilder._applyColSpan(card, 6);
-        }
-        window.nbFormBuilder._updateEmptyState();
-      }
-    });
-  }
-
-  function _attachAllRowDrops() {
-    var canvas = document.getElementById('formCanvas');
-    if (!canvas) return;
-    canvas.querySelectorAll('.nb-row-body').forEach(_attachRowBodyDrop);
-  }
-
-  // Canvas-level drop: Group and Tab land directly on canvas
-  document.addEventListener('dragover', function (e) {
-    var canvas = document.getElementById('formCanvas');
-    if (canvas && e.target === canvas) { e.preventDefault(); canvas.classList.add('drag-over'); }
-  });
-  document.addEventListener('dragleave', function (e) {
-    var canvas = document.getElementById('formCanvas');
-    if (canvas && e.target === canvas) canvas.classList.remove('drag-over');
-  });
-  document.addEventListener('drop', function (e) {
-    var canvas = document.getElementById('formCanvas');
-    if (!canvas || e.target !== canvas) return;
-    e.preventDefault();
-    canvas.classList.remove('drag-over');
-    var dtype = e.dataTransfer.getData('text/nb-type') || e.dataTransfer.getData('text/plain');
-    if (dtype === 'group' || dtype === 'tab') {
-      window.nbFormBuilder.addField(dtype, {});
-    }
-  });
-
-  document.addEventListener('dragstart', function (e) {
-    var tool = e.target.closest ? e.target.closest('.nb-tool[data-type]') : null;
-    if (tool) e.dataTransfer.setData('text/nb-type', tool.dataset.type);
-    var card = e.target.closest ? e.target.closest('.nb-cfield[id]') : null;
-    if (card) {
-      if (!card.id) card.id = 'nb-card-' + Date.now();
-      e.dataTransfer.setData('text/nb-card-id', card.id);
-    }
-  }, true);
-
-
-  /* ════════════════════════════════════════════════════════════════════
-     SECTION 4 — Subform FK panel
-  ═══════════════════════════════════════════════════════════════════ */
-
-  function _toggleRow(cls, dataKey, checkedAttr, label, hint) {
-    return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">'
-      + '<input type="checkbox" class="' + cls + '" data-fk-flag="' + dataKey + '" ' + checkedAttr + '>'
-      + '<span><strong>' + label + '</strong>'
-      + (hint ? ' <span style="color:var(--text-muted,#999);font-size:11px;">— ' + hint + '</span>' : '')
-      + '</span></label>';
-  }
-
-  function _subformPanelHTML(d) {
-    var isFk     = d.is_fk           ? 'checked' : '';
-    var hideGrid = d.hide_in_grid    ? 'checked' : '';
-    var srvRo    = d.server_readonly ? 'checked' : '';
-    var viewGrid = (!d.subform_view || d.subform_view === 'grid') ? 'selected' : '';
-    var viewForm = (d.subform_view === 'form') ? 'selected' : '';
-    return [
-      '<div class="nb-sf-fk-panel" style="display:flex;flex-direction:column;gap:8px;padding:10px 0;grid-column:1/-1;">',
-        '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Child Form</label>',
-        '<select class="nu-input nb-sf-form-code" style="width:100%;"><option value="">— select form —</option></select></div>',
-        '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">FK Field (links child → parent)</label>',
-        '<div style="display:flex;gap:6px;">',
-          '<select class="nu-input nb-sf-fk-field" style="flex:1;"><option value="">— select FK field —</option></select>',
-          '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm nb-sf-create-fk">＋ Create FK Field</button>',
-        '</div></div>',
-        '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Display Mode</label>',
-        '<select class="nu-input nb-sf-view" style="width:100%;">',
-          '<option value="grid" ' + viewGrid + '>Grid (table)</option>',
-          '<option value="form" ' + viewForm + '>Form (stacked)</option>',
-        '</select></div>',
-        '<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);">',
-          '<label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">FK Field Flags</label>',
-          _toggleRow('nb-sf-is-fk',           'is_fk',           isFk,     'FK field',        'Force hidden; builder locks this field'),
-          _toggleRow('nb-sf-hide-in-grid',    'hide_in_grid',    hideGrid, 'Hide in grid',    'Excludes column from subform table'),
-          _toggleRow('nb-sf-server-readonly', 'server_readonly', srvRo,    'Server readonly', 'PHP ignores POST value; always writes parent ID'),
-        '</div>',
-      '</div>'
-    ].join('');
-  }
-
-  function _attachSubformPanelEvents(card, initialData) {
-    var panel = card.querySelector('.nb-sf-fk-panel');
-    if (!panel) return;
-
-    var d = initialData || {};
-
-    _populateFormDropdown(panel, d.form_code || '', function () {
-      if (d.form_code) _populateFkDropdown(panel, d.form_code, d.fk_field || '');
-    });
-
-    var viewSel = panel.querySelector('.nb-sf-view');
-    if (viewSel && d.subform_view) viewSel.value = d.subform_view;
-
-    var formSel = panel.querySelector('.nb-sf-form-code');
-    if (formSel) {
-      formSel.addEventListener('change', function () {
-        _populateFkDropdown(panel, formSel.value, '');
-      });
-    }
-
-    var createBtn = panel.querySelector('.nb-sf-create-fk');
-    if (createBtn) {
-      createBtn.addEventListener('click', function () { _createFkField(panel); });
-    }
-  }
-
-  function _populateFormDropdown(panel, selectedCode, cb) {
-    var sel = panel.querySelector('.nb-sf-form-code');
-    if (!sel) { if (cb) cb(); return; }
-    fetch('api/forms.php?action=list', { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (json) {
-        var forms = (json && json.success && json.forms) ? json.forms : [];
-        while (sel.options.length > 1) sel.remove(1);
-        forms.forEach(function (f) {
-          var opt = document.createElement('option');
-          opt.value = f.form_code || f.code || '';
-          opt.textContent = (f.form_name || f.name || opt.value) + ' (' + opt.value + ')';
-          sel.appendChild(opt);
-        });
-        if (selectedCode) {
-          sel.value = selectedCode;
-          if (sel.value !== selectedCode) {
-            var m = document.createElement('option');
-            m.value = selectedCode; m.textContent = selectedCode + ' (saved)';
-            sel.insertBefore(m, sel.options[1] || null);
-            sel.value = selectedCode;
-          }
-        }
-        if (cb) cb();
-      })
-      .catch(function () { if (cb) cb(); });
-  }
-
-  function _populateFkDropdown(panel, formCode, selectedFk) {
-    var sel = panel.querySelector('.nb-sf-fk-field');
-    if (!sel || !formCode) return;
-    fetch('api/forms.php?action=get_by_code&code=' + encodeURIComponent(formCode), { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (json) {
-        if (!json.success || !json.form) return;
-        var layout = [];
-        try { layout = JSON.parse(json.form.form_layout || '[]'); } catch (e) { layout = []; }
-        var fields = Array.isArray(layout) ? layout : [];
-        while (sel.options.length > 1) sel.remove(1);
-        fields.forEach(function (f) {
-          var fname = f.name || f.fieldname || '';
-          var ftype = f.type || f.fieldtype || 'text';
-          if (!fname || ['html','heading','divider','fieldset','subform','button','group','tab'].indexOf(ftype) !== -1) return;
-          var opt = document.createElement('option');
-          opt.value = fname;
-          opt.textContent = (f.label || f.fieldlabel || fname) + ' [' + fname + ']';
-          sel.appendChild(opt);
-        });
-        if (selectedFk) {
-          sel.value = selectedFk;
-          if (sel.value !== selectedFk) {
-            var m = document.crea
+            var nav = el.querySelector('[id$="-nav"
