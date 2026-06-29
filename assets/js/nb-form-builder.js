@@ -199,26 +199,16 @@
     grid.className = 'nb-fp-grid';
     grid.appendChild(spanBar);
 
-    // REPLACE the whole labelVal/nameVal/phVal/defVal/helpVal block with:
-var labelVal = (card.dataset.fieldLabel !== undefined && card.dataset.fieldLabel !== '')
-  ? card.dataset.fieldLabel
-  : (function () { var el = card.querySelector('.nu-field-label'); return el ? (el.value || el.getAttribute('value') || '') : ''; }());
-
-var nameVal = (card.dataset.fieldName !== undefined && card.dataset.fieldName !== '')
-  ? card.dataset.fieldName
-  : (function () { var el = card.querySelector('.nu-field-name'); return el ? (el.value || el.getAttribute('value') || '') : ''; }());
-
-var phVal = (card.dataset.fieldPh !== undefined && card.dataset.fieldPh !== '')
-  ? card.dataset.fieldPh
-  : (function () { var el = card.querySelector('.nu-field-placeholder'); return el ? (el.value || el.getAttribute('value') || '') : ''; }());
-
-var defVal = (card.dataset.fieldDefault !== undefined && card.dataset.fieldDefault !== '')
-  ? card.dataset.fieldDefault
-  : (function () { var el = card.querySelector('.nu-field-default'); return el ? (el.value || el.getAttribute('value') || '') : ''; }());
-
-var helpVal = (card.dataset.fieldHelp !== undefined && card.dataset.fieldHelp !== '')
-  ? card.dataset.fieldHelp
-  : (function () { var el = card.querySelector('.nu-field-help'); return el ? (el.value || el.getAttribute('value') || '') : ''; }());
+   var _dsOrDom = function (dsKey, cls) {
+  if (card.dataset[dsKey]) return card.dataset[dsKey];
+  var el = card.querySelector(cls);
+  return el ? (el.value || el.getAttribute('value') || '') : '';
+};
+var labelVal = _dsOrDom('fieldLabel',   '.nu-field-label');
+var nameVal  = _dsOrDom('fieldName',    '.nu-field-name');
+var phVal    = _dsOrDom('fieldPh',      '.nu-field-placeholder');
+var defVal   = _dsOrDom('fieldDefault', '.nu-field-default');
+var helpVal  = _dsOrDom('fieldHelp',    '.nu-field-help');
   
     function _fp(labelText, inputEl, full) {
       var wrap = document.createElement('div');
@@ -621,7 +611,9 @@ var helpVal = (card.dataset.fieldHelp !== undefined && card.dataset.fieldHelp !=
     _wireRowDrag(row); _attachRowBodyDrop(rb);
     if (fields && fields.length) {
       fields.forEach(function (f) {
-        var card = window.nbFormBuilder._makeFieldCard(f.type || 'text', f.label || '', f.name || '', !!f.required, f);
+       var fLabel = f.label || f.fieldlabel || f.field_label || f.title || '';
+var fName  = f.name  || f.fieldname  || f.field_name  || f.column_name || '';
+var card = window.nbFormBuilder._makeFieldCard(f.type || 'text', fLabel, fName, !!f.required, f);
         if (!card) return;
         var d = rb.querySelector('.nb-row-drop-hint'); if (d) d.remove();
         _prepCard(card); rb.appendChild(card);
@@ -1061,16 +1053,17 @@ var card = me._makeFieldCard(f.type || 'text', fLabel, fName, !!f.required, f);
   }
   function _readFieldCard(card, rowIndex) {
     var t = card.dataset.type || 'text';
-    var _val = function (sel) {
+   var _val = function (sel) {
   var e = card.querySelector(sel);
   if (!e) return '';
-  // dataset is the authoritative source (kept in sync by panel listeners)
-  if (sel === '.nu-field-label'       && card.dataset.fieldLabel    !== undefined) return card.dataset.fieldLabel;
-  if (sel === '.nu-field-name'        && card.dataset.fieldName     !== undefined) return card.dataset.fieldName;
-  if (sel === '.nu-field-placeholder' && card.dataset.fieldPh       !== undefined) return card.dataset.fieldPh;
-  if (sel === '.nu-field-default'     && card.dataset.fieldDefault  !== undefined) return card.dataset.fieldDefault;
-  if (sel === '.nu-field-help'        && card.dataset.fieldHelp     !== undefined) return card.dataset.fieldHelp;
-  return e.value || e.getAttribute('value') || '';
+  // Use DOM input as primary source — dataset only if user edited via panel (non-empty)
+  var domVal = e.value || e.getAttribute('value') || '';
+  if (sel === '.nu-field-label'       && card.dataset.fieldLabel)   return card.dataset.fieldLabel;
+  if (sel === '.nu-field-name'        && card.dataset.fieldName)    return card.dataset.fieldName;
+  if (sel === '.nu-field-placeholder' && card.dataset.fieldPh)      return card.dataset.fieldPh;
+  if (sel === '.nu-field-default'     && card.dataset.fieldDefault) return card.dataset.fieldDefault;
+  if (sel === '.nu-field-help'        && card.dataset.fieldHelp)    return card.dataset.fieldHelp;
+  return domVal;
 };
     var _chk = function (sel) { var e = card.querySelector(sel); return !!(e && e.checked); };
     var sm = card.querySelector('.nu-field-select-mode'); var isMs = (t === 'select' || t === 'select2') && sm && sm.value === 'multi';
