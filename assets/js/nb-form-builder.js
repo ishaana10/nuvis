@@ -1056,7 +1056,17 @@ card.dataset.fieldHelp     = extra.help_text       || extra.field_help_text || '
   }
   function _readFieldCard(card, rowIndex) {
     var t = card.dataset.type || 'text';
-    var _val = function (sel) { var e = card.querySelector(sel); return e ? e.value : ''; };
+    var _val = function (sel) {
+  var e = card.querySelector(sel);
+  if (!e) return '';
+  // dataset is the authoritative source (kept in sync by panel listeners)
+  if (sel === '.nu-field-label'       && card.dataset.fieldLabel    !== undefined) return card.dataset.fieldLabel;
+  if (sel === '.nu-field-name'        && card.dataset.fieldName     !== undefined) return card.dataset.fieldName;
+  if (sel === '.nu-field-placeholder' && card.dataset.fieldPh       !== undefined) return card.dataset.fieldPh;
+  if (sel === '.nu-field-default'     && card.dataset.fieldDefault  !== undefined) return card.dataset.fieldDefault;
+  if (sel === '.nu-field-help'        && card.dataset.fieldHelp     !== undefined) return card.dataset.fieldHelp;
+  return e.value || e.getAttribute('value') || '';
+};
     var _chk = function (sel) { var e = card.querySelector(sel); return !!(e && e.checked); };
     var sm = card.querySelector('.nu-field-select-mode'); var isMs = (t === 'select' || t === 'select2') && sm && sm.value === 'multi';
     var field = { type:t, label:_val('.nu-field-label'), name:_val('.nu-field-name'), required:_chk('.nu-field-required'), no_duplicate:_chk('.nu-field-no-duplicate'), readonly:_chk('.nu-field-readonly'), hidden:_chk('.nu-field-hidden'), hidden_for_normal_users:_chk('.nu-field-hidden-normal'), placeholder:_val('.nu-field-placeholder'), default_value:_val('.nu-field-default'), help_text:_val('.nu-field-help'), col:parseInt(card.dataset.col,10)||6, row_index:(rowIndex!==undefined&&rowIndex!==null)?rowIndex:-1 };
