@@ -1,6 +1,6 @@
 # nuvis
 
-A modern, responsive rebuild of the nuBuilder Forte low-code platform — PHP/MySQL, fully self-hosted.
+A modern, responsive rebuild of the nuvis low-code platform — PHP/MySQL, fully self-hosted.
 
 > **Live:** [ict-fj.com/nuvis/](http://ict-fj.com/nuvis/) · **Host:** A2Hosting (cPanel) · **Stack:** PHP 7.4, MySQL 5.7+, Apache
 
