@@ -802,73 +802,82 @@ function nu_render_tab_container(array $item, array $record) {
     $tcIdx++;
     $containerId = 'nu-tabs-tc' . $tcIdx;
 
-    // Tab nav bar
     $html  = '<div class="nu-tabs" id="' . nu_attr($containerId) . '" style="margin-bottom:16px;">';
     $html .= '<div class="nu-tab-bar" role="tablist" style="display:flex;flex-wrap:wrap;gap:0;border-bottom:2px solid var(--color-primary,#4f6bed);padding:0 4px;">';
 
     foreach ($tabs as $i => $tab) {
-        $tabLabel = nu_attr($tab['name'] ?? $tab['label'] ?? ('Tab ' . ($i + 1)));
-        $tabId    = nu_attr($tab['id']   ?? ('tab_' . $i));
+        $tabLabel = $tab['name'] ?? ($tab['label'] ?? ('Tab ' . ($i + 1)));
+        $tabId    = 'tab_' . $tcIdx . '_' . $i;
         $active   = $i === 0;
         $html .= '<button type="button"'
                . ' class="nu-tab-btn' . ($active ? ' nu-tab-active' : '') . '"'
                . ' role="tab"'
-               . ' data-tab="' . $tabId . '"'
-               . ' data-tabs-container="' . $containerId . '"'
+               . ' data-tab="' . nu_attr($tabId) . '"'
+               . ' data-tabs-container="' . nu_attr($containerId) . '"'
                . ' aria-selected="' . ($active ? 'true' : 'false') . '"'
-               . ' aria-controls="' . $containerId . '-panel-' . $tabId . '"'
                . ' onclick="nuTabSwitch(this)"'
                . ' style="padding:6px 16px;font-size:13px;border:1px solid transparent;'
                . 'border-radius:6px 6px 0 0;margin-bottom:-2px;cursor:pointer;background:' . ($active ? '#fff' : 'none') . ';'
                . 'border-color:' . ($active ? 'var(--color-primary,#4f6bed) var(--color-primary,#4f6bed) #fff' : 'transparent') . ';'
                . 'font-weight:' . ($active ? '600' : '400') . ';'
                . 'color:' . ($active ? 'var(--color-primary,#4f6bed)' : '#555') . ';"'
-               . '>' . $tabLabel . '</button>';
+               . '>' . nu_html($tabLabel) . '</button>';
     }
-    $html .= '</div>'; // .nu-tab-bar
+    $html .= '</div>';
 
     $ROW_STYLE = 'display:grid;grid-template-columns:repeat(12,1fr);gap:8px;margin-bottom:4px;align-items:start;';
 
-    // Tab panels
     foreach ($tabs as $i => $tab) {
-        $tabId  = nu_attr($tab['id'] ?? ('tab_' . $i));
+        $tabId  = 'tab_' . $tcIdx . '_' . $i;
         $hidden = $i !== 0;
 
         $html .= '<div'
-               . ' id="' . $containerId . '-panel-' . $tabId . '"'
-               . ' class="nu-tab-panel' . ($hidden ? ' nu-tab-panel-hidden' : '') . '"'
+               . ' id="' . nu_attr($containerId) . '-panel-' . nu_attr($tabId) . '"'
+               . ' class="nu-tab-panel"'
                . ' role="tabpanel"'
-               . ' data-tab="' . $tabId . '"'
+               . ' data-tab="' . nu_attr($tabId) . '"'
                . ' style="padding:12px 4px;' . ($hidden ? 'display:none;' : '') . '"'
                . '>';
 
-        // Collect fields from rows (builder shape: tab.rows[*].fields)
         $rows = $tab['rows'] ?? [];
-        if (!empty($rows)) {
-            foreach ($rows as $row) {
-                $rowFields = $row['fields'] ?? [];
-                if (empty($rowFields)) continue;
+        foreach ($rows as $rowIdx => $row) {
+            // A row can be a plain row { fields: [...] } or a group { type: "group", rows: [...] }
+            $rowType = $row['type'] ?? 'row';
+
+            if ($rowType === 'group') {
+                // Render as a group section
+                $groupLabel = $row['label'] ?? 'Group';
+                $html .= '<div style="border:1px solid #ddd;border-radius:8px;margin-bottom:12px;overflow:hidden;">';
+                $html .= '<div style="padding:8px 14px;background:var(--bg-elevated,#f8f9fa);border-bottom:1px solid #ddd;font-weight:600;font-size:13px;">' . nu_html($groupLabel) . '</div>';
+                $html .= '<div style="padding:10px 8px;">';
+                foreach (($row['rows'] ?? []) as $innerRow) {
+                    $innerFields = $innerRow['fields'] ?? [];
+                    if (empty($innerFields)) continue;
+                    $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
+                    foreach ($innerFields as $field) {
+                        $html .= nu_render_field($field, nu_field_value($record, $field), $record);
+                    }
+                    $html .= '</div>';
+                }
+                $html .= '</div></div>';
+            } else {
+                // Plain row with fields
+                $fields = $row['fields'] ?? [];
+                if (empty($fields)) continue;
                 $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
-                foreach ($rowFields as $field) {
+                foreach ($fields as $field) {
                     $html .= nu_render_field($field, nu_field_value($record, $field), $record);
                 }
                 $html .= '</div>';
             }
-        } elseif (!empty($tab['fields'])) {
-            // Legacy flat fields array fallback
-            $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
-            foreach ($tab['fields'] as $field) {
-                $html .= nu_render_field($field, nu_field_value($record, $field), $record);
-            }
-            $html .= '</div>';
         }
 
-        $html .= '</div>'; // .nu-tab-panel
+        $html .= '</div>';
     }
 
-    $html .= '</div>'; // .nu-tabs
+    $html .= '</div>';
 
-    // Inline tab switching script (only emitted once per page via flag)
+    // Tab switch script (only once per page)
     static $tabScriptEmitted = false;
     if (!$tabScriptEmitted) {
         $tabScriptEmitted = true;
@@ -889,15 +898,12 @@ function nu_render_tab_container(array $item, array $record) {
                . 'wrap.querySelectorAll(".nu-tab-panel").forEach(function(p){'
                . 'var on=p.getAttribute("data-tab")===tid;'
                . 'p.style.display=on?"":"none";'
-               . 'p.classList.toggle("nu-tab-panel-hidden",!on);'
                . '});'
                . '}}</script>';
     }
 
     return $html;
 }
-
-
 
 function nu_render_form_html($form, $record = [], $recordId = null) {
     $c        = nu_form_columns();
@@ -1052,28 +1058,41 @@ function nu_inject_parent_context(array $layout, string $parentTable, string $pa
     return $layout;
 }
 
-function nu_flatten_layout($layout) {
-    $fields = [];
+function nu_flatten_fields(array $layout): array {
+    $out = [];
     foreach ($layout as $node) {
         $t = $node['type'] ?? 'field';
-        if ($t === 'section' || $t === 'group') {
-            foreach (nu_flatten_layout($node['children'] ?? []) as $f) $fields[] = $f;
-        } elseif ($t === 'row') {
-            foreach (($node['children'] ?? []) as $f) $fields[] = $f;
+
+        if (in_array($t, ['section', 'group', 'row'], true)) {
+            // top-level group/section uses children[]
+            foreach (nu_flatten_fields($node['children'] ?? []) as $f) $out[] = $f;
+            // group inside a tab uses rows[].fields[]
+            foreach (($node['rows'] ?? []) as $row) {
+                foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
+            }
+
         } elseif ($t === 'tab') {
-            // Builder shape: tab container → tabs[] → rows[] → fields[]
+            // tab container: iterate each tab panel's rows
             foreach (($node['tabs'] ?? []) as $tab) {
                 foreach (($tab['rows'] ?? []) as $row) {
-                    foreach (nu_flatten_layout($row['fields'] ?? []) as $f) $fields[] = $f;
+                    $rowType = $row['type'] ?? 'row';
+                    if ($rowType === 'group') {
+                        // group inside tab panel
+                        foreach (($row['rows'] ?? []) as $innerRow) {
+                            foreach (nu_flatten_fields($innerRow['fields'] ?? []) as $f) $out[] = $f;
+                        }
+                    } else {
+                        // plain row inside tab panel
+                        foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
+                    }
                 }
-                // Legacy flat fields fallback
-                foreach (nu_flatten_layout($tab['fields'] ?? []) as $f) $fields[] = $f;
             }
+
         } else {
-            $fields[] = $node;
+            $out[] = $node;
         }
     }
-    return $fields;
+    return $out;
 }
 
 function nu_flatten_layout_for_grid($layout) {
