@@ -1054,16 +1054,22 @@ var card = me._makeFieldCard(f.type || 'text', fLabel, fName, !!f.required, f);
   function _readFieldCard(card, rowIndex) {
     var t = card.dataset.type || 'text';
    var _val = function (sel) {
+  var dsMap = {
+    '.nu-field-label':       'fieldLabel',
+    '.nu-field-name':        'fieldName',
+    '.nu-field-placeholder': 'fieldPh',
+    '.nu-field-default':     'fieldDefault',
+    '.nu-field-help':        'fieldHelp'
+  };
+  var dsKey = dsMap[sel];
+  // Always prefer dataset if it exists (set at card creation AND on panel edit)
+  if (dsKey && card.dataset[dsKey] !== undefined && card.dataset[dsKey] !== null) {
+    return card.dataset[dsKey];
+  }
   var e = card.querySelector(sel);
   if (!e) return '';
-  // Use DOM input as primary source — dataset only if user edited via panel (non-empty)
-  var domVal = e.value || e.getAttribute('value') || '';
-  if (sel === '.nu-field-label'       && card.dataset.fieldLabel)   return card.dataset.fieldLabel;
-  if (sel === '.nu-field-name'        && card.dataset.fieldName)    return card.dataset.fieldName;
-  if (sel === '.nu-field-placeholder' && card.dataset.fieldPh)      return card.dataset.fieldPh;
-  if (sel === '.nu-field-default'     && card.dataset.fieldDefault) return card.dataset.fieldDefault;
-  if (sel === '.nu-field-help'        && card.dataset.fieldHelp)    return card.dataset.fieldHelp;
-  return domVal;
+  // getAttribute('value') is the original HTML attribute — more reliable than .value on hidden inputs
+  return e.getAttribute('value') || e.value || '';
 };
     var _chk = function (sel) { var e = card.querySelector(sel); return !!(e && e.checked); };
     var sm = card.querySelector('.nu-field-select-mode'); var isMs = (t === 'select' || t === 'select2') && sm && sm.value === 'multi';
