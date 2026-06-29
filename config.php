@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// nuBuilder 5 - Master Configuration
+// nuvis - Master Configuration
 
 define('NU_VERSION', '5.0.0');
 define('NU_BUILD_DATE', '2026-05-27');
@@ -39,7 +39,7 @@ $nuConfig['uploadPath'] = NU_ROOT . '/uploads/';
 $nuConfig['logPath']    = NU_ROOT . '/logs/';
 
 // ─── Display ──────────────────────────────────────────────────────────────────
-$nuConfig['siteTitle'] = 'NuBuilder 5';
+$nuConfig['siteTitle'] = 'nuvis';
 $nuConfig['theme']     = 'auto';
 
 // ─── API ──────────────────────────────────────────────────────────────────────
