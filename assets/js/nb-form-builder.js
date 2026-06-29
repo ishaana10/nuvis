@@ -170,11 +170,10 @@
     if (canvas) canvas.style.marginRight = '';
   }
 
- function _renderPropsInPanel(card, body) {
+function _renderPropsInPanel(card, body) {
   var type = card.dataset.type || 'text';
   var col  = parseInt(card.dataset.col, 10) || 6;
 
-  /* ── helpers ── */
   function _fp(labelText, inputEl, full) {
     var wrap = document.createElement('div');
     wrap.className = 'nb-fp' + (full ? ' nb-fp-full' : '');
@@ -189,23 +188,24 @@
     i.type = 'text';
     i.className = 'nu-input';
     i.placeholder = ph || '';
-    /* Set value via both property AND attribute to guarantee display */
     i.setAttribute('value', val || '');
     i.value = val || '';
     return i;
   }
+
+  /* ── FIX-L: Read ONLY from dataset. Dataset is set before innerHTML now.
+     Fallback uses getAttribute (works on display:none), NOT .value ── */
   function _fromCard(dsKey, bodySelector) {
-  var v = card.dataset[dsKey];
-  if (v !== undefined && v !== null && v !== '') return v;
-  /* Fallback: use getAttribute (works on display:none inputs), NOT .value */
-  var el = card.querySelector('.nb-cfield-body ' + bodySelector);
-  if (el) {
-    v = el.getAttribute('value') || '';
-    if (v) card.dataset[dsKey] = v;
-    return v;
+    var v = card.dataset[dsKey];
+    if (v !== undefined && v !== null && v !== '') return v;
+    var el = card.querySelector('.nb-cfield-body ' + bodySelector);
+    if (el) {
+      v = el.getAttribute('value') || '';
+      if (v) card.dataset[dsKey] = v;
+      return v;
+    }
+    return '';
   }
-  return '';
-}
 
   /* ── Width bar ── */
   var spanBar = document.createElement('div');
@@ -233,7 +233,7 @@
   grid.className = 'nb-fp-grid';
   grid.appendChild(spanBar);
 
-  /* ── Base fields — read straight from card.dataset ── */
+  /* ── Read values — dataset is primary source ── */
   var labelVal = _fromCard('fieldLabel',   '.nu-field-label');
   var nameVal  = _fromCard('fieldName',    '.nu-field-name');
   var phVal    = _fromCard('fieldPh',      '.nu-field-placeholder');
@@ -244,7 +244,7 @@
   labelInput.addEventListener('input', function () {
     card.dataset.fieldLabel = labelInput.value;
     var orig = card.querySelector('.nb-cfield-body .nu-field-label');
-    if (orig) orig.value = labelInput.value;
+    if (orig) { orig.value = labelInput.value; orig.setAttribute('value', labelInput.value); }
     var hdr = card.querySelector('.nb-cfield-label');
     if (hdr) hdr.textContent = labelInput.value || '(no label)';
     var titleEl = document.getElementById('nb-props-title');
@@ -255,7 +255,7 @@
   nameInput.addEventListener('input', function () {
     card.dataset.fieldName = nameInput.value;
     var orig = card.querySelector('.nb-cfield-body .nu-field-name');
-    if (orig) orig.value = nameInput.value;
+    if (orig) { orig.value = nameInput.value; orig.setAttribute('value', nameInput.value); }
   });
 
   grid.appendChild(_fp('Label', labelInput));
@@ -266,14 +266,14 @@
     phInput.addEventListener('input', function () {
       card.dataset.fieldPh = phInput.value;
       var orig = card.querySelector('.nb-cfield-body .nu-field-placeholder');
-      if (orig) orig.value = phInput.value;
+      if (orig) { orig.value = phInput.value; orig.setAttribute('value', phInput.value); }
     });
 
     var defInput = _inp(defVal, 'Default value');
     defInput.addEventListener('input', function () {
       card.dataset.fieldDefault = defInput.value;
       var orig = card.querySelector('.nb-cfield-body .nu-field-default');
-      if (orig) orig.value = defInput.value;
+      if (orig) { orig.value = defInput.value; orig.setAttribute('value', defInput.value); }
     });
 
     grid.appendChild(_fp('Placeholder', phInput));
@@ -284,17 +284,16 @@
   helpInput.addEventListener('input', function () {
     card.dataset.fieldHelp = helpInput.value;
     var orig = card.querySelector('.nb-cfield-body .nu-field-help');
-    if (orig) orig.value = helpInput.value;
+    if (orig) { orig.value = helpInput.value; orig.setAttribute('value', helpInput.value); }
   });
   grid.appendChild(_fp('Help Text', helpInput, true));
 
-  /* ── Type-specific extras: wire directly from live body inputs ── */
+  /* ── Type-specific extras ── */
   var cardBody = card.querySelector('.nb-cfield-body');
   if (cardBody) {
     var bodyGrid = cardBody.querySelector('.nb-fp-grid');
     if (bodyGrid) {
       Array.prototype.forEach.call(bodyGrid.children, function (child) {
-        /* Skip the base fields — already rendered above */
         if (child.querySelector('.nu-field-label')       ||
             child.querySelector('.nu-field-name')        ||
             child.querySelector('.nu-field-placeholder') ||
@@ -302,7 +301,6 @@
             child.querySelector('.nu-field-help')        ||
             child.classList.contains('nb-vis-flags')) return;
 
-        /* Clone the child and sync live values before appending */
         var clone = child.cloneNode(true);
         child.querySelectorAll('input, select, textarea').forEach(function (origEl, idx) {
           var cloneEl = clone.querySelectorAll('input, select, textarea')[idx];
@@ -310,15 +308,16 @@
           if (origEl.type === 'checkbox' || origEl.type === 'radio') {
             cloneEl.checked = origEl.checked;
           } else {
-            cloneEl.setAttribute('value', origEl.value);
-            cloneEl.value = origEl.value;
+            /* FIX: use getAttribute, not .value, for display:none inputs */
+            var attrVal = origEl.getAttribute('value') || '';
+            cloneEl.setAttribute('value', attrVal);
+            cloneEl.value = attrVal;
           }
-          /* Wire clone → original */
           (function (o, c) {
-            c.addEventListener('input',  function () { if (o.type !== 'checkbox' && o.type !== 'radio') o.value = c.value; });
+            c.addEventListener('input',  function () { if (o.type !== 'checkbox' && o.type !== 'radio') { o.value = c.value; o.setAttribute('value', c.value); } });
             c.addEventListener('change', function () {
               if (o.type === 'checkbox' || o.type === 'radio') o.checked = c.checked;
-              else o.value = c.value;
+              else { o.value = c.value; o.setAttribute('value', c.value); }
             });
           }(origEl, cloneEl));
         });
@@ -327,7 +326,7 @@
     }
   }
 
-  /* ── Visibility / field options flags ── */
+  /* ── Visibility flags ── */
   var visWrap = document.createElement('div');
   visWrap.className = 'nb-vis-flags nb-fp-full';
   var visTitle = document.createElement('label');
@@ -358,7 +357,6 @@
   grid.appendChild(visWrap);
   body.appendChild(grid);
 }
-
 
   /* ════════════════════════════════════════════════════════════════════
      _nbSfData
