@@ -179,7 +179,7 @@ function _renderPropsInPanel(card, body) {
     return i;
   }
 
-  function _fromCard(dsKey, bodySelector) {
+  /*function _fromCard(dsKey, bodySelector) {
     var v = card.dataset[dsKey];
     if (v !== undefined && v !== null && v !== '') return v;
 
@@ -190,7 +190,13 @@ function _renderPropsInPanel(card, body) {
       return v;
     }
     return '';
-  }
+  }*/
+  
+  function _fromCard(dsKey, bodySelector) {
+  var v = card.dataset[dsKey];
+  if (v !== undefined && v !== null) return v;
+  return '';
+}
 
   var spanBar = document.createElement('div');
   spanBar.className = 'nb-span-bar';
@@ -705,7 +711,7 @@ function _openPropsPanel(card) {
 var fName  = f.name  || f.fieldname  || f.field_name  || f.column_name || '';
 var card = window.nbFormBuilder._makeFieldCard(f.type || 'text', fLabel, fName, !!f.required, f);*/
 
-var fd = (f && typeof f.fields === 'object' && f.fields) ? f.fields : f;
+/*var fd = (f && typeof f.fields === 'object' && f.fields) ? f.fields : f;
 
 var fType  = fd.type || f.type || 'text';
 var fLabel = fd.label || fd.fieldlabel || fd.field_label || fd.title || '';
@@ -714,7 +720,39 @@ var fReq   = !!(fd.required || f.required);
 
 var merged = Object.assign({}, f, fd);
 
+var card = window.nbFormBuilder._makeFieldCard(fType, fLabel, fName, fReq, merged);*/
+
+
+var fd = (f && typeof f.fields === 'object' && f.fields) ? f.fields : f || {};
+
+var fType = fd.type || 'text';
+
+var fLabel =
+  fd.label ??
+  fd.fieldlabel ??
+  fd.field_label ??
+  fd.title ??
+  '';
+
+var fName =
+  fd.name ??
+  fd.fieldname ??
+  fd.field_name ??
+  fd.column_name ??
+  '';
+
+var fReq = !!fd.required;
+
+var merged = Object.assign({}, fd, {
+  label: fLabel,
+  name: fName,
+  required: fReq
+});
+
 var card = window.nbFormBuilder._makeFieldCard(fType, fLabel, fName, fReq, merged);
+
+
+
         if (!card) return;
         var d = rb.querySelector('.nb-row-drop-hint'); if (d) d.remove();
         _prepCard(card); rb.appendChild(card);
