@@ -1406,9 +1406,9 @@ if (!window._nbFormsModuleInit) {
     nbFormBuilder._groupTabPatched = true;
 
     var _origMakeFieldCard = nbFormBuilder._makeFieldCard;
-    nbFormBuilder._makeFieldCard = function(field) {
-      var card = typeof _origMakeFieldCard === 'function'
-        ? _origMakeFieldCard.call(nbFormBuilder, field) : null;
+   nbFormBuilder._makeFieldCard = function(type, label, name, required, extra) {
+  var card = typeof _origMakeFieldCard === 'function'
+    ? _origMakeFieldCard.call(nbFormBuilder, type, label, name, required, extra) : null;
       if (!card) return card;
 
       if (field.type === 'group') {
