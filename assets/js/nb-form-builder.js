@@ -547,14 +547,6 @@ function _openPropsPanel(card) {
         var row = window.nbFormBuilder.addRow();
         var rb  = row ? row.querySelector('.nb-row-body') : null;
         if (rb) {
-            
-            console.log('[loadForm] field args:', JSON.stringify({
-  type: fieldDef.type,
-  label: fieldDef.label,
-  name: fieldDef.name,
-  required: fieldDef.required,
-  fullDef: fieldDef
-}));
           var nc = window.nbFormBuilder._makeFieldCard(dtype, dtype + ' field', dtype + '_' + Date.now(), false, { col: 6 });
           if (nc) { _prepCard(nc); var hint = rb.querySelector('.nb-row-drop-hint'); if (hint) hint.remove(); rb.appendChild(nc); window.nbFormBuilder._applyColSpan(nc, 6); }
         }
@@ -1297,13 +1289,7 @@ var _val = function (sel) {
         if (existing) { var oldRow = existing.closest('.nb-row'); rowBody.appendChild(existing); window.nbFormBuilder._applyColSpan(existing, existing.dataset.col || 6); if (oldRow && !oldRow.querySelector('.nb-cfield')) oldRow.remove(); window.nbFormBuilder._updateEmptyState(); return; }
       }
       var dtype = e.dataTransfer.getData('text/nb-type') || e.dataTransfer.getData('text/plain');
-      if (dtype && dtype !== 'group' && dtype !== 'tab') {
-          console.log('[loadForm] field args:', JSON.stringify(
-  label: fieldDef.label,
-  name: fieldDef.name,
-  required: fieldDef.required,
-  fullDef: fieldDef
-}));
+       if (dtype && dtype !== 'group' && dtype !== 'tab') {
         var nc = window.nbFormBuilder._makeFieldCard(dtype, dtype + ' field', dtype + '_' + Date.now(), false, { col: 6 });
         if (nc) { _prepCard(nc); var hint = rowBody.querySelector('.nb-row-drop-hint'); if (hint) hint.remove(); rowBody.appendChild(nc); window.nbFormBuilder._applyColSpan(nc, 6); }
         window.nbFormBuilder._updateEmptyState();
