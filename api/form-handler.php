@@ -355,3 +355,4 @@ function handleBrowse($db, $formCode) {
     
     echo json_encode(['success' => true, 'data' => ['records' => $records, 'layout' => $fields, 'page' => $page, 'pages' => $pages, 'total' => $total]]);
 }
+
