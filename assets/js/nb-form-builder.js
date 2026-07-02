@@ -1,5 +1,5 @@
 /**
- * nb-form-builder.js  — PATCHED v7.3
+ * nb-form-builder.js  — PATCHED v7.4
  *
  * v7 Fixes:
  *   FIX-J  Added nbFormBuilder.edit(formId) method (was missing — caused "not a function" error)
@@ -198,9 +198,9 @@ function _renderSubformPanel(card, grid) {
   if (mirrorSrvRo)    mirrorSrvRo.checked    = liveSrvRo;
   if (mirrorView && liveView) mirrorView.value = liveView;
   /* ── one-time initial sync → hidden body panel ── */
-if (origFormSel && liveFormCode) { origFormSel.value = liveFormCode; origFormSel.setAttribute('value', liveFormCode); }
-if (origFkSel  && liveFkField)  { origFkSel.value  = liveFkField;  origFkSel.setAttribute('value', liveFkField); }
-if (origViewSel && liveView)    { origViewSel.value = liveView; }
+if (origFormSel && liveFormCode) { origFormSel.setAttribute('value', liveFormCode); }
+if (origFkSel  && liveFkField)  { origFkSel.setAttribute('value', liveFkField); }
+if (origViewSel && liveView)    { origViewSel.setAttribute('value', liveView); }
 if (origIsFk)     origIsFk.checked     = liveIsFk;
 if (origHideGrid) origHideGrid.checked = liveHideGrid;
 if (origSrvRo)    origSrvRo.checked    = liveSrvRo;
@@ -209,9 +209,12 @@ if (origSrvRo)    origSrvRo.checked    = liveSrvRo;
   grid.appendChild(sfWrap);
 
   // Pass liveFormCode so _populateFormDropdown marks the right option selected
-  _populateFormDropdown(livePanel, liveFormCode, function () {
-    if (liveFormCode) _populateFkDropdown(livePanel, liveFormCode, liveFkField);
+_populateFormDropdown(livePanel, liveFormCode, function () {
+  if (origFormSel) origFormSel.value = liveFormCode;   // ← add this
+  if (liveFormCode) _populateFkDropdown(livePanel, liveFormCode, liveFkField, function () {
+    if (origFkSel) origFkSel.value = liveFkField;       // ← add this
   });
+});
 
   if (mirrorFormSel) {
     mirrorFormSel.addEventListener('change', function () {
@@ -1428,7 +1431,7 @@ var _val = function (sel) {
       .catch(function () { if (cb) cb(); });
   }
 
-  function _populateFkDropdown(panel, formCode, selectedField) {
+  function _populateFkDropdown(panel, formCode, selectedField , cb) {
     var sel = panel.querySelector('.nb-sf-fk-field'); if (!sel) return;
     sel.innerHTML = '<option value="">— select FK field —</option>';
     if (!formCode) return;
@@ -1442,8 +1445,11 @@ var _val = function (sel) {
           opt.textContent = (f.label || f.fieldlabel || opt.value) + ' (' + opt.value + ')';
           if (opt.value === selectedField) opt.selected = true;
           sel.appendChild(opt);
+         if (cb) cb();
         });
       })
+      
+       
       .catch(function () {});
   }
 
