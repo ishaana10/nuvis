@@ -164,12 +164,12 @@ function _renderSubformPanel(card, grid) {
   var origHideGrid = card.querySelector('.nb-cfield-body .nb-sf-hide-in-grid');
   var origSrvRo    = card.querySelector('.nb-cfield-body .nb-sf-server-readonly');
 
-  var liveFormCode = card.dataset.sfFormCode    || '';
-  var liveFkField  = card.dataset.sfFkField     || '';
-  var liveView     = card.dataset.sfSubformView || 'grid';
-  var liveIsFk     = card.dataset.sfIsFk           === '1';
-  var liveHideGrid = card.dataset.sfHideInGrid     === '1';
-  var liveSrvRo    = card.dataset.sfServerReadonly  === '1';
+  var liveFormCode = origFormSel  ? (origFormSel.value  || origFormSel.getAttribute('value')  || '') : (card.dataset.sfFormCode || '');
+  var liveFkField  = origFkSel    ? (origFkSel.value    || origFkSel.getAttribute('value')    || '') : (card.dataset.sfFkField  || '');
+  var liveView     = origViewSel  ? (origViewSel.value  || origViewSel.getAttribute('value')  || 'grid') : (card.dataset.sfSubformView || 'grid');
+  var liveIsFk     = origIsFk     ? origIsFk.checked     : (card.dataset.sfIsFk === '1');
+  var liveHideGrid = origHideGrid ? origHideGrid.checked : (card.dataset.sfHideInGrid === '1');
+  var liveSrvRo    = origSrvRo    ? origSrvRo.checked    : (card.dataset.sfServerReadonly === '1');
 
   if (liveFormCode) card.dataset.sfFormCode    = liveFormCode;
   if (liveFkField)  card.dataset.sfFkField     = liveFkField;
@@ -1021,27 +1021,19 @@ fields.forEach(function (f) {
   }
   var sfData;
   if (canvasType === 'subform') {
-    var sf = (extra.subform && typeof extra.subform === 'object') ? extra.subform : {};
-    sfData = {
-      form_code:       sf.form_code       || extra.sf_form_code || '',
-      fk_field:        sf.fk_field        || extra.sf_fk_field  || '',
-      subform_view:    extra.subform_view  || 'grid',
-      help_text:       extra.help_text     || extra.field_help_text || '',
-      is_fk:           !!sf.is_fk,
-      hide_in_grid:    !!sf.hide_in_grid,
-      server_readonly: !!sf.server_readonly
-    };
-    extraBody += _subformPanelHTML(sfData);
-
-    /* ── FIX: seed dataset so _renderSubformPanel reads it synchronously ── */
-    card.dataset.sfFormCode       = sfData.form_code    || '';
-    card.dataset.sfFkField        = sfData.fk_field     || '';
-    card.dataset.sfSubformView    = sfData.subform_view || 'grid';
-    card.dataset.sfHelpText       = sfData.help_text    || '';
-    card.dataset.sfIsFk           = sfData.is_fk           ? '1' : '0';
-    card.dataset.sfHideInGrid     = sfData.hide_in_grid    ? '1' : '0';
-    card.dataset.sfServerReadonly = sfData.server_readonly ? '1' : '0';
-  }
+  var sf = (extra.subform && typeof extra.subform === 'object') ? extra.subform : {};
+  sfData = {
+    form_code:       sf.form_code       || extra.sf_form_code || '',
+    fk_field:        sf.fk_field        || extra.sf_fk_field  || '',
+    subform_view:    extra.subform_view  || 'grid',
+    help_text:       extra.help_text     || extra.field_help_text || '',
+    is_fk:           !!sf.is_fk,
+    hide_in_grid:    !!sf.hide_in_grid,
+    server_readonly: !!sf.server_readonly
+  };
+  extraBody += _subformPanelHTML(sfData);
+  // ← NO dataset writes here. card doesn't exist yet.
+}
 
   var card = document.createElement('div');
   card.className = 'nb-cfield'; card.dataset.type = canvasType; card.dataset.runtimeType = type;
