@@ -1,5 +1,5 @@
 /**
- * nb-form-builder.js  — PATCHED v7.2
+ * nb-form-builder.js  — PATCHED v7.3
  *
  * v7 Fixes:
  *   FIX-J  Added nbFormBuilder.edit(formId) method (was missing — caused "not a function" error)
@@ -1045,6 +1045,17 @@ card.dataset.fieldName    = name  || '';
 card.dataset.fieldPh      = extra.placeholder   || '';
 card.dataset.fieldDefault = extra.default_value || extra.defaultvalue || '';
 card.dataset.fieldHelp    = extra.help_text || extra.field_help_text || '';
+
+if (canvasType === 'subform' && sfData) {
+  card.dataset.sfFormCode       = sfData.form_code    || '';
+  card.dataset.sfFkField        = sfData.fk_field     || '';
+  card.dataset.sfSubformView    = sfData.subform_view || 'grid';
+  card.dataset.sfHelpText       = sfData.help_text    || '';
+  card.dataset.sfIsFk           = sfData.is_fk           ? '1' : '0';
+  card.dataset.sfHideInGrid     = sfData.hide_in_grid    ? '1' : '0';
+  card.dataset.sfServerReadonly = sfData.server_readonly ? '1' : '0';
+}
+/* ── END ADD ── */
 
   card.innerHTML =
     '<div class="nb-cfield-header">'
