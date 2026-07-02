@@ -163,13 +163,19 @@ function _renderSubformPanel(card, grid) {
   var origHideGrid = card.querySelector('.nb-cfield-body .nb-sf-hide-in-grid');
   var origSrvRo    = card.querySelector('.nb-cfield-body .nb-sf-server-readonly');
 
-  var liveFormCode = origFormSel  ? (origFormSel.value  || origFormSel.getAttribute('value')  || '') : (card.dataset.sfFormCode || '');
-  var liveFkField  = origFkSel    ? (origFkSel.value    || origFkSel.getAttribute('value')    || '') : (card.dataset.sfFkField  || '');
-  var liveView     = origViewSel  ? (origViewSel.value  || origViewSel.getAttribute('value')  || 'grid') : (card.dataset.sfSubformView || 'grid');
+  /* ── FIX: getAttribute first, then .value, then dataset ── */
+  function _readSel(el, dsKey) {
+    if (!el) return card.dataset[dsKey] || '';
+    return el.getAttribute('value') || el.value || card.dataset[dsKey] || '';
+  }
+
+    var liveFormCode = _readSel(origFormSel, 'sfFormCode');
+  var liveFkField  = _readSel(origFkSel,   'sfFkField');
+  var liveView     = _readSel(origViewSel, 'sfSubformView') || 'grid';
   var liveIsFk     = origIsFk     ? origIsFk.checked     : (card.dataset.sfIsFk === '1');
   var liveHideGrid = origHideGrid ? origHideGrid.checked : (card.dataset.sfHideInGrid === '1');
   var liveSrvRo    = origSrvRo    ? origSrvRo.checked    : (card.dataset.sfServerReadonly === '1');
-
+  
   console.group('[nb-sfpanel] _renderSubformPanel card.id=' + card.id);
   console.log('  liveFormCode :', liveFormCode);
   console.log('  liveFkField  :', liveFkField);
@@ -205,8 +211,15 @@ function _renderSubformPanel(card, grid) {
   if (mirrorSrvRo)    mirrorSrvRo.checked    = liveSrvRo;
   if (mirrorView && liveView) mirrorView.value = liveView;
 
-  if (origFormSel && liveFormCode) { origFormSel.value = liveFormCode; origFormSel.setAttribute('value', liveFormCode); }
-  if (origFkSel  && liveFkField)  { origFkSel.setAttribute('value', liveFkField); }
+   if (origFormSel && liveFormCode) {
+    origFormSel.value = liveFormCode;
+    origFormSel.setAttribute('value', liveFormCode);
+  }
+  if (origFkSel && liveFkField) {
+    origFkSel.setAttribute('value', liveFkField);
+    /* Don't set .value yet — options haven't loaded — but setAttribute
+       ensures _readFieldCard's getAttribute() path finds it */
+  }
   if (origViewSel && liveView)    { origViewSel.setAttribute('value', liveView); }
   if (origIsFk)     origIsFk.checked     = liveIsFk;
   if (origHideGrid) origHideGrid.checked = liveHideGrid;
@@ -1314,47 +1327,124 @@ entry.fields.forEach(function (f) {
     return result;
   }
   function _readFieldCard(card, rowIndex) {
-    var t = card.dataset.type || 'text';
-var _val = function (sel) {
-  var dsMap = {
-    '.nu-field-label':       'fieldLabel',
-    '.nu-field-name':        'fieldName',
-    '.nu-field-placeholder': 'fieldPh',
-    '.nu-field-default':     'fieldDefault',
-    '.nu-field-help':        'fieldHelp'
-  };
-  var dsKey = dsMap[sel];
-  if (dsKey && card.dataset[dsKey] !== undefined && card.dataset[dsKey] !== '') {
-    return card.dataset[dsKey];
-  }
-  var e = card.querySelector(sel);
-  if (!e) {
-    console.error('[nb-read] _val: no element for', sel, 'card.id=', card.id);
-    return '';
-  }
-  var attrVal = e.getAttribute('value');
-  var propVal = e.value;
-  if (!attrVal && !propVal) {
-    console.error('[nb-read] _val: both attr and prop empty for', sel, '| dsKey=', dsKey, '| dsVal=', card.dataset[dsKey], '| card.id=', card.id);
-  }
-  return attrVal || propVal || '';
-};
-    var _chk = function (sel) { var e = card.querySelector(sel); return !!(e && e.checked); };
-    var sm = card.querySelector('.nu-field-select-mode'); var isMs = (t === 'select' || t === 'select2') && sm && sm.value === 'multi';
-    var field = { type:t, label:_val('.nu-field-label'), name:_val('.nu-field-name'), required:_chk('.nu-field-required'), no_duplicate:_chk('.nu-field-no-duplicate'), readonly:_chk('.nu-field-readonly'), hidden:_chk('.nu-field-hidden'), hidden_for_normal_users:_chk('.nu-field-hidden-normal'), placeholder:_val('.nu-field-placeholder'), default_value:_val('.nu-field-default'), help_text:_val('.nu-field-help'), col:parseInt(card.dataset.col,10)||6, row_index:(rowIndex!==undefined&&rowIndex!==null)?rowIndex:-1 };
-    if (t === 'select')  { field.multiple = isMs; field.select2 = false; field.select_type = isMs ? 'multiselect' : 'select'; }
-    if (t === 'select2') { field.select2 = true; field.multiple = isMs; field.select_type = 'select2'; field.allow_clear = _chk('.nu-field-allow-clear'); }
-    if (['select','select2','radio','checkbox_group'].indexOf(t) !== -1) {
-      var osr = card.querySelector('.nu-field-opt-src:checked'); var os = osr ? osr.value : 'manual'; field.options_source = os;
-      if (os === 'table') { field.options_table = _val('.nu-field-opt-table'); field.options_value_col = _val('.nu-field-opt-val-col'); field.options_label_col = _val('.nu-field-opt-label-col'); field.options_filter = _val('.nu-field-opt-filter'); field.options = []; }
-      else { var oe = card.querySelector('.nu-field-options'); field.options = oe ? oe.value.split('\n').map(function(l){l=l.trim();if(!l)return null;var p=l.split('|');return p.length>=2?{value:p[0].trim(),label:p[1].trim()}:{value:l,label:l};}).filter(Boolean) : []; }
+  var t = card.dataset.type || 'text';
+
+  var _val = function (sel) {
+    var dsMap = {
+      '.nu-field-label':       'fieldLabel',
+      '.nu-field-name':        'fieldName',
+      '.nu-field-placeholder': 'fieldPh',
+      '.nu-field-default':     'fieldDefault',
+      '.nu-field-help':        'fieldHelp'
+    };
+    var dsKey = dsMap[sel];
+
+    if (dsKey && card.dataset[dsKey] !== undefined && card.dataset[dsKey] !== '') {
+      return card.dataset[dsKey];
     }
-    var fe = card.querySelector('.nu-field-formula'); if (fe) field.formula = fe.value;
-    if (t === 'lookup') { field.lookup = { table:_val('.nu-lookup-table'), display_column:_val('.nu-lookup-display')||'name', id_column:_val('.nu-lookup-store')||'id', filter:_val('.nu-lookup-filter'), extra:_val('.nu-lookup-extra') }; }
-    if (t === 'subform') { field.subform = _readCardConfig(card); }
-    return field;
+
+    /* ── FIX: subform cards have no placeholder/default inputs — skip silently ── */
+    if (t === 'subform' && (sel === '.nu-field-placeholder' || sel === '.nu-field-default')) {
+      return '';
+    }
+    /* ── END FIX ── */
+
+    var e = card.querySelector(sel);
+    if (!e) {
+      console.error('[nb-read] _val: no element for', sel, 'card.id=', card.id);
+      return '';
+    }
+    var attrVal = e.getAttribute('value');
+    var propVal = e.value;
+    if (!attrVal && !propVal) {
+      console.error('[nb-read] _val: both attr and prop empty for', sel,
+                    '| dsKey=', dsKey,
+                    '| dsVal=', card.dataset[dsKey],
+                    '| card.id=', card.id);
+    }
+    return attrVal || propVal || '';
+  };
+
+  var _chk = function (sel) {
+    var e = card.querySelector(sel);
+    return !!(e && e.checked);
+  };
+
+  var sm   = card.querySelector('.nu-field-select-mode');
+  var isMs = (t === 'select' || t === 'select2') && sm && sm.value === 'multi';
+
+  var field = {
+    type:                  t,
+    label:                 _val('.nu-field-label'),
+    name:                  _val('.nu-field-name'),
+    required:              _chk('.nu-field-required'),
+    no_duplicate:          _chk('.nu-field-no-duplicate'),
+    readonly:              _chk('.nu-field-readonly'),
+    hidden:                _chk('.nu-field-hidden'),
+    hidden_for_normal_users: _chk('.nu-field-hidden-normal'),
+    placeholder:           _val('.nu-field-placeholder'),
+    default_value:         _val('.nu-field-default'),
+    help_text:             _val('.nu-field-help'),
+    col:                   parseInt(card.dataset.col, 10) || 6,
+    row_index:             (rowIndex !== undefined && rowIndex !== null) ? rowIndex : -1
+  };
+
+  if (t === 'select') {
+    field.multiple    = isMs;
+    field.select2     = false;
+    field.select_type = isMs ? 'multiselect' : 'select';
+  }
+  if (t === 'select2') {
+    field.select2     = true;
+    field.multiple    = isMs;
+    field.select_type = 'select2';
+    field.allow_clear = _chk('.nu-field-allow-clear');
   }
 
+  if (['select', 'select2', 'radio', 'checkbox_group'].indexOf(t) !== -1) {
+    var osr = card.querySelector('.nu-field-opt-src:checked');
+    var os  = osr ? osr.value : 'manual';
+    field.options_source = os;
+    if (os === 'table') {
+      field.options_table      = _val('.nu-field-opt-table');
+      field.options_value_col  = _val('.nu-field-opt-val-col');
+      field.options_label_col  = _val('.nu-field-opt-label-col');
+      field.options_filter     = _val('.nu-field-opt-filter');
+      field.options            = [];
+    } else {
+      var oe = card.querySelector('.nu-field-options');
+      field.options = oe
+        ? oe.value.split('\n').map(function (l) {
+            l = l.trim();
+            if (!l) return null;
+            var p = l.split('|');
+            return p.length >= 2
+              ? { value: p[0].trim(), label: p[1].trim() }
+              : { value: l, label: l };
+          }).filter(Boolean)
+        : [];
+    }
+  }
+
+  var fe = card.querySelector('.nu-field-formula');
+  if (fe) field.formula = fe.value;
+
+  if (t === 'lookup') {
+    field.lookup = {
+      table:          _val('.nu-lookup-table'),
+      display_column: _val('.nu-lookup-display') || 'name',
+      id_column:      _val('.nu-lookup-store')   || 'id',
+      filter:         _val('.nu-lookup-filter'),
+      extra:          _val('.nu-lookup-extra')
+    };
+  }
+
+  if (t === 'subform') {
+    field.subform = _readCardConfig(card);
+  }
+
+  return field;
+}
 
   /* ════════════════════════════════════════════════════════════════════
      Options source HTML
@@ -1601,5 +1691,8 @@ var _val = function (sel) {
     }
     _ensurePropsPanel();
   });
+
+
+
 
 }(window));
