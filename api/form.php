@@ -1095,7 +1095,6 @@ function nu_flatten_fields(array $layout): array {
     return $out;
 }
 
-
 /**
  * Flattens a nested form layout (groups, tabs, rows) into a single
  * flat array of field definitions, used when rendering/saving a form.
@@ -1103,7 +1102,7 @@ function nu_flatten_fields(array $layout): array {
  * @param  array $layout  The parsed form_layout JSON array
  * @return array          Flat list of field definition arrays
  */
-function nu_flatten_layout(array $layout): array {
+/*function nu_flatten_layout(array $layout): array {
     $fields = [];
 
     foreach ($layout as $item) {
@@ -1143,6 +1142,59 @@ function nu_flatten_layout(array $layout): array {
     }
 
     return $fields;
+}
+*/
+
+function nu_flatten_layout_fields($layout) {
+    if (is_string($layout)) {
+        $decoded = json_decode($layout, true);
+        $layout = is_array($decoded) ? $decoded : [];
+    }
+
+    $out = [];
+
+    $walk = function($items) use (&$walk, &$out) {
+        if (!is_array($items)) return;
+
+        foreach ($items as $item) {
+            if (!is_array($item)) continue;
+
+            // Row wrapper: { fields: [...] }
+            if (isset($item['fields']) && is_array($item['fields'])) {
+                $walk($item['fields']);
+                continue;
+            }
+
+            $type = strtolower(trim((string)($item['type'] ?? '')));
+
+            // Layout-only containers
+            if ($type === 'tab') {
+                foreach (($item['tabs'] ?? []) as $tab) {
+                    if (!is_array($tab)) continue;
+                    $walk($tab['rows'] ?? []);
+                }
+                continue;
+            }
+
+            if ($type === 'group') {
+                $walk($item['rows'] ?? []);
+                continue;
+            }
+
+            // Relationship/layout field, not a physical column on parent table
+            if ($type === 'subform') {
+                continue;
+            }
+
+            // Real leaf field
+            if (!empty($item['name'])) {
+                $out[] = $item;
+            }
+        }
+    };
+
+    $walk($layout);
+    return $out;
 }
 
 function nu_flatten_layout_for_grid($layout) {
