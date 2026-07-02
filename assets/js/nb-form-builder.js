@@ -1,5 +1,5 @@
 /**
- * nb-form-builder.js  — PATCHED v7
+ * nb-form-builder.js  — PATCHED v7.1
  *
  * v7 Fixes:
  *   FIX-J  Added nbFormBuilder.edit(formId) method (was missing — caused "not a function" error)
@@ -197,6 +197,13 @@ function _renderSubformPanel(card, grid) {
   if (mirrorHideGrid) mirrorHideGrid.checked = liveHideGrid;
   if (mirrorSrvRo)    mirrorSrvRo.checked    = liveSrvRo;
   if (mirrorView && liveView) mirrorView.value = liveView;
+  /* ── one-time initial sync → hidden body panel ── */
+if (origFormSel && liveFormCode) { origFormSel.value = liveFormCode; origFormSel.setAttribute('value', liveFormCode); }
+if (origFkSel  && liveFkField)  { origFkSel.value  = liveFkField;  origFkSel.setAttribute('value', liveFkField); }
+if (origViewSel && liveView)    { origViewSel.value = liveView; }
+if (origIsFk)     origIsFk.checked     = liveIsFk;
+if (origHideGrid) origHideGrid.checked = liveHideGrid;
+if (origSrvRo)    origSrvRo.checked    = liveSrvRo;
 
   // Must be in the live DOM before fetch callbacks fire
   grid.appendChild(sfWrap);
@@ -1387,9 +1394,9 @@ var _val = function (sel) {
     
           .then(function (r) { return r.json(); })
       .then(function (res) {
-        if (!res || !res.data) { if (cb) cb(); return; }
+        if (!res || !res.forms) { if (cb) cb(); return; }
         sel.innerHTML = '<option value="">— select form —</option>';
-        res.data.forEach(function (f) {
+        res.forms.forEach(function (f) {
           var opt = document.createElement('option');
           opt.value = f.form_code || f.code || '';
           opt.textContent = (f.form_name || f.name || '') + ' (' + opt.value + ')';
@@ -1438,23 +1445,40 @@ var _val = function (sel) {
   }
 
   function _readCardConfig(card) {
-    var panel = card.querySelector('.nb-sf-fk-panel');
-    if (!panel) return { form_code:'', fk_field:'', subform_view:'grid', help_text:'', is_fk:false, hide_in_grid:false, server_readonly:false };
-    var fc   = panel.querySelector('.nb-sf-form-code');
-    var fk   = panel.querySelector('.nb-sf-fk-field');
-    var view = panel.querySelector('.nb-sf-view');
-    var ht   = card.querySelector('.nu-field-help');
+  /* Prefer dataset (written by _nbSfData.write + _renderSubformPanel sync) */
+  var dsCode = card.dataset.sfFormCode    || '';
+  var dsFk   = card.dataset.sfFkField     || '';
+  var dsView = card.dataset.sfSubformView || 'grid';
+  var dsHelp = card.dataset.sfHelpText    || '';
+  var dsIsFk = card.dataset.sfIsFk        === '1';
+  var dsHide = card.dataset.sfHideInGrid  === '1';
+  var dsSrv  = card.dataset.sfServerReadonly === '1';
+
+  /* If dataset populated, use it — avoids reading unpopulated hidden selects */
+  if (dsCode) {
     return {
-      form_code:       fc   ? fc.value   : '',
-      fk_field:        fk   ? fk.value   : '',
-      subform_view:    view ? view.value : 'grid',
-      help_text:       ht   ? ht.value   : '',
-      is_fk:           !!(panel.querySelector('.nb-sf-is-fk')          && panel.querySelector('.nb-sf-is-fk').checked),
-      hide_in_grid:    !!(panel.querySelector('.nb-sf-hide-in-grid')    && panel.querySelector('.nb-sf-hide-in-grid').checked),
-      server_readonly: !!(panel.querySelector('.nb-sf-server-readonly') && panel.querySelector('.nb-sf-server-readonly').checked)
+      form_code: dsCode, fk_field: dsFk, subform_view: dsView,
+      help_text: dsHelp, is_fk: dsIsFk, hide_in_grid: dsHide, server_readonly: dsSrv
     };
   }
 
+  /* Fallback: read from hidden body panel selects */
+  var panel = card.querySelector('.nb-sf-fk-panel');
+  if (!panel) return { form_code:'', fk_field:'', subform_view:'grid', help_text:'', is_fk:false, hide_in_grid:false, server_readonly:false };
+  var fc   = panel.querySelector('.nb-sf-form-code');
+  var fk   = panel.querySelector('.nb-sf-fk-field');
+  var view = panel.querySelector('.nb-sf-view');
+  var ht   = card.querySelector('.nu-field-help');
+  return {
+    form_code:       fc   ? fc.value   : '',
+    fk_field:        fk   ? fk.value   : '',
+    subform_view:    view ? view.value : 'grid',
+    help_text:       ht   ? ht.value   : '',
+    is_fk:           !!(panel.querySelector('.nb-sf-is-fk')          && panel.querySelector('.nb-sf-is-fk').checked),
+    hide_in_grid:    !!(panel.querySelector('.nb-sf-hide-in-grid')    && panel.querySelector('.nb-sf-hide-in-grid').checked),
+    server_readonly: !!(panel.querySelector('.nb-sf-server-readonly') && panel.querySelector('.nb-sf-server-readonly').checked)
+  };
+}
 
   /* ════════════════════════════════════════════════════════════════════
      Keyboard + click-outside close panel
