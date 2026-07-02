@@ -272,8 +272,8 @@ function _renderSubformPanel(card, grid) {
 
   livePanel.addEventListener('change', function (e) {
     var tgt = e.target;
-    var m = (tgt.className || '').match(/\bnb-sf-[\w-]+\b/);
-    if (!m) return;
+  var m = (tgt.className || '').match(/\bnb-sf-[\w-]+\b/);
+  if (!m) return;
     var origEl = card.querySelector('.nb-cfield-body .' + m[0]);
     console.log('[nb-sfpanel] livePanel change', m[0], 'origEl=', !!origEl, 'tgt.value=', tgt.value, 'tgt.checked=', tgt.checked);
     if (!origEl) return;
@@ -1205,6 +1205,7 @@ if (canvasType === 'subform' && sfData) {
         form_custom_php: _v('formCustomPhp'), form_custom_css: _v('formCustomCss')
       };
       if (editId) payload.form_id = editId;
+      console.log('[saveForm] payload:', JSON.stringify(payload, null, 2));
       try {
         var res = await NuApp.apiJson('api/forms.php?action=save', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
         if (res && res.success) { NuApp.toast(editId ? 'Form updated!' : 'Form created!', 'success'); this.close(); NuApp.loadModule('forms'); }
