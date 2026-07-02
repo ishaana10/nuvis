@@ -198,9 +198,10 @@ function _renderSubformPanel(card, grid) {
   if (mirrorSrvRo)    mirrorSrvRo.checked    = liveSrvRo;
   if (mirrorView && liveView) mirrorView.value = liveView;
   /* ── one-time initial sync → hidden body panel ── */
-if (origFormSel && liveFormCode) { origFormSel.setAttribute('value', liveFormCode); }
-if (origFkSel  && liveFkField)  { origFkSel.setAttribute('value', liveFkField); }
-if (origViewSel && liveView)    { origViewSel.setAttribute('value', liveView); }
+/* ── one-time initial sync → hidden body panel ── */
+if (origFormSel && liveFormCode) { origFormSel.value = liveFormCode; origFormSel.setAttribute('value', liveFormCode); }
+if (origFkSel  && liveFkField)  { origFkSel.value  = liveFkField;  origFkSel.setAttribute('value', liveFkField); }
+if (origViewSel && liveView)    { origViewSel.value = liveView; origViewSel.setAttribute('value', liveView); }
 if (origIsFk)     origIsFk.checked     = liveIsFk;
 if (origHideGrid) origHideGrid.checked = liveHideGrid;
 if (origSrvRo)    origSrvRo.checked    = liveSrvRo;
@@ -1431,28 +1432,42 @@ var _val = function (sel) {
       .catch(function () { if (cb) cb(); });
   }
 
-  function _populateFkDropdown(panel, formCode, selectedField , cb) {
-    var sel = panel.querySelector('.nb-sf-fk-field'); if (!sel) return;
-    sel.innerHTML = '<option value="">— select FK field —</option>';
-    if (!formCode) return;
-    fetch('api/forms.php?action=get_fields&code=' + encodeURIComponent(formCode), { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (!res || !res.fields) return;
-        res.fields.forEach(function (f) {
-          var opt = document.createElement('option');
-          opt.value = f.name || f.fieldname || '';
-          opt.textContent = (f.label || f.fieldlabel || opt.value) + ' (' + opt.value + ')';
-          if (opt.value === selectedField) opt.selected = true;
-          sel.appendChild(opt);
-         if (cb) cb();
-        });
-      })
-      
-       
-      .catch(function () {});
-  }
+ function _populateFkDropdown(panel, formCode, selectedField, cb) {
+  var sel = panel.querySelector('.nb-sf-fk-field');
+  if (!sel) { if (cb) cb(); return; }
+  sel.innerHTML = '<option value="">— select FK field —</option>';
+  if (!formCode) { if (cb) cb(); return; }
 
+  fetch('?object=nuform&method=getFields&form_code=' + encodeURIComponent(formCode))
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var fields = Array.isArray(data) ? data : (data.fields || data.data || []);
+      fields.forEach(function (f) {
+        var fname = f.field_name || f.fieldname || f.name || '';
+        if (!fname) return;
+        var opt = document.createElement('option');
+        opt.value = fname;
+        opt.textContent = (f.label || f.fieldlabel || fname) + ' (' + fname + ')';
+        sel.appendChild(opt);
+      });
+
+      /* FIX: force sel.value AFTER all options are in the DOM */
+      if (selectedField) {
+        sel.value = selectedField;
+        if (sel.value !== selectedField) {
+          /* field no longer exists — add a placeholder so it's not silently lost */
+          var missing = document.createElement('option');
+          missing.value = selectedField;
+          missing.textContent = selectedField + ' (saved)';
+          sel.insertBefore(missing, sel.options[1] || null);
+          sel.value = selectedField;
+        }
+      }
+
+      if (cb) cb();   /* ← called ONCE, after forEach completes */
+    })
+    .catch(function () { if (cb) cb(); });
+}
   function _createFkField(panel) {
     var formSel = panel.querySelector('.nb-sf-form-code');
     var fkSel   = panel.querySelector('.nb-sf-fk-field');
