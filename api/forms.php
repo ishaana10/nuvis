@@ -31,6 +31,8 @@ switch ($action) {
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
 }
 
+error_log('[FORMS SAVE] POST: ' . json_encode($_POST));
+error_log('[FORMS SAVE] INPUT: ' . file_get_contents('php://input'));
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function nu_is_structural_type(string $type): bool {
@@ -308,15 +310,7 @@ function actionList($db) {
 function actionSave($db) {
     nu_ensure_nu_forms_columns($db);
     
-    echo json_encode([
-    'success' => false,
-    '_debug' => [
-        'hit' => true,
-        'file' => __FILE__,
-        'time' => date('Y-m-d H:i:s')
-    ]
-]);
-exit;
+  
 
     $raw  = file_get_contents('php://input');
     $data = json_decode($raw, true);
