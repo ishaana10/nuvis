@@ -155,7 +155,6 @@
   if (canvas) canvas.style.marginRight = '';
 }
 
-
 function _renderSubformPanel(card, grid) {
   var origFormSel  = card.querySelector('.nb-cfield-body .nb-sf-form-code');
   var origFkSel    = card.querySelector('.nb-cfield-body .nb-sf-fk-field');
@@ -170,6 +169,14 @@ function _renderSubformPanel(card, grid) {
   var liveIsFk     = origIsFk     ? origIsFk.checked     : (card.dataset.sfIsFk === '1');
   var liveHideGrid = origHideGrid ? origHideGrid.checked : (card.dataset.sfHideInGrid === '1');
   var liveSrvRo    = origSrvRo    ? origSrvRo.checked    : (card.dataset.sfServerReadonly === '1');
+
+  console.group('[nb-sfpanel] _renderSubformPanel card.id=' + card.id);
+  console.log('  liveFormCode :', liveFormCode);
+  console.log('  liveFkField  :', liveFkField);
+  console.log('  liveView     :', liveView);
+  console.log('  origFormSel  :', origFormSel);
+  console.log('  origFkSel    :', origFkSel);
+  console.groupEnd();
 
   if (liveFormCode) card.dataset.sfFormCode    = liveFormCode;
   if (liveFkField)  card.dataset.sfFkField     = liveFkField;
@@ -197,32 +204,56 @@ function _renderSubformPanel(card, grid) {
   if (mirrorHideGrid) mirrorHideGrid.checked = liveHideGrid;
   if (mirrorSrvRo)    mirrorSrvRo.checked    = liveSrvRo;
   if (mirrorView && liveView) mirrorView.value = liveView;
-  /* ── one-time initial sync → hidden body panel ── */
-/* ── one-time initial sync → hidden body panel ── */
-if (origFormSel && liveFormCode) { origFormSel.value = liveFormCode; origFormSel.setAttribute('value', liveFormCode); }
-if (origFkSel  && liveFkField)  { origFkSel.value  = liveFkField;  origFkSel.setAttribute('value', liveFkField); }
-if (origViewSel && liveView)    { origViewSel.value = liveView; origViewSel.setAttribute('value', liveView); }
-if (origIsFk)     origIsFk.checked     = liveIsFk;
-if (origHideGrid) origHideGrid.checked = liveHideGrid;
-if (origSrvRo)    origSrvRo.checked    = liveSrvRo;
+
+  if (origFormSel && liveFormCode) { origFormSel.value = liveFormCode; origFormSel.setAttribute('value', liveFormCode); }
+  if (origFkSel  && liveFkField)  { origFkSel.setAttribute('value', liveFkField); }
+  if (origViewSel && liveView)    { origViewSel.setAttribute('value', liveView); }
+  if (origIsFk)     origIsFk.checked     = liveIsFk;
+  if (origHideGrid) origHideGrid.checked = liveHideGrid;
+  if (origSrvRo)    origSrvRo.checked    = liveSrvRo;
 
   // Must be in the live DOM before fetch callbacks fire
   grid.appendChild(sfWrap);
 
-  // Pass liveFormCode so _populateFormDropdown marks the right option selected
-_populateFormDropdown(livePanel, liveFormCode, function () {
-  if (origFormSel) origFormSel.value = liveFormCode;   // ← add this
-  if (liveFormCode) _populateFkDropdown(livePanel, liveFormCode, liveFkField, function () {
-    if (origFkSel) origFkSel.value = liveFkField;       // ← add this
+  _populateFormDropdown(livePanel, liveFormCode, function () {
+    console.log('[nb-sfpanel] formDropdown populated. liveFormCode=', liveFormCode,
+                '| mirrorFormSel.value=', mirrorFormSel ? mirrorFormSel.value : 'N/A');
+    if (origFormSel) origFormSel.value = liveFormCode;
+
+    if (liveFormCode) {
+      _populateFkDropdown(livePanel, liveFormCode, liveFkField, function () {
+        console.log('[nb-sfpanel] fkDropdown populated.',
+                    '| livePanel sel.value=', livePanel.querySelector('.nb-sf-fk-field') ? livePanel.querySelector('.nb-sf-fk-field').value : 'N/A',
+                    '| liveFkField=', liveFkField);
+        // Sync the live panel's FK value back to the hidden body select
+        if (origFkSel) {
+          var liveFkSel = livePanel.querySelector('.nb-sf-fk-field');
+          if (liveFkSel) {
+            origFkSel.value = liveFkSel.value;
+            origFkSel.setAttribute('value', liveFkSel.value);
+            console.log('[nb-sfpanel] origFkSel.value set to:', origFkSel.value);
+          }
+        }
+        card.dataset.sfFkField = liveFkField;
+      });
+    }
   });
-});
 
   if (mirrorFormSel) {
     mirrorFormSel.addEventListener('change', function () {
       card.dataset.sfFormCode = mirrorFormSel.value;
       if (origFormSel) { origFormSel.value = mirrorFormSel.value; origFormSel.setAttribute('value', mirrorFormSel.value); }
       if (origFkSel)   { origFkSel.innerHTML = '<option value="">— select FK field —</option>'; origFkSel.value = ''; }
-      _populateFkDropdown(livePanel, mirrorFormSel.value, '');
+      // ← FIXED: pass cb so origFkSel syncs after FK options load on form change
+      _populateFkDropdown(livePanel, mirrorFormSel.value, '', function () {
+        var liveFkSel = livePanel.querySelector('.nb-sf-fk-field');
+        console.log('[nb-sfpanel] formChange FK repopulated. liveFkSel.value=',
+                    liveFkSel ? liveFkSel.value : 'N/A');
+        if (origFkSel && liveFkSel) {
+          origFkSel.innerHTML = liveFkSel.innerHTML; // sync options
+          origFkSel.value = liveFkSel.value;
+        }
+      });
     });
   }
 
@@ -231,6 +262,7 @@ _populateFormDropdown(livePanel, liveFormCode, function () {
     var m = (tgt.className || '').match(/\bnb-sf-[\w-]+\b/);
     if (!m) return;
     var origEl = card.querySelector('.nb-cfield-body .' + m[0]);
+    console.log('[nb-sfpanel] livePanel change', m[0], 'origEl=', !!origEl, 'tgt.value=', tgt.value, 'tgt.checked=', tgt.checked);
     if (!origEl) return;
     if (tgt.type === 'checkbox') {
       origEl.checked = tgt.checked;
@@ -1434,39 +1466,58 @@ var _val = function (sel) {
 
  function _populateFkDropdown(panel, formCode, selectedField, cb) {
   var sel = panel.querySelector('.nb-sf-fk-field');
+  console.group('[nb-fk] _populateFkDropdown');
+  console.log('  panel         :', panel);
+  console.log('  formCode      :', formCode);
+  console.log('  selectedField :', selectedField);
+  console.log('  sel found     :', !!sel);
+  console.groupEnd();
+
   if (!sel) { if (cb) cb(); return; }
   sel.innerHTML = '<option value="">— select FK field —</option>';
   if (!formCode) { if (cb) cb(); return; }
 
-  fetch('?object=nuform&method=getFields&form_code=' + encodeURIComponent(formCode))
+  fetch('api/forms.php?action=get_fields&code=' + encodeURIComponent(formCode), { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
-    .then(function (data) {
-      var fields = Array.isArray(data) ? data : (data.fields || data.data || []);
-      fields.forEach(function (f) {
-        var fname = f.field_name || f.fieldname || f.name || '';
-        if (!fname) return;
+    .then(function (res) {
+      console.group('[nb-fk] _populateFkDropdown fetch response  formCode=' + formCode);
+      console.log('  raw res       :', res);
+      console.log('  res.fields    :', res && res.fields);
+      console.groupEnd();
+
+      if (!res || !res.fields) {
+        console.warn('[nb-fk] No fields returned for formCode=', formCode);
+        if (cb) cb();
+        return;
+      }
+
+      res.fields.forEach(function (f) {
         var opt = document.createElement('option');
-        opt.value = fname;
-        opt.textContent = (f.label || f.fieldlabel || fname) + ' (' + fname + ')';
+        opt.value = f.name || f.fieldname || '';
+        opt.textContent = (f.label || f.fieldlabel || opt.value) + ' (' + opt.value + ')';
+        if (opt.value === selectedField) {
+          opt.selected = true;
+          console.log('[nb-fk] matched selectedField=', selectedField, 'opt.value=', opt.value);
+        }
         sel.appendChild(opt);
       });
 
-      /* FIX: force sel.value AFTER all options are in the DOM */
-      if (selectedField) {
-        sel.value = selectedField;
-        if (sel.value !== selectedField) {
-          /* field no longer exists — add a placeholder so it's not silently lost */
-          var missing = document.createElement('option');
-          missing.value = selectedField;
-          missing.textContent = selectedField + ' (saved)';
-          sel.insertBefore(missing, sel.options[1] || null);
-          sel.value = selectedField;
-        }
+      console.log('[nb-fk] after populate: sel.value=', sel.value,
+                  '| sel.options.length=', sel.options.length,
+                  '| wanted=', selectedField);
+
+      if (selectedField && sel.value !== selectedField) {
+        console.warn('[nb-fk] selectedField NOT in options — option was never appended or value mismatch.',
+                     'selectedField=', selectedField,
+                     'options=', Array.prototype.map.call(sel.options, function(o){ return o.value; }));
       }
 
-      if (cb) cb();   /* ← called ONCE, after forEach completes */
+      if (cb) cb(); // ← FIXED: moved OUTSIDE forEach, called once after all options added
     })
-    .catch(function () { if (cb) cb(); });
+    .catch(function (err) {
+      console.error('[nb-fk] fetch error for formCode=', formCode, err);
+      if (cb) cb();
+    });
 }
   function _createFkField(panel) {
     var formSel = panel.querySelector('.nb-sf-form-code');
