@@ -26,6 +26,7 @@ switch ($action) {
     case 'delete':       actionDelete($db);       break;
     case 'get_by_code':  actionGetByCode($db);    break;
     case 'patch_layout': actionPatchLayout($db);  break;
+    case 'get_fields':   actionGetFields($db);    break;
     default:
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
 }
@@ -306,6 +307,16 @@ function actionList($db) {
 // ── SAVE (insert or update) ───────────────────────────────────────────────
 function actionSave($db) {
     nu_ensure_nu_forms_columns($db);
+    
+    echo json_encode([
+    'success' => false,
+    '_debug' => [
+        'hit' => true,
+        'file' => __FILE__,
+        'time' => date('Y-m-d H:i:s')
+    ]
+]);
+exit;
 
     $raw  = file_get_contents('php://input');
     $data = json_decode($raw, true);
@@ -421,6 +432,33 @@ function actionDelete($db) {
         if ($dropWarning !== null) $resp['drop_warning'] = $dropWarning;
         echo json_encode($resp);
 
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+// Add this function at the bottom of forms.php:
+function actionGetFields($db) {
+    $code = $_GET['code'] ?? '';
+    if (!$code) { echo json_encode(['success' => false, 'error' => 'Missing code']); return; }
+    try {
+        $form = $db->fetchOne('SELECT form_layout FROM nu_forms WHERE form_code = ? LIMIT 1', [$code]);
+        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found']); return; }
+
+        $layout = json_decode($form['form_layout'] ?? '[]', true);
+        if (!is_array($layout)) $layout = [];
+
+        $flat   = nu_flatten_fields($layout);
+        $fields = [];
+        foreach ($flat as $f) {
+            $type = $f['type'] ?? $f['fieldtype'] ?? 'text';
+            if (nu_is_structural_type($type)) continue;
+            $name  = trim($f['name'] ?? $f['fieldname'] ?? '');
+            $label = trim($f['label'] ?? $f['fieldlabel'] ?? $name);
+            if ($name === '') continue;
+            $fields[] = ['name' => $name, 'label' => $label, 'type' => $type];
+        }
+        echo json_encode(['success' => true, 'fields' => $fields]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
