@@ -119,7 +119,10 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
     $table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
     if ($table === '') return;
 
-    $layout = json_decode($layoutJson, true);
+    $layout = is_string($formLayout) ? json_decode($formLayout, true) : $formLayout;
+    if (!is_array($layout)) $layout = [];
+
+    $fields = nu_flatten_layout_fields($layout);
     if (!is_array($layout)) {
         error_log('[forms.php] nu_sync_table_from_layout: invalid JSON for table=' . $table);
         return;
@@ -309,54 +312,84 @@ function actionList($db) {
 // ── SAVE (insert or update) ───────────────────────────────────────────────
 function actionSave($db) {
     nu_ensure_nu_forms_columns($db);
-    
-  
 
     $raw  = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    if (!is_array($data)) { echo json_encode(['success' => false, 'error' => 'Invalid JSON payload']); return; }
+    if (!is_array($data)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid JSON payload']);
+        return;
+    }
 
-    $formId   = $data['form_id']   ?? null;
+    $formId   = $data['form_id'] ?? null;
     $formName = trim($data['form_name'] ?? '');
     $formCode = trim($data['form_code'] ?? '');
 
-    if (!$formName) { echo json_encode(['success' => false, 'error' => 'form_name is required']); return; }
-    if (!$formCode) $formCode = preg_replace('/[^a-z0-9]+/', '_', strtolower($formName));
+    if (!$formName) {
+        echo json_encode(['success' => false, 'error' => 'form_name is required']);
+        return;
+    }
+
+    if (!$formCode) {
+        $formCode = preg_replace('/[^a-z0-9]+/', '_', strtolower($formName));
+    }
 
     $formLayout = $data['form_layout'] ?? '';
-    if (is_array($formLayout)) $formLayout = json_encode($formLayout);
+    if (is_array($formLayout)) {
+        $formLayout = json_encode($formLayout);
+    }
 
-    // Read these BEFORE array processing so DDL always has them
     $formTable = trim($data['form_table'] ?? '');
     $pkType    = trim($data['form_pk_type'] ?? 'autoincrement');
     $tableMode = trim($data['form_table_mode'] ?? 'new');
 
     error_log('[forms.php] actionSave: name=' . $formName . ' table=' . $formTable . ' pk=' . $pkType . ' mode=' . $tableMode);
 
+    // Build browse_columns from real fields only when empty
+    $browseColumns = $data['browse_columns'] ?? '';
+
+    if (is_array($browseColumns)) {
+        $browseColumns = implode(',', array_filter($browseColumns));
+    } else {
+        $browseColumns = trim((string)$browseColumns);
+    }
+
+    if ($browseColumns === '') {
+        $flatFields = nu_flatten_layout_fields($formLayout);
+        $defaultBrowseColumns = [];
+
+        foreach ($flatFields as $f) {
+            if (!empty($f['name'])) {
+                $defaultBrowseColumns[] = $f['name'];
+            }
+        }
+
+        $browseColumns = implode(',', $defaultBrowseColumns);
+    }
+
     $row = [
         'form_name'                 => $formName,
         'form_code'                 => $formCode,
         'form_table'                => $formTable,
-        'form_type'                 => $data['form_type']                ?? 'main',
+        'form_type'                 => $data['form_type'] ?? 'main',
         'form_table_mode'           => $tableMode,
         'form_pk_type'              => $pkType,
         'form_layout'               => $formLayout,
         'form_active'               => 1,
-        'browse_sql'                => $data['browse_sql']               ?? '',
-        'browse_columns'            => $data['browse_columns']           ?? '',
-        'browse_search_enabled'     => isset($data['browse_search_enabled'])   ? (int)$data['browse_search_enabled']  : 0,
+        'browse_sql'                => $data['browse_sql'] ?? '',
+        'browse_columns'            => $browseColumns,
+        'browse_search_enabled'     => isset($data['browse_search_enabled']) ? (int)$data['browse_search_enabled'] : 0,
         'browse_search_placeholder' => $data['browse_search_placeholder'] ?? '',
-        'browse_search_fields'      => $data['browse_search_fields']     ?? '',
-        'browse_page_size'          => isset($data['browse_page_size'])  ? (int)$data['browse_page_size'] : 20,
-        'browse_default_sort'       => $data['browse_default_sort']      ?? '',
-        'browse_display_mode'       => $data['browse_display_mode']      ?? 'inline',
-        'form_custom_js'            => $data['form_custom_js']           ?? '',
-        'form_js_before_save'       => $data['form_js_before_save']      ?? '',
-        'form_js_after_save'        => $data['form_js_after_save']       ?? '',
-        'form_custom_php'           => $data['form_custom_php']          ?? '',
-        'form_custom_css'           => $data['form_custom_css']          ?? '',
-        'form_panel_mode'           => $data['form_panel_mode']          ?? 'fixed',
-        'form_panel_width'          => isset($data['form_panel_width'])  ? (int)$data['form_panel_width'] : 0,
+        'browse_search_fields'      => $data['browse_search_fields'] ?? '',
+        'browse_page_size'          => isset($data['browse_page_size']) ? (int)$data['browse_page_size'] : 20,
+        'browse_default_sort'       => $data['browse_default_sort'] ?? '',
+        'browse_display_mode'       => $data['browse_display_mode'] ?? 'inline',
+        'form_custom_js'            => $data['form_custom_js'] ?? '',
+        'form_js_before_save'       => $data['form_js_before_save'] ?? '',
+        'form_js_after_save'        => $data['form_js_after_save'] ?? '',
+        'form_custom_php'           => $data['form_custom_php'] ?? '',
+        'form_custom_css'           => $data['form_custom_css'] ?? '',
+        'form_panel_mode'           => $data['form_panel_mode'] ?? 'fixed',
+        'form_panel_width'          => isset($data['form_panel_width']) ? (int)$data['form_panel_width'] : 0,
     ];
 
     try {
@@ -367,7 +400,11 @@ function actionSave($db) {
             error_log('[forms.php] actionSave: updated form_id=' . $savedId);
         } else {
             $existing = $db->fetchOne('SELECT form_id FROM nu_forms WHERE form_code = ?', [$formCode]);
-            if ($existing) { echo json_encode(['success' => false, 'error' => "Form code '{$formCode}' already exists"]); return; }
+            if ($existing) {
+                echo json_encode(['success' => false, 'error' => "Form code '{$formCode}' already exists"]);
+                return;
+            }
+
             $row['created_at'] = date('Y-m-d H:i:s');
             $row['updated_at'] = date('Y-m-d H:i:s');
             $db->insert('nu_forms', $row);
@@ -375,14 +412,12 @@ function actionSave($db) {
             error_log('[forms.php] actionSave: inserted form_id=' . $savedId);
         }
 
-        // ── DDL: create or sync the data table ───────────────────────────
         if ($formTable !== '' && $tableMode !== 'existing_no_sync') {
             if ($formLayout !== '' && $formLayout !== '[]') {
                 try {
                     nu_sync_table_from_layout($db, $formTable, $formLayout, $pkType);
                 } catch (Throwable $e) {
                     error_log('[forms.php] DDL sync FAILED: ' . $e->getMessage());
-                    // form row already saved — DDL failure is logged, not fatal
                 }
             } else {
                 error_log('[forms.php] actionSave: skipping DDL — form_layout empty for table=' . $formTable);
@@ -393,7 +428,11 @@ function actionSave($db) {
             error_log('[forms.php] actionSave: table_mode=existing_no_sync — skipping DDL for ' . $formTable);
         }
 
-        echo json_encode(['success' => true, 'form_id' => $savedId]);
+        echo json_encode([
+            'success' => true,
+            'form_id' => $savedId,
+            'browse_columns' => $browseColumns
+        ]);
     } catch (Exception $e) {
         error_log('[forms.php] actionSave EXCEPTION: ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
