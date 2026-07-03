@@ -14,31 +14,55 @@ function nu_flatten_layout_fields($layout) {
         foreach ($items as $item) {
             if (!is_array($item)) continue;
 
-            if (isset($item['fields']) && is_array($item['fields'])) {
-                $walk($item['fields']);
-                continue;
-            }
-
             $type = strtolower(trim((string)($item['type'] ?? '')));
 
+            // ── Tab container ──────────────────────────────────────────────
             if ($type === 'tab') {
                 foreach (($item['tabs'] ?? []) as $tab) {
                     if (!is_array($tab)) continue;
-                    $walk($tab['rows'] ?? []);
+                    foreach (($tab['rows'] ?? []) as $row) {
+                        $rowType = strtolower(trim((string)($row['type'] ?? 'row')));
+                        if ($rowType === 'group') {
+                            // group inside a tab panel — recurse its rows
+                            $walk($row['rows'] ?? []);
+                        } else {
+                            // plain row inside a tab panel
+                            $walk($row['fields'] ?? []);
+                        }
+                    }
                 }
                 continue;
             }
 
-            if ($type === 'group') {
-                $walk($item['rows'] ?? []);
+            // ── Section or Group (uses children[] at top level) ────────────
+            if ($type === 'section' || $type === 'group') {
+                // Top-level sections/groups store nested nodes in children[]
+                $walk($item['children'] ?? []);
+                // Also handle rows[] for groups that appear inside tab panels
+                foreach (($item['rows'] ?? []) as $row) {
+                    $walk($row['fields'] ?? []);
+                }
                 continue;
             }
 
+            // ── Plain row (uses fields[]) ──────────────────────────────────
+            if ($type === 'row' || isset($item['fields'])) {
+                $walk($item['fields'] ?? []);
+                continue;
+            }
+
+            // ── Subform — skip, handled separately ────────────────────────
             if ($type === 'subform') {
                 continue;
             }
 
-            if (!empty($item['name'])) {
+            // ── Skip layout-only / non-data types ─────────────────────────
+            if (in_array($type, ['html', 'content', 'button', 'fieldset', 'heading', 'divider'], true)) {
+                continue;
+            }
+
+            // ── Leaf field — must have a name ──────────────────────────────
+            if (!empty($item['name']) || !empty($item['fieldname'])) {
                 $out[] = $item;
             }
         }
