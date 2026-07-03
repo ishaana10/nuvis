@@ -1498,10 +1498,14 @@ function nu_handle_list() {
     $layout = nu_decode_layout($form);
 
     if ($table === '') {
-        nu_json(['success' => true, 'data' => [
-            'layout'=>$layout,'records'=>[],'page'=>1,'pages'=>1,'total'=>0,
-            'query'=>$q,'browsesearchenabled'=>0,'browsesearchplaceholder'=>'Search...'
-        ]]);
+       nu_json(['success' => true, 'data' => [
+    'layout'  => nu_flatten_layout_for_grid($layout),  // ← FIXED
+    'records' => $records,
+    'page'    => $page,   'pages' => $pages,  'total' => $total,
+    'query'   => $q,
+    'browsesearchenabled'       => $searchEnabled,
+    'browsesearchplaceholder'   => $form[$c['browse_search_placeholder']] ?? 'Search...',
+]]);
     }
 
     $pageSize = (int)($form[$c['browse_page_size']] ?? 20);
