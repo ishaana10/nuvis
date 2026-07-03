@@ -319,10 +319,14 @@ function nu_flatten_layout_fields($layout) {
     $out = [];
 
     $walk = function($items) use (&$walk, &$out) {
-        if (!is_array($items)) return;
+        if (!is_array($items)) {
+            return;
+        }
 
         foreach ($items as $item) {
-            if (!is_array($item)) continue;
+            if (!is_array($item)) {
+                continue;
+            }
 
             if (isset($item['fields']) && is_array($item['fields'])) {
                 $walk($item['fields']);
@@ -333,7 +337,9 @@ function nu_flatten_layout_fields($layout) {
 
             if ($type === 'tab') {
                 foreach (($item['tabs'] ?? []) as $tab) {
-                    if (!is_array($tab)) continue;
+                    if (!is_array($tab)) {
+                        continue;
+                    }
                     $walk($tab['rows'] ?? []);
                 }
                 continue;
@@ -357,6 +363,12 @@ function nu_flatten_layout_fields($layout) {
     $walk($layout);
     return $out;
 }
+
+function nu_flatten_layout($layout) {
+    return nu_flatten_layout_fields($layout);
+}
+
+
 // ── SAVE (insert or update) ───────────────────────────────────────────────
 function actionSave($db) {
     nu_ensure_nu_forms_columns($db);
