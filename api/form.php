@@ -1100,7 +1100,7 @@ function nu_flatten_fields(array $layout): array {
 
 function nu_flatten_layout_for_grid($layout) {
     return array_values(array_filter(
-        nu_flatten_layout($layout),
+        nu_flatten_fields($layout),   // ← use the local function, it handles tabs
         function ($f) { return !nu_field_hide_in_grid($f); }
     ));
 }
