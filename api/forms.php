@@ -8,7 +8,7 @@ header('Content-Type: application/json');
 require_once '../config.php';
 require_once '../core/Database.php';
 require_once '../core/Auth.php';
-
+require_once __DIR__ . '/_form_layout_helpers.php';
 $auth = new NuAuth();
 if (!$auth->checkAuth()) {
     http_response_code(403);
@@ -310,6 +310,7 @@ function actionList($db) {
 }
 
 
+/*
 function nu_flatten_layout_fields($layout) {
     if (is_string($layout)) {
         $decoded = json_decode($layout, true);
@@ -367,6 +368,8 @@ function nu_flatten_layout_fields($layout) {
 function nu_flatten_layout($layout) {
     return nu_flatten_layout_fields($layout);
 }
+
+*/
 
 
 // ── SAVE (insert or update) ───────────────────────────────────────────────
