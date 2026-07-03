@@ -1159,7 +1159,6 @@ function nu_flatten_layout_fields($layout) {
         foreach ($items as $item) {
             if (!is_array($item)) continue;
 
-            // Row wrapper: { fields: [...] }
             if (isset($item['fields']) && is_array($item['fields'])) {
                 $walk($item['fields']);
                 continue;
@@ -1167,7 +1166,6 @@ function nu_flatten_layout_fields($layout) {
 
             $type = strtolower(trim((string)($item['type'] ?? '')));
 
-            // Layout-only containers
             if ($type === 'tab') {
                 foreach (($item['tabs'] ?? []) as $tab) {
                     if (!is_array($tab)) continue;
@@ -1181,12 +1179,10 @@ function nu_flatten_layout_fields($layout) {
                 continue;
             }
 
-            // Relationship/layout field, not a physical column on parent table
             if ($type === 'subform') {
                 continue;
             }
 
-            // Real leaf field
             if (!empty($item['name'])) {
                 $out[] = $item;
             }
@@ -1196,6 +1192,7 @@ function nu_flatten_layout_fields($layout) {
     $walk($layout);
     return $out;
 }
+
 
 function nu_flatten_layout_for_grid($layout) {
     return array_values(array_filter(
