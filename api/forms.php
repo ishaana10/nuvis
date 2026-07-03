@@ -313,86 +313,101 @@ function actionList($db) {
 function actionSave($db) {
     nu_ensure_nu_forms_columns($db);
 
-    $raw  = file_get_contents('php://input');
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        echo json_encode(['success' => false, 'error' => 'Invalid JSON payload']);
-        return;
+    // Always return JSON
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
     }
-
-    $formId   = $data['form_id'] ?? null;
-    $formName = trim($data['form_name'] ?? '');
-    $formCode = trim($data['form_code'] ?? '');
-
-    if (!$formName) {
-        echo json_encode(['success' => false, 'error' => 'form_name is required']);
-        return;
-    }
-
-    if (!$formCode) {
-        $formCode = preg_replace('/[^a-z0-9]+/', '_', strtolower($formName));
-    }
-
-    $formLayout = $data['form_layout'] ?? '';
-    if (is_array($formLayout)) {
-        $formLayout = json_encode($formLayout);
-    }
-
-    $formTable = trim($data['form_table'] ?? '');
-    $pkType    = trim($data['form_pk_type'] ?? 'autoincrement');
-    $tableMode = trim($data['form_table_mode'] ?? 'new');
-
-    error_log('[forms.php] actionSave: name=' . $formName . ' table=' . $formTable . ' pk=' . $pkType . ' mode=' . $tableMode);
-
-    // Build browse_columns from real fields only when empty
-    $browseColumns = $data['browse_columns'] ?? '';
-
-    if (is_array($browseColumns)) {
-        $browseColumns = implode(',', array_filter($browseColumns));
-    } else {
-        $browseColumns = trim((string)$browseColumns);
-    }
-
-    if ($browseColumns === '') {
-        $flatFields = nu_flatten_layout_fields($formLayout);
-        $defaultBrowseColumns = [];
-
-        foreach ($flatFields as $f) {
-            if (!empty($f['name'])) {
-                $defaultBrowseColumns[] = $f['name'];
-            }
-        }
-
-        $browseColumns = implode(',', $defaultBrowseColumns);
-    }
-
-    $row = [
-        'form_name'                 => $formName,
-        'form_code'                 => $formCode,
-        'form_table'                => $formTable,
-        'form_type'                 => $data['form_type'] ?? 'main',
-        'form_table_mode'           => $tableMode,
-        'form_pk_type'              => $pkType,
-        'form_layout'               => $formLayout,
-        'form_active'               => 1,
-        'browse_sql'                => $data['browse_sql'] ?? '',
-        'browse_columns'            => $browseColumns,
-        'browse_search_enabled'     => isset($data['browse_search_enabled']) ? (int)$data['browse_search_enabled'] : 0,
-        'browse_search_placeholder' => $data['browse_search_placeholder'] ?? '',
-        'browse_search_fields'      => $data['browse_search_fields'] ?? '',
-        'browse_page_size'          => isset($data['browse_page_size']) ? (int)$data['browse_page_size'] : 20,
-        'browse_default_sort'       => $data['browse_default_sort'] ?? '',
-        'browse_display_mode'       => $data['browse_display_mode'] ?? 'inline',
-        'form_custom_js'            => $data['form_custom_js'] ?? '',
-        'form_js_before_save'       => $data['form_js_before_save'] ?? '',
-        'form_js_after_save'        => $data['form_js_after_save'] ?? '',
-        'form_custom_php'           => $data['form_custom_php'] ?? '',
-        'form_custom_css'           => $data['form_custom_css'] ?? '',
-        'form_panel_mode'           => $data['form_panel_mode'] ?? 'fixed',
-        'form_panel_width'          => isset($data['form_panel_width']) ? (int)$data['form_panel_width'] : 0,
-    ];
 
     try {
+        $raw = file_get_contents('php://input');
+        $data = json_decode($raw, true);
+
+        if (!is_array($data)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid JSON payload'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $formId   = $data['form_id'] ?? null;
+        $formName = trim((string)($data['form_name'] ?? ''));
+        $formCode = trim((string)($data['form_code'] ?? ''));
+
+        if ($formName === '') {
+            echo json_encode(['success' => false, 'error' => 'form_name is required'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if ($formCode === '') {
+            $formCode = preg_replace('/[^a-z0-9]+/', '_', strtolower($formName));
+        }
+
+        $formLayout = $data['form_layout'] ?? '';
+        if (is_array($formLayout)) {
+            $formLayout = json_encode($formLayout, JSON_UNESCAPED_UNICODE);
+        } else {
+            $formLayout = (string)$formLayout;
+        }
+
+        $formTable = trim((string)($data['form_table'] ?? ''));
+        $pkType    = trim((string)($data['form_pk_type'] ?? 'autoincrement'));
+        $tableMode = trim((string)($data['form_table_mode'] ?? 'new'));
+
+        error_log('[forms.php] actionSave: name=' . $formName . ' table=' . $formTable . ' pk=' . $pkType . ' mode=' . $tableMode);
+
+        // Safe browse_columns normalization
+        $browseColumns = $data['browse_columns'] ?? '';
+
+        if (is_array($browseColumns)) {
+            $tmp = [];
+            foreach ($browseColumns as $v) {
+                $v = trim((string)$v);
+                if ($v !== '') $tmp[] = $v;
+            }
+            $browseColumns = implode(',', $tmp);
+        } else {
+            $browseColumns = trim((string)$browseColumns);
+        }
+
+        // Default browse columns from real fields only
+        if ($browseColumns === '') {
+            $flatFields = nu_flatten_layout_fields($formLayout);
+            $defaultBrowseColumns = [];
+
+            foreach ($flatFields as $f) {
+                $name = trim((string)($f['name'] ?? ''));
+                if ($name !== '') {
+                    $defaultBrowseColumns[] = $name;
+                }
+            }
+
+            $browseColumns = implode(',', $defaultBrowseColumns);
+        }
+
+        $row = [
+            'form_name'                 => $formName,
+            'form_code'                 => $formCode,
+            'form_table'                => $formTable,
+            'form_type'                 => $data['form_type'] ?? 'main',
+            'form_table_mode'           => $tableMode,
+            'form_pk_type'              => $pkType,
+            'form_layout'               => $formLayout,
+            'form_active'               => 1,
+            'browse_sql'                => (string)($data['browse_sql'] ?? ''),
+            'browse_columns'            => $browseColumns,
+            'browse_search_enabled'     => isset($data['browse_search_enabled']) ? (int)$data['browse_search_enabled'] : 0,
+            'browse_search_placeholder' => (string)($data['browse_search_placeholder'] ?? ''),
+            'browse_search_fields'      => (string)($data['browse_search_fields'] ?? ''),
+            'browse_page_size'          => isset($data['browse_page_size']) ? (int)$data['browse_page_size'] : 20,
+            'browse_default_sort'       => (string)($data['browse_default_sort'] ?? ''),
+            'browse_display_mode'       => (string)($data['browse_display_mode'] ?? 'inline'),
+            'form_custom_js'            => (string)($data['form_custom_js'] ?? ''),
+            'form_js_before_save'       => (string)($data['form_js_before_save'] ?? ''),
+            'form_js_after_save'        => (string)($data['form_js_after_save'] ?? ''),
+            'form_custom_php'           => (string)($data['form_custom_php'] ?? ''),
+            'form_custom_css'           => (string)($data['form_custom_css'] ?? ''),
+            'form_panel_mode'           => (string)($data['form_panel_mode'] ?? 'fixed'),
+            'form_panel_width'          => isset($data['form_panel_width']) ? (int)$data['form_panel_width'] : 0,
+        ];
+
         if ($formId) {
             $row['updated_at'] = date('Y-m-d H:i:s');
             $db->update('nu_forms', $row, 'form_id = ?', [$formId]);
@@ -401,7 +416,7 @@ function actionSave($db) {
         } else {
             $existing = $db->fetchOne('SELECT form_id FROM nu_forms WHERE form_code = ?', [$formCode]);
             if ($existing) {
-                echo json_encode(['success' => false, 'error' => "Form code '{$formCode}' already exists"]);
+                echo json_encode(['success' => false, 'error' => "Form code '{$formCode}' already exists"], JSON_UNESCAPED_UNICODE);
                 return;
             }
 
@@ -429,16 +444,19 @@ function actionSave($db) {
         }
 
         echo json_encode([
-            'success' => true,
-            'form_id' => $savedId,
+            'success'        => true,
+            'form_id'        => $savedId,
             'browse_columns' => $browseColumns
-        ]);
-    } catch (Exception $e) {
-        error_log('[forms.php] actionSave EXCEPTION: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        ], JSON_UNESCAPED_UNICODE);
+
+    } catch (Throwable $e) {
+        error_log('[forms.php] actionSave EXCEPTION: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        echo json_encode([
+            'success' => false,
+            'error'   => $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE);
     }
 }
-
 // ── DELETE a form ─────────────────────────────────────────────────────────
 function actionDelete($db) {
     $id = $_GET['id'] ?? '';
