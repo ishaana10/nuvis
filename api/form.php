@@ -1499,7 +1499,7 @@ function nu_handle_list() {
 
     if ($table === '') {
         nu_json(['success' => true, 'data' => [
-            'layout'=>nu_flatten_layout_for_grid($layout),'records'=>[],'page'=>1,'pages'=>1,'total'=>0,
+    'layout'  => nu_flatten_layout_for_grid($layout), 'records' => $records,'page'=>1,'pages'=>1,'total'=>0,
             'query'=>$q,'browsesearchenabled'=>0,'browsesearchplaceholder'=>'Search...'
         ]]);
         
