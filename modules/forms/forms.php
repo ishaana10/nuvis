@@ -934,9 +934,25 @@ foreach ($forms as $f) {
           <label class="nu-label">Search Placeholder</label>
           <input type="text" id="formBrowseSearchPlaceholder" class="nu-input" placeholder="Search records...">
         </div>
-        <div>
+        <div style="grid-column:1/-1;">
           <label class="nu-label">Search Fields <span style="font-weight:400;color:var(--text-tertiary);">(comma-sep)</span></label>
           <input type="text" id="formBrowseSearchFields" class="nu-input" placeholder="name, email">
+        </div>
+        <div style="grid-column:1/-1;">
+          <label class="nu-label" style="margin-bottom:6px;display:block;">
+            Browse PHP
+            <span style="font-weight:400;color:var(--text-tertiary);">— customize browse query (use <code>$nuSql</code>, <code>$nuWhere</code>, <code>$nuOrder</code>, <code>$nuParams</code>)</span>
+          </label>
+          <div class="nb-ace-wrap" id="wrapBrowsePhp">
+            <div class="nb-ace-topbar">
+              <span class="nb-ace-lang-badge php">PHP</span>
+              <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo · drag handle to resize</span>
+              <button class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceBrowsePhp')">☀ theme</button>
+            </div>
+            <div id="aceBrowsePhp" class="nb-ace-editor" style="height:140px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceBrowsePhp"></div>
+          </div>
+          <textarea id="formBrowsePhp" class="nb-ace-hidden"></textarea>
         </div>
       </div>
     </div>
@@ -1190,6 +1206,7 @@ if (!window._nbFormsModuleInit) {
     nbAce.init('aceJsAfterSave',   'formJsAfterSave',   'javascript');
     nbAce.init('aceCustomPhp',     'formCustomPhp',     'php');
     nbAce.init('aceCustomCss',     'formCustomCss',     'css');
+    nbAce.init('aceBrowsePhp',     'formBrowsePhp',     'php');
   }, 100);
 
   // ── Resize Ace when its parent tab becomes visible ────────────────
@@ -1539,6 +1556,7 @@ if (!window._nbFormsModuleInit) {
         aceJsAfterSave:  'formJsAfterSave',
         aceCustomPhp:    'formCustomPhp',
         aceCustomCss:    'formCustomCss',
+        aceBrowsePhp:    'formBrowsePhp',
       };
       var snapshot = {};
       Object.keys(aceMap).forEach(function(aceId) {

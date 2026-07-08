@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS nu_forms (
     browse_page_size          INT          DEFAULT 20,
     browse_default_sort       VARCHAR(255),
     browse_display_mode       VARCHAR(20)  DEFAULT 'inline',
+    browse_php                TEXT,
 
     form_created_by  INT,
     form_created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -251,3 +252,4 @@ INSERT INTO nu_menus (menu_parent_id, menu_code, menu_label, menu_type, menu_tar
 -- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS browse_page_size    INT DEFAULT 20 AFTER browse_search_fields;
 -- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS browse_default_sort VARCHAR(255)  AFTER browse_page_size;
 -- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS browse_display_mode VARCHAR(20) DEFAULT 'inline' AFTER browse_default_sort;
+-- ALTER TABLE nu_forms ADD COLUMN IF NOT EXISTS browse_php          TEXT          AFTER browse_display_mode;
