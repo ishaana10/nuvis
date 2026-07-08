@@ -488,6 +488,29 @@ function _renderPropsInPanel(card, body) {
   });
 
   grid.appendChild(visWrap);
+
+  // Custom attributes for developers
+  var attrWrap = document.createElement('div');
+  attrWrap.className = 'nb-fp nb-fp-full';
+  attrWrap.style.marginTop = '10px';
+  var attrLabel = document.createElement('label');
+  attrLabel.textContent = 'Custom Attributes (JSON or key=val)';
+  attrLabel.style.fontWeight = '700';
+  attrWrap.appendChild(attrLabel);
+  var attrArea = document.createElement('textarea');
+  attrArea.className = 'nu-input nu-field-custom-attrs';
+  attrArea.rows = 3;
+  attrArea.placeholder = 'data-custom="value"\n{"style": "color:red"}';
+  var liveAttr = _fromCard('fieldCustomAttrs', '.nu-field-custom-attrs');
+  attrArea.value = liveAttr;
+  attrArea.addEventListener('input', function () {
+    card.dataset.fieldCustomAttrs = attrArea.value;
+    var orig = card.querySelector('.nb-cfield-body .nu-field-custom-attrs');
+    if (orig) { orig.value = attrArea.value; orig.setAttribute('value', attrArea.value); }
+  });
+  attrWrap.appendChild(attrArea);
+  grid.appendChild(attrWrap);
+
   body.appendChild(grid);
 }
 
@@ -902,6 +925,28 @@ fields.forEach(function (f) {
     var el = card.querySelector(sel);
     if (el) el.checked = !!fd[map[sel]];
   });
+
+  var customAttrs = card.querySelector('.nu-field-custom-attrs');
+  if (customAttrs) {
+    var caVal = fd.custom_attributes || '';
+    customAttrs.value = caVal;
+    customAttrs.setAttribute('value', caVal);
+    card.dataset.fieldCustomAttrs = caVal;
+  }
+
+  if (type === 'upload') {
+    var exts = card.querySelector('.nu-upload-exts');
+    if (exts) { exts.value = fd.allowed_extensions || ''; exts.setAttribute('value', exts.value); }
+    var size = card.querySelector('.nu-upload-maxsize');
+    if (size) { size.value = fd.max_size_mb || ''; size.setAttribute('value', size.value); }
+  }
+
+  if (type === 'photo_canvas') {
+    var w = card.querySelector('.nu-canvas-width');
+    if (w) { w.value = fd.canvas_width || ''; w.setAttribute('value', w.value); }
+    var h = card.querySelector('.nu-canvas-height');
+    if (h) { h.value = fd.canvas_height || ''; h.setAttribute('value', h.value); }
+  }
 }
     /* ════════════════════════════════════════════════════════════════════
      nbFormBuilder public API
@@ -1068,6 +1113,12 @@ fields.forEach(function (f) {
     var lk = (extra.lookup && typeof extra.lookup === 'object') ? extra.lookup : {};
     extraBody += '<div style="background:var(--bg-offset,#f0f4ff);border:1.5px solid var(--color-primary,#4f6bed);border-radius:8px;padding:12px 14px;margin-top:6px;grid-column:1/-1;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--color-primary,#4f6bed);margin-bottom:10px;">🔗 LOOKUP CONFIG</div><div style="margin-bottom:8px;"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Lookup Table</label><input type="text" class="nu-input nu-lookup-table" value="' + _esc(lk.table || extra.lookup_form || '') + '" placeholder="e.g. customers" style="font-size:12px;width:100%;box-sizing:border-box;"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;"><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Display Col</label><input type="text" class="nu-input nu-lookup-display" value="' + _esc(lk.display_column || extra.lookup_display || '') + '" placeholder="full_name" style="font-size:12px;"></div><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Store Col</label><input type="text" class="nu-input nu-lookup-store" value="' + _esc(lk.id_column || extra.lookup_store || '') + '" placeholder="id" style="font-size:12px;"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Filter SQL</label><input type="text" class="nu-input nu-lookup-filter" value="' + _esc(lk.filter || extra.lookup_filter || '') + '" placeholder="active=1" style="font-size:12px;"></div><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Extra Mapping</label><input type="text" class="nu-input nu-lookup-extra" value="' + _esc(lk.extra || extra.lookup_extra || '') + '" placeholder="code:dept_code" style="font-size:12px;"></div></div></div>';
   }
+  if (canvasType === 'upload') {
+    extraBody += '<div style="background:var(--bg-offset,#f0f4ff);border:1.5px solid var(--color-primary,#4f6bed);border-radius:8px;padding:12px 14px;margin-top:6px;grid-column:1/-1;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--color-primary,#4f6bed);margin-bottom:10px;">📤 UPLOAD CONFIG</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Allowed Exts</label><input type="text" class="nu-input nu-upload-exts" value="' + _esc(extra.allowed_extensions || '') + '" placeholder="jpg,png,pdf" style="font-size:12px;"></div><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Max Size (MB)</label><input type="number" class="nu-input nu-upload-maxsize" value="' + _esc(extra.max_size_mb || '') + '" placeholder="10" style="font-size:12px;"></div></div></div>';
+  }
+  if (canvasType === 'photo_canvas') {
+    extraBody += '<div style="background:var(--bg-offset,#f0f4ff);border:1.5px solid var(--color-primary,#4f6bed);border-radius:8px;padding:12px 14px;margin-top:6px;grid-column:1/-1;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--color-primary,#4f6bed);margin-bottom:10px;">🎨 PHOTO CANVAS CONFIG</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Canvas Width</label><input type="number" class="nu-input nu-canvas-width" value="' + _esc(extra.canvas_width || '') + '" placeholder="800" style="font-size:12px;"></div><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Canvas Height</label><input type="number" class="nu-input nu-canvas-height" value="' + _esc(extra.canvas_height || '') + '" placeholder="600" style="font-size:12px;"></div></div></div>';
+  }
   var sfData;
   if (canvasType === 'subform') {
   var sf = (extra.subform && typeof extra.subform === 'object') ? extra.subform : {};
@@ -1123,6 +1174,7 @@ if (canvasType === 'subform' && sfData) {
         + '<div class="nb-fp nb-fp-full"><label>Help Text</label><input type="text" class="nu-input nu-field-help" value="' + _esc(extra.help_text || extra.field_help_text || '') + '"></div>'
         + extraBody
         + _visibilityFlagsHTML(extra)
+        + '<div class="nb-fp nb-fp-full" style="grid-column:1/-1;"><label>Custom Attributes</label><textarea class="nu-input nu-field-custom-attrs" rows="2">' + _esc(extra.custom_attributes || '') + '</textarea></div>'
       + '</div>'
     + '</div>';
 
@@ -1336,7 +1388,8 @@ entry.fields.forEach(function (f) {
       '.nu-field-name':        'fieldName',
       '.nu-field-placeholder': 'fieldPh',
       '.nu-field-default':     'fieldDefault',
-      '.nu-field-help':        'fieldHelp'
+      '.nu-field-help':        'fieldHelp',
+      '.nu-field-custom-attrs':'fieldCustomAttrs'
     };
     var dsKey = dsMap[sel];
 
@@ -1387,7 +1440,8 @@ entry.fields.forEach(function (f) {
     default_value:         _val('.nu-field-default'),
     help_text:             _val('.nu-field-help'),
     col:                   parseInt(card.dataset.col, 10) || 6,
-    row_index:             (rowIndex !== undefined && rowIndex !== null) ? rowIndex : -1
+    row_index:             (rowIndex !== undefined && rowIndex !== null) ? rowIndex : -1,
+    custom_attributes:     _val('.nu-field-custom-attrs')
   };
 
   if (t === 'select') {
@@ -1438,6 +1492,16 @@ entry.fields.forEach(function (f) {
       filter:         _val('.nu-lookup-filter'),
       extra:          _val('.nu-lookup-extra')
     };
+  }
+
+  if (t === 'upload') {
+    field.allowed_extensions = _val('.nu-upload-exts');
+    field.max_size_mb         = _val('.nu-upload-maxsize');
+  }
+
+  if (t === 'photo_canvas') {
+    field.canvas_width  = _val('.nu-canvas-width');
+    field.canvas_height = _val('.nu-canvas-height');
   }
 
   if (t === 'subform') {
