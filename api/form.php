@@ -1510,8 +1510,21 @@ function nu_handle_list() {
     if ($pageSize < 1) $pageSize = 20;
 
     $pk         = nu_get_pk($table);
-    $sortSql    = trim((string)($form[$c['browse_default_sort']] ?? ''));
-    $defaultOrder = $sortSql !== '' ? $sortSql : "`{$pk}` DESC";
+
+    // Support dynamic sorting
+    $reqSort = $_GET['sort'] ?? '';
+    $reqDir  = strtoupper($_GET['dir'] ?? 'ASC');
+    if (!in_array($reqDir, ['ASC', 'DESC'])) $reqDir = 'ASC';
+
+    $sortSql      = trim((string)($form[$c['browse_default_sort']] ?? ''));
+    $defaultOrder = $sortSql !== '' ? $sortSql : "`{$table}`.`{$pk}` DESC";
+
+    if ($reqSort !== '') {
+        $safeReqSort = nu_safe_ident($reqSort);
+        $orderClause = "`{$safeReqSort}` {$reqDir}";
+    } else {
+        $orderClause = $defaultOrder;
+    }
 
     $browsePhp = trim((string)($form[$c['browse_php']] ?? ''));
     $nuHash    = nu_get_hash();
@@ -1538,7 +1551,7 @@ function nu_handle_list() {
         if ($searchEnabled && $q !== '') {
             $fields = array_filter(array_map('trim', explode(',', $searchFields)));
             if (!$fields) {
-                foreach (nu_flatten_layout($layout) as $field) {
+                foreach (nu_flatten_layout_for_grid($layout) as $field) {
                     $fname = nu_safe_ident(nu_field_name($field));
                     if ($fname !== '') $fields[] = $fname;
                 }
@@ -1555,16 +1568,30 @@ function nu_handle_list() {
             }
         }
 
-        $orderClause = $nuOrder !== '' ? $nuOrder : $defaultOrder;
+        $finalOrder = $nuOrder !== '' ? $nuOrder : $orderClause;
         $total  = (int)nu_q("SELECT COUNT(*) FROM ({$baseSql}) _nu_cnt", $baseParams)->fetchColumn();
         $pages  = max(1, (int)ceil($total / $pageSize));
         if ($page > $pages) $page = $pages;
         $offset = ($page - 1) * $pageSize;
-        $records = nu_q($baseSql . " ORDER BY {$orderClause} LIMIT {$pageSize} OFFSET {$offset}", $baseParams)
+        $records = nu_q($baseSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}", $baseParams)
                        ->fetchAll(PDO::FETCH_ASSOC);
 
     } else {
         $where = []; $params = [];
+        $joins = [];
+        $selectCols = ["`{$table}`.*"];
+
+        // Handle custom Joins from layout
+        $flatLayout = nu_flatten_layout_for_grid($layout);
+        foreach ($flatLayout as $f) {
+            $jSql = trim($f['join_sql'] ?? '');
+            $jDisp = trim($f['join_display_field'] ?? '');
+            $fName = nu_field_name($f);
+            if ($jSql !== '' && $jDisp !== '') {
+                $joins[] = $jSql;
+                $selectCols[] = "{$jDisp} AS `{$fName}_display`";
+            }
+        }
 
         if ($nuWhere !== '') {
             $where[]  = '(' . $nuWhere . ')';
@@ -1574,7 +1601,7 @@ function nu_handle_list() {
         if ($searchEnabled && $q !== '') {
             $fields = array_filter(array_map('trim', explode(',', $searchFields)));
             if (!$fields) {
-                foreach (nu_flatten_layout($layout) as $field) {
+                foreach ($flatLayout as $field) {
                     $fname = nu_safe_ident(nu_field_name($field));
                     if ($fname !== '') $fields[] = $fname;
                 }
@@ -1583,6 +1610,10 @@ function nu_handle_list() {
             foreach ($fields as $fn) {
                 $fn = nu_safe_ident($fn);
                 if ($fn === '') continue;
+                // If it's a join display field, we might need to handle it differently,
+                // but usually searching by the alias or original field works if SQL allows.
+                // To be safe, we wrap in subquery or use the join field directly if we knew it.
+                // For now, let's assume it's a column in the main table or we use the alias.
                 $likes[] = "`{$fn}` LIKE ?";
                 $params[] = '%' . $q . '%';
             }
@@ -1590,17 +1621,23 @@ function nu_handle_list() {
         }
 
         $whereSql    = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
-        $orderClause = $nuOrder !== '' ? $nuOrder : $defaultOrder;
-        $total       = (int)nu_q("SELECT COUNT(*) FROM `{$table}`" . $whereSql, $params)->fetchColumn();
+        $joinSql     = $joins ? (' ' . implode(' ', $joins)) : '';
+        $selectSql   = implode(', ', $selectCols);
+
+        $finalOrder = $nuOrder !== '' ? $nuOrder : $orderClause;
+
+        $totalSql    = "SELECT COUNT(*) FROM `{$table}`" . $joinSql . $whereSql;
+        $total       = (int)nu_q($totalSql, $params)->fetchColumn();
         $pages       = max(1, (int)ceil($total / $pageSize));
         if ($page > $pages) $page = $pages;
         $offset      = ($page - 1) * $pageSize;
-        $records     = nu_q("SELECT * FROM `{$table}`" . $whereSql . " ORDER BY {$orderClause} LIMIT {$pageSize} OFFSET {$offset}", $params)
-                           ->fetchAll(PDO::FETCH_ASSOC);
+
+        $recordsSql  = "SELECT {$selectSql} FROM `{$table}`" . $joinSql . $whereSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}";
+        $records     = nu_q($recordsSql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     nu_json(['success' => true, 'data' => [
-        'layout'  => $layout, 'records' => $records,
+        'layout'  => nu_flatten_layout_for_grid($layout), 'records' => $records,
         'page'    => $page,   'pages'   => $pages,   'total' => $total,
         'query'   => $q,      'browsesearchenabled'   => $searchEnabled,
         'browsesearchplaceholder' => $form[$c['browse_search_placeholder']] ?? 'Search...'

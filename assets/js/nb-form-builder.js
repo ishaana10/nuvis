@@ -406,6 +406,35 @@ function _renderPropsInPanel(card, body) {
   });
   grid.appendChild(_fp('Help Text', helpInput, true));
 
+  var joinSqlInput = _inp(_fromCard('fieldJoinSql', '.nu-field-join-sql'), 'LEFT JOIN table ON ...');
+  joinSqlInput.addEventListener('input', function () {
+    card.dataset.fieldJoinSql = joinSqlInput.value;
+    var orig = card.querySelector('.nb-cfield-body .nu-field-join-sql');
+    if (orig) { orig.value = joinSqlInput.value; orig.setAttribute('value', joinSqlInput.value); }
+  });
+  grid.appendChild(_fp('Join SQL', joinSqlInput, true));
+
+  var joinDisplayInput = _inp(_fromCard('fieldJoinDisplay', '.nu-field-join-display'), 'table.column');
+  joinDisplayInput.addEventListener('input', function () {
+    card.dataset.fieldJoinDisplay = joinDisplayInput.value;
+    var orig = card.querySelector('.nb-cfield-body .nu-field-join-display');
+    if (orig) { orig.value = joinDisplayInput.value; orig.setAttribute('value', joinDisplayInput.value); }
+  });
+  grid.appendChild(_fp('Join Display Field', joinDisplayInput, true));
+
+  var badgesInput = document.createElement('textarea');
+  badgesInput.className = 'nu-input nu-field-badges';
+  badgesInput.rows = 3;
+  badgesInput.placeholder = '[{"label":"New","condition":"{id} > 100","class":"nu-badge-success"}]';
+  var bval = _fromCard('fieldBadges', '.nu-field-badges');
+  badgesInput.value = bval;
+  badgesInput.addEventListener('input', function () {
+    card.dataset.fieldBadges = badgesInput.value;
+    var orig = card.querySelector('.nb-cfield-body .nu-field-badges');
+    if (orig) { orig.value = badgesInput.value; orig.setAttribute('value', badgesInput.value); }
+  });
+  grid.appendChild(_fp('Badges JSON', badgesInput, true));
+
   // Type-specific extras from body grid (skip standard fields already rendered above)
   var cardBody = card.querySelector('.nb-cfield-body');
   if (cardBody) {
@@ -838,11 +867,20 @@ fields.forEach(function (f) {
   var bodyPh    = card.querySelector('.nu-field-placeholder');
   var bodyDef   = card.querySelector('.nu-field-default');
   var bodyHelp  = card.querySelector('.nu-field-help');
+  var bodyJoin  = card.querySelector('.nu-field-join-sql');
+  var bodyDisp  = card.querySelector('.nu-field-join-display');
+  var bodyBadg  = card.querySelector('.nu-field-badges');
   if (bodyLabel) { bodyLabel.value = fLabel; bodyLabel.setAttribute('value', fLabel); }
   if (bodyName)  { bodyName.value  = fName;  bodyName.setAttribute('value', fName); }
   if (bodyPh)    { bodyPh.value    = fPh;    bodyPh.setAttribute('value', fPh); }
   if (bodyDef)   { bodyDef.value   = fDef;   bodyDef.setAttribute('value', fDef); }
   if (bodyHelp)  { bodyHelp.value  = fHelp;  bodyHelp.setAttribute('value', fHelp); }
+  if (bodyJoin)  { bodyJoin.value  = f.join_sql || ''; bodyJoin.setAttribute('value', f.join_sql || ''); }
+  if (bodyDisp)  { bodyDisp.value  = f.join_display_field || ''; bodyDisp.setAttribute('value', f.join_display_field || ''); }
+  if (bodyBadg)  {
+    var bv = typeof f.badges === 'string' ? f.badges : JSON.stringify(f.badges || []);
+    bodyBadg.value = bv; bodyBadg.setAttribute('value', bv);
+  }
 
   /* Update visible header label */
   var hdr = card.querySelector('.nb-cfield-label');
@@ -941,7 +979,7 @@ fields.forEach(function (f) {
 
     _clearForm: function () {
       ['builderFormName','builderFormCode','builderFormTable','formBrowseSql','formBrowseColumns','formBrowseDefaultSort',
-       'formBrowseSearchPlaceholder','formBrowseSearchFields','formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomCss']
+       'formBrowseSearchPlaceholder','formBrowseSearchFields','formBrowsePhp','formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomCss']
         .forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
       var ps = document.getElementById('formBrowsePageSize'); if (ps) ps.value = '20';
       var srch = document.getElementById('formBrowseSearchEnabled'); if (srch) srch.checked = false;
@@ -1064,6 +1102,9 @@ fields.forEach(function (f) {
     extraBody += _optionsSourceHTML(name, extra.options_source === 'table', rcOpts, extra);
   }
   if (canvasType === 'calculated') extraBody += '<div class="nb-fp nb-fp-full"><label>Formula</label><textarea class="nu-input nu-field-formula" rows="2" placeholder="{qty} * {price}">' + _esc(extra.formula || extra.calc_formula || '') + '</textarea></div>';
+  extraBody += '<div class="nb-fp nb-fp-full" style="display:none;"><label>Join SQL</label><input type="text" class="nu-input nu-field-join-sql" value="' + _esc(extra.join_sql || '') + '"></div>';
+  extraBody += '<div class="nb-fp nb-fp-full" style="display:none;"><label>Join Display</label><input type="text" class="nu-input nu-field-join-display" value="' + _esc(extra.join_display_field || '') + '"></div>';
+  extraBody += '<div class="nb-fp nb-fp-full" style="display:none;"><label>Badges</label><textarea class="nu-input nu-field-badges">' + _esc(typeof extra.badges === 'string' ? extra.badges : JSON.stringify(extra.badges || [])) + '</textarea></div>';
   if (canvasType === 'lookup') {
     var lk = (extra.lookup && typeof extra.lookup === 'object') ? extra.lookup : {};
     extraBody += '<div style="background:var(--bg-offset,#f0f4ff);border:1.5px solid var(--color-primary,#4f6bed);border-radius:8px;padding:12px 14px;margin-top:6px;grid-column:1/-1;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--color-primary,#4f6bed);margin-bottom:10px;">🔗 LOOKUP CONFIG</div><div style="margin-bottom:8px;"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Lookup Table</label><input type="text" class="nu-input nu-lookup-table" value="' + _esc(lk.table || extra.lookup_form || '') + '" placeholder="e.g. customers" style="font-size:12px;width:100%;box-sizing:border-box;"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;"><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Display Col</label><input type="text" class="nu-input nu-lookup-display" value="' + _esc(lk.display_column || extra.lookup_display || '') + '" placeholder="full_name" style="font-size:12px;"></div><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Store Col</label><input type="text" class="nu-input nu-lookup-store" value="' + _esc(lk.id_column || extra.lookup_store || '') + '" placeholder="id" style="font-size:12px;"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Filter SQL</label><input type="text" class="nu-input nu-lookup-filter" value="' + _esc(lk.filter || extra.lookup_filter || '') + '" placeholder="active=1" style="font-size:12px;"></div><div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Extra Mapping</label><input type="text" class="nu-input nu-lookup-extra" value="' + _esc(lk.extra || extra.lookup_extra || '') + '" placeholder="code:dept_code" style="font-size:12px;"></div></div></div>';
@@ -1094,6 +1135,9 @@ card.dataset.fieldName    = name  || '';
 card.dataset.fieldPh      = extra.placeholder   || '';
 card.dataset.fieldDefault = extra.default_value || extra.defaultvalue || '';
 card.dataset.fieldHelp    = extra.help_text || extra.field_help_text || '';
+card.dataset.fieldJoinSql = extra.join_sql || '';
+card.dataset.fieldJoinDisplay = extra.join_display_field || '';
+card.dataset.fieldBadges = typeof extra.badges === 'string' ? extra.badges : JSON.stringify(extra.badges || []);
 
 if (canvasType === 'subform' && sfData) {
   card.dataset.sfFormCode       = sfData.form_code    || '';
@@ -1200,7 +1244,7 @@ if (canvasType === 'subform' && sfData) {
         browse_display_mode: _v('browseDisplayMode'), browse_sql: _v('formBrowseSql'), browse_columns: _v('formBrowseColumns'),
         browse_page_size: _v('formBrowsePageSize'), browse_default_sort: _v('formBrowseDefaultSort'),
         browse_search_enabled: _c('formBrowseSearchEnabled') ? 1 : 0, browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
-        browse_search_fields: _v('formBrowseSearchFields'), form_custom_js: _v('formCustomJs'),
+        browse_search_fields: _v('formBrowseSearchFields'), browse_php: _v('formBrowsePhp'), form_custom_js: _v('formCustomJs'),
         form_js_before_save: _v('formJsBeforeSave'), form_js_after_save: _v('formJsAfterSave'),
         form_custom_php: _v('formCustomPhp'), form_custom_css: _v('formCustomCss')
       };
@@ -1225,6 +1269,7 @@ if (canvasType === 'subform' && sfData) {
       _set('formBrowseSql', formData.browse_sql || ''); _set('formBrowseColumns', formData.browse_columns || '');
       _set('formBrowsePageSize', formData.browse_page_size || '20'); _set('formBrowseDefaultSort', formData.browse_default_sort || '');
       _set('formBrowseSearchPlaceholder', formData.browse_search_placeholder || ''); _set('formBrowseSearchFields', formData.browse_search_fields || '');
+      _set('formBrowsePhp', formData.browse_php || '');
       _set('formCustomJs', formData.form_custom_js || ''); _set('formJsBeforeSave', formData.form_js_before_save || '');
       _set('formJsAfterSave', formData.form_js_after_save || ''); _set('formCustomPhp', formData.form_custom_php || '');
       _set('formCustomCss', formData.form_custom_css || ''); _chk('formBrowseSearchEnabled', formData.browse_search_enabled);
@@ -1336,7 +1381,10 @@ entry.fields.forEach(function (f) {
       '.nu-field-name':        'fieldName',
       '.nu-field-placeholder': 'fieldPh',
       '.nu-field-default':     'fieldDefault',
-      '.nu-field-help':        'fieldHelp'
+      '.nu-field-help':        'fieldHelp',
+      '.nu-field-join-sql':    'fieldJoinSql',
+      '.nu-field-join-display': 'fieldJoinDisplay',
+      '.nu-field-badges':       'fieldBadges'
     };
     var dsKey = dsMap[sel];
 
@@ -1386,6 +1434,9 @@ entry.fields.forEach(function (f) {
     placeholder:           _val('.nu-field-placeholder'),
     default_value:         _val('.nu-field-default'),
     help_text:             _val('.nu-field-help'),
+    join_sql:              _val('.nu-field-join-sql'),
+    join_display_field:     _val('.nu-field-join-display'),
+    badges:                (function(){ try { return JSON.parse(_val('.nu-field-badges') || '[]'); } catch(e){ return []; } })(),
     col:                   parseInt(card.dataset.col, 10) || 6,
     row_index:             (rowIndex !== undefined && rowIndex !== null) ? rowIndex : -1
   };

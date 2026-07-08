@@ -555,33 +555,35 @@ window.NuApp = {
     return this._openFormInline(code, formLabel, null, false);
   },
 
-  async browseForm(code, page, query, formLabel, displayMode) {
+  async browseForm(code, page, query, formLabel, displayMode, sort, dir) {
     const mode = (displayMode || 'inline').toLowerCase();
-    if (mode === 'modal')    return this._browseModal(code, page, query, formLabel);
-    if (mode === 'fullpage') return this._browseFullPage(code, page, query, formLabel);
-    return this._browseInline(code, page, query, formLabel);
+    if (mode === 'modal')    return this._browseModal(code, page, query, formLabel, sort, dir);
+    if (mode === 'fullpage') return this._browseFullPage(code, page, query, formLabel, sort, dir);
+    return this._browseInline(code, page, query, formLabel, sort, dir);
   },
 
-  async _fetchBrowseData(code, page, query) {
+  async _fetchBrowseData(code, page, query, sort, dir) {
     page  = page  || 1;
     query = query || '';
-    const json = await this.apiJson(
-      'api/form.php?action=list&code=' + encodeURIComponent(code) +
-      '&page=' + encodeURIComponent(page) + '&q=' + encodeURIComponent(query),
-      { credentials: 'same-origin' }
-    );
+    let url = 'api/form.php?action=list&code=' + encodeURIComponent(code) +
+              '&page=' + encodeURIComponent(page) + '&q=' + encodeURIComponent(query);
+    if (sort) url += '&sort=' + encodeURIComponent(sort) + '&dir=' + encodeURIComponent(dir || 'ASC');
+
+    const json = await this.apiJson(url, { credentials: 'same-origin' });
     if (!json.success) throw new Error(json.error || 'Browse failed');
     return json;
   },
 
   // ── Browse table builder ─────────────────────────────────────────────────
-  _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit, canEdit, canAdd) {
+  _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit, canEdit, canAdd, currentSort, currentDir) {
     const _canEdit          = (canEdit !== undefined) ? canEdit : NuPerms.canEdit();
     const _canAdd           = (canAdd  !== undefined) ? canAdd  : NuPerms.canAdd();
     const data              = json.data || {};
     const layout            = Array.isArray(data.layout)  ? data.layout  : [];
     const records           = Array.isArray(data.records) ? data.records : [];
     const currentQuery      = data.query || query || '';
+    const sortField         = currentSort || '';
+    const sortDir           = currentDir  || 'ASC';
     const searchEnabled     = String(data.browsesearchenabled || 0) === '1';
     const searchPlaceholder = data.browsesearchplaceholder || 'Search...';
 
@@ -635,8 +637,17 @@ window.NuApp = {
     headRow.style.cssText = 'border-bottom:2px solid var(--border-color,#ddd);background:var(--table-head-bg,#f8f9fa);';
     layout.forEach((f) => {
       const th = document.createElement('th');
-      th.style.cssText = 'padding:12px;text-align:left;font-size:13px;font-weight:600;';
-      th.textContent = f.fieldlabel || f.label || f.fieldname || f.name || '';
+      const fname = f.fieldname || f.name;
+      th.style.cssText = 'padding:12px;text-align:left;font-size:13px;font-weight:600;cursor:pointer;user-select:none;';
+      let labelText = f.fieldlabel || f.label || fname || '';
+      if (sortField === fname) {
+        labelText += (sortDir === 'ASC' ? ' \u2191' : ' \u2193');
+      }
+      th.textContent = labelText;
+      th.onclick = () => {
+          const nextDir = (sortField === fname && sortDir === 'ASC') ? 'DESC' : 'ASC';
+          this.browseForm(code, 1, currentQuery, label, displayMode, fname, nextDir);
+      };
       headRow.appendChild(th);
     });
     const actionTh = document.createElement('th');
@@ -665,9 +676,37 @@ window.NuApp = {
           const fieldName  = f.fieldname || f.name;
           const displayKey = fieldName + '_display';
           let value = '';
-          if ((f.fieldtype || f.type) === 'lookup' && row[displayKey] != null) value = row[displayKey];
+          if (row[displayKey] != null) value = row[displayKey];
           else if (row[fieldName] != null) value = row[fieldName];
-          td.textContent = String(value);
+
+          const contentWrap = document.createElement('div');
+          contentWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+          const textSpan = document.createElement('span');
+          textSpan.textContent = String(value);
+          contentWrap.appendChild(textSpan);
+
+          // Render Badges
+          const badges = f.badges;
+          if (Array.isArray(badges)) {
+              badges.forEach(b => {
+                  let condition = b.condition || '';
+                  // Simple template replacement
+                  for (let key in row) {
+                      condition = condition.replace(new RegExp('{' + key + '}', 'g'), JSON.stringify(row[key]));
+                  }
+                  try {
+                      if (eval(condition)) {
+                          const bSpan = document.createElement('span');
+                          bSpan.className = 'nu-badge ' + (b.class || '');
+                          bSpan.textContent = b.label;
+                          bSpan.style.fontSize = '10px';
+                          contentWrap.appendChild(bSpan);
+                      }
+                  } catch (e) { console.warn('Badge condition error:', e, condition); }
+              });
+          }
+
+          td.appendChild(contentWrap);
           tr.appendChild(td);
         });
 
@@ -700,19 +739,19 @@ window.NuApp = {
       const prevBtn = document.createElement('button');
       prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; prevBtn.textContent = '\u2190 Prev';
       prevBtn.disabled = (data.page || 1) <= 1;
-      prevBtn.onclick = () => this.browseForm(code, (data.page || 1) - 1, currentQuery, label, displayMode);
+      prevBtn.onclick = () => this.browseForm(code, (data.page || 1) - 1, currentQuery, label, displayMode, sortField, sortDir);
       pagination.appendChild(prevBtn);
       for (let i = 1; i <= (data.pages || 1); i++) {
         const pageBtn = document.createElement('button');
         pageBtn.className = 'nu-btn ' + (i === (data.page || 1) ? 'nu-btn-primary' : 'nu-btn-ghost') + ' nu-btn-sm';
         pageBtn.textContent = i;
-        pageBtn.onclick = () => this.browseForm(code, i, currentQuery, label, displayMode);
+        pageBtn.onclick = () => this.browseForm(code, i, currentQuery, label, displayMode, sortField, sortDir);
         pagination.appendChild(pageBtn);
       }
       const nextBtn = document.createElement('button');
       nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; nextBtn.textContent = 'Next \u2192';
       nextBtn.disabled = (data.page || 1) >= (data.pages || 1);
-      nextBtn.onclick = () => this.browseForm(code, (data.page || 1) + 1, currentQuery, label, displayMode);
+      nextBtn.onclick = () => this.browseForm(code, (data.page || 1) + 1, currentQuery, label, displayMode, sortField, sortDir);
       pagination.appendChild(nextBtn);
       const meta = document.createElement('span');
       meta.style.cssText = 'margin-left:8px;color:#666;font-size:13px;';
@@ -721,11 +760,11 @@ window.NuApp = {
     }
   },
 
-  async _browseInline(code, page, query, formLabel) {
+  async _browseInline(code, page, query, formLabel, sort, dir) {
     try {
       const _canAdd  = NuPerms.canAdd();
       const _canEdit = NuPerms.canEdit();
-      const json  = await this._fetchBrowseData(code, page, query);
+      const json  = await this._fetchBrowseData(code, page, query, sort, dir);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
       const container = document.getElementById('contentArea');
@@ -753,15 +792,15 @@ window.NuApp = {
       backBtn.onclick = () => this.loadModule('forms');
       btnGroup.appendChild(backBtn);
       header.appendChild(btnGroup); container.appendChild(header);
-      this._buildBrowseTable(json, code, page, query, label, 'inline', container, null, _canEdit, _canAdd);
+      this._buildBrowseTable(json, code, page, query, label, 'inline', container, null, _canEdit, _canAdd, sort, dir);
     } catch (err) { console.error('_browseInline error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
-  async _browseModal(code, page, query, formLabel) {
+  async _browseModal(code, page, query, formLabel, sort, dir) {
     try {
       const _canAdd  = NuPerms.canAdd();
       const _canEdit = NuPerms.canEdit();
-      const json  = await this._fetchBrowseData(code, page, query);
+      const json  = await this._fetchBrowseData(code, page, query, sort, dir);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
       let overlay = document.querySelector('.nu-browse-overlay');
@@ -791,7 +830,7 @@ window.NuApp = {
       rightBtns.appendChild(closeBtn); header.appendChild(rightBtns);
       box.appendChild(header);
       const tableContainer = document.createElement('div');
-      this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer, null, _canEdit, _canAdd);
+      this._buildBrowseTable(json, code, page, query, label, 'modal', tableContainer, null, _canEdit, _canAdd, sort, dir);
       box.appendChild(tableContainer);
       overlay.innerHTML = ''; overlay.appendChild(box);
       if (isNew) {
@@ -801,11 +840,11 @@ window.NuApp = {
     } catch (err) { console.error('_browseModal error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
-  async _browseFullPage(code, page, query, formLabel) {
+  async _browseFullPage(code, page, query, formLabel, sort, dir) {
     try {
       const _canAdd  = NuPerms.canAdd();
       const _canEdit = NuPerms.canEdit();
-      const json  = await this._fetchBrowseData(code, page, query);
+      const json  = await this._fetchBrowseData(code, page, query, sort, dir);
       const data  = json.data || {};
       const label = formLabel || data.form_name || code;
       this._enterFullPage();
@@ -829,7 +868,7 @@ window.NuApp = {
       exitBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; exitBtn.textContent = '\u2715 Exit Full Page';
       exitBtn.onclick = () => { this._exitFullPage(); this.loadModule('forms'); };
       btnGroup.appendChild(exitBtn); header.appendChild(btnGroup); container.appendChild(header);
-      this._buildBrowseTable(json, code, page, query, label, 'fullpage', container, null, _canEdit, _canAdd);
+      this._buildBrowseTable(json, code, page, query, label, 'fullpage', container, null, _canEdit, _canAdd, sort, dir);
     } catch (err) { this._exitFullPage(); console.error('_browseFullPage error', err); this.toast('Error: ' + err.message, 'error'); }
   },
 
