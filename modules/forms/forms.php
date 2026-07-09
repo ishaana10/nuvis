@@ -850,8 +850,6 @@ foreach ($forms as $f) {
             <div class="nb-tools-group-label">Advanced</div>
             <div class="nb-tool" data-type="lookup"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Lookup</div>
             <div class="nb-tool" data-type="subform"    draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Subform</div>
-            <div class="nb-tool" data-type="upload"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Upload</div>
-            <div class="nb-tool" data-type="photo_canvas" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Photo Canvas</div>
             <div class="nb-tool" data-type="calculated" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h8M4 17h12"/></svg>Calc</div>
             <div class="nb-tool" data-type="range"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="12" r="2"/><path d="M2 12h4M10 12h12"/></svg>Range</div>
             <div class="nb-tool" data-type="color"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Color</div>
@@ -936,9 +934,25 @@ foreach ($forms as $f) {
           <label class="nu-label">Search Placeholder</label>
           <input type="text" id="formBrowseSearchPlaceholder" class="nu-input" placeholder="Search records...">
         </div>
-        <div>
+        <div style="grid-column:1/-1;">
           <label class="nu-label">Search Fields <span style="font-weight:400;color:var(--text-tertiary);">(comma-sep)</span></label>
           <input type="text" id="formBrowseSearchFields" class="nu-input" placeholder="name, email">
+        </div>
+        <div style="grid-column:1/-1;">
+          <label class="nu-label" style="margin-bottom:6px;display:block;">
+            Browse PHP
+            <span style="font-weight:400;color:var(--text-tertiary);">— customize browse query (use <code>$nuSql</code>, <code>$nuWhere</code>, <code>$nuOrder</code>, <code>$nuParams</code>)</span>
+          </label>
+          <div class="nb-ace-wrap" id="wrapBrowsePhp">
+            <div class="nb-ace-topbar">
+              <span class="nb-ace-lang-badge php">PHP</span>
+              <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo · drag handle to resize</span>
+              <button class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceBrowsePhp')">☀ theme</button>
+            </div>
+            <div id="aceBrowsePhp" class="nb-ace-editor" style="height:140px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceBrowsePhp"></div>
+          </div>
+          <textarea id="formBrowsePhp" class="nb-ace-hidden"></textarea>
         </div>
       </div>
     </div>
@@ -1192,6 +1206,7 @@ if (!window._nbFormsModuleInit) {
     nbAce.init('aceJsAfterSave',   'formJsAfterSave',   'javascript');
     nbAce.init('aceCustomPhp',     'formCustomPhp',     'php');
     nbAce.init('aceCustomCss',     'formCustomCss',     'css');
+    nbAce.init('aceBrowsePhp',     'formBrowsePhp',     'php');
   }, 100);
 
   // ── Resize Ace when its parent tab becomes visible ────────────────
@@ -1404,95 +1419,220 @@ if (!window._nbFormsModuleInit) {
   };
 
   // ── Group + Tab canvas rendering helpers ─────────────────────────
-  if (!nbFormBuilder._groupTabPatched) {
-    nbFormBuilder._groupTabPatched = true;
+if (!nbFormBuilder._groupTabPatched) {
+  nbFormBuilder._groupTabPatched = true;
 
-    var _origMakeFieldCard = nbFormBuilder._makeFieldCard;
-   nbFormBuilder._makeFieldCard = function(type, label, name, required, extra) {
-      var f = (typeof type === 'object') ? type : (extra || {});
-      var fType = f.type || type;
+  var _origMakeFieldCard = nbFormBuilder._makeFieldCard;
+  var _origMakeDefaultField = nbFormBuilder._makeDefaultField;
 
-      var card = typeof _origMakeFieldCard === 'function'
-        ? _origMakeFieldCard.call(nbFormBuilder, type, label, name, required, extra) : null;
+  nbFormBuilder._makeFieldCard = function(type, label, name, required, extra) {
+    var field = (type && typeof type === 'object')
+      ? type
+      : {
+          id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+          type: type,
+          label: label || (type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Field'),
+          name: name || ((type || 'field') + '_' + Math.random().toString(36).slice(2, 6)),
+          required: !!required,
+          col: (extra && extra.col) ? extra.col : 6
+        };
 
-      if (!card) {
-          if (fType === 'group' || fType === 'tab') {
-              card = document.createElement('div');
-              card.className = 'nb-cfield';
-              card.dataset.type = fType;
-              card.innerHTML = '<div class="nb-cfield-header"><span class="nb-cfield-label">' + (f.label || fType) + '</span></div>';
-          } else {
-              return null;
-          }
-      }
+    extra = extra || {};
+    if (field.col != null && extra.col == null) extra.col = field.col;
+    if (field.placeholder != null && extra.placeholder == null) extra.placeholder = field.placeholder;
+    if (field.help_text != null && extra.help_text == null) extra.help_text = field.help_text;
+    if (field.default_value != null && extra.default_value == null) extra.default_value = field.default_value;
+    if (field.options != null && extra.options == null) extra.options = field.options;
+    if (field.multiple != null && extra.multiple == null) extra.multiple = field.multiple;
+    if (field.select2 != null && extra.select2 == null) extra.select2 = field.select2;
+    if (field.allow_clear != null && extra.allow_clear == null) extra.allow_clear = field.allow_clear;
+    if (field.select_type != null && extra.select_type == null) extra.select_type = field.select_type;
+    if (field.options_source != null && extra.options_source == null) extra.options_source = field.options_source;
 
-      if (fType === 'group') {
-        var groupBody = document.createElement('div');
-        groupBody.className = 'nb-cfield-group-body';
-        groupBody.dataset.groupId = f.id || '';
-        var children = f.children || [];
+    try {
+      console.log('[nb patch] _makeFieldCard start', {
+        incomingType: type,
+        resolvedType: field.type,
+        label: field.label,
+        name: field.name,
+        field: field
+      });
+    } catch (e) {}
+
+    var card = typeof _origMakeFieldCard === 'function'
+      ? _origMakeFieldCard.call(
+          nbFormBuilder,
+          field.type,
+          field.label,
+          field.name,
+          !!field.required,
+          extra
+        )
+      : null;
+
+    if (!card) {
+      try { console.warn('[nb patch] original returned null', field); } catch (e) {}
+      return card;
+    }
+
+    card.__nbFieldRef = field;
+
+    if (field.type === 'group') {
+      var oldGroupBody = card.querySelector('.nb-cfield-group-body');
+      if (oldGroupBody) oldGroupBody.remove();
+
+      var groupBody = document.createElement('div');
+      groupBody.className = 'nb-cfield-group-body';
+      groupBody.dataset.groupId = field.id || '';
+
+      function renderGroupChildren() {
+        groupBody.innerHTML = '';
+        var children = Array.isArray(field.children) ? field.children : [];
         if (!children.length) {
           groupBody.innerHTML = '<div style="color:var(--text-tertiary);font-size:11px;text-align:center;padding:10px;">Drop fields here</div>';
-        } else {
-          children.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) groupBody.appendChild(cc); });
+          return;
         }
-        groupBody.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); groupBody.classList.add('drag-col-over'); });
-        groupBody.addEventListener('dragleave', function(e) { if (!groupBody.contains(e.relatedTarget)) groupBody.classList.remove('drag-col-over'); });
-        groupBody.addEventListener('drop', function(e) {
-          e.preventDefault(); e.stopPropagation();
-          groupBody.classList.remove('drag-col-over');
-          var dType = e.dataTransfer.getData('nb-field-type');
-          if (!dType || dType === 'group' || dType === 'tab') return;
-          if (!f.children) f.children = [];
-          f.children.push(nbFormBuilder._makeDefaultField(dType));
-          groupBody.innerHTML = '';
-          f.children.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) groupBody.appendChild(cc); });
+        children.forEach(function(child) {
+          var cc = nbFormBuilder._makeFieldCard(child);
+          if (cc) groupBody.appendChild(cc);
         });
-        card.appendChild(groupBody);
       }
 
-      if (fType === 'tab') {
-        if (!f.tabs || !f.tabs.length) f.tabs = [{ label: 'Tab 1', children: [] }];
-        var tabNav   = document.createElement('div');
-        tabNav.className = 'nb-cfield-tab-nav';
-        var tabPanes = document.createElement('div');
+      renderGroupChildren();
 
-        f.tabs.forEach(function(tab, idx) {
+      groupBody.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        groupBody.classList.add('drag-col-over');
+      });
+
+      groupBody.addEventListener('dragleave', function(e) {
+        if (!groupBody.contains(e.relatedTarget)) groupBody.classList.remove('drag-col-over');
+      });
+
+      groupBody.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        groupBody.classList.remove('drag-col-over');
+
+        var droppedType = e.dataTransfer.getData('nb-field-type');
+        if (!droppedType || droppedType === 'group' || droppedType === 'tab') return;
+
+        if (!Array.isArray(field.children)) field.children = [];
+        field.children.push(nbFormBuilder._makeDefaultField(droppedType));
+        renderGroupChildren();
+
+        try { console.log('[nb patch] group drop', field); } catch (err) {}
+      });
+
+      card.appendChild(groupBody);
+    }
+
+    if (field.type === 'tab') {
+      var oldTabNav = card.querySelector('.nb-cfield-tab-nav');
+      if (oldTabNav) oldTabNav.remove();
+
+      var oldTabPanes = card.querySelector('.nb-cfield-tab-panes');
+      if (oldTabPanes) oldTabPanes.remove();
+
+      if (!Array.isArray(field.tabs) || !field.tabs.length) {
+        field.tabs = [{ label: 'Tab 1', rows: [{ fields: [] }] }];
+      }
+
+      field.tabs.forEach(function(tab, idx) {
+        if (!tab.label && tab.name) tab.label = tab.name;
+        if (!Array.isArray(tab.rows)) {
+          if (Array.isArray(tab.children)) {
+            tab.rows = [{ fields: tab.children }];
+          } else {
+            tab.rows = [{ fields: [] }];
+          }
+        }
+      });
+
+      var tabNav = document.createElement('div');
+      tabNav.className = 'nb-cfield-tab-nav';
+
+      var tabPanes = document.createElement('div');
+      tabPanes.className = 'nb-cfield-tab-panes';
+
+      function renderTabs() {
+        tabNav.innerHTML = '';
+        tabPanes.innerHTML = '';
+
+        field.tabs.forEach(function(tab, idx) {
           var navBtn = document.createElement('button');
           navBtn.type = 'button';
           navBtn.className = 'nb-cfield-tab-nav-item' + (idx === 0 ? ' active' : '');
           navBtn.textContent = tab.label || ('Tab ' + (idx + 1));
           navBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            tabNav.querySelectorAll('.nb-cfield-tab-nav-item').forEach(function(b){ b.classList.remove('active'); });
-            tabPanes.querySelectorAll('.nb-cfield-tab-panel').forEach(function(p){ p.classList.remove('active'); });
+            tabNav.querySelectorAll('.nb-cfield-tab-nav-item').forEach(function(b) {
+              b.classList.remove('active');
+            });
+            tabPanes.querySelectorAll('.nb-cfield-tab-panel').forEach(function(p) {
+              p.classList.remove('active');
+            });
             navBtn.classList.add('active');
-            tabPanes.querySelectorAll('.nb-cfield-tab-panel')[idx].classList.add('active');
+            var panels = tabPanes.querySelectorAll('.nb-cfield-tab-panel');
+            if (panels[idx]) panels[idx].classList.add('active');
           });
           tabNav.appendChild(navBtn);
 
           var panel = document.createElement('div');
           panel.className = 'nb-cfield-tab-panel' + (idx === 0 ? ' active' : '');
-          var tabChildren = tab.children || [];
-          if (!tabChildren.length) {
-            panel.innerHTML = '<div style="color:var(--text-tertiary);font-size:11px;text-align:center;padding:10px;">Drop fields here</div>';
-          } else {
-            tabChildren.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) panel.appendChild(cc); });
-          }
-          (function(panelEl, tabIdx) {
-            panelEl.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); panelEl.classList.add('drag-col-over'); });
-            panelEl.addEventListener('dragleave', function(e) { if (!panelEl.contains(e.relatedTarget)) panelEl.classList.remove('drag-col-over'); });
-            panelEl.addEventListener('drop', function(e) {
-              e.preventDefault(); e.stopPropagation();
-              panelEl.classList.remove('drag-col-over');
-              var dType = e.dataTransfer.getData('nb-field-type');
-              if (!dType || dType === 'group' || dType === 'tab') return;
-              if (!f.tabs[tabIdx].children) f.tabs[tabIdx].children = [];
-              f.tabs[tabIdx].children.push(nbFormBuilder._makeDefaultField(dType));
-              panelEl.innerHTML = '';
-              f.tabs[tabIdx].children.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) panelEl.appendChild(cc); });
+
+          var rows = Array.isArray(tab.rows) ? tab.rows : [];
+          if (!rows.length) rows = tab.rows = [{ fields: [] }];
+          var row = rows[0];
+          if (!Array.isArray(row.fields)) row.fields = [];
+
+          function renderPanelFields() {
+            panel.innerHTML = '';
+            if (!row.fields.length) {
+              panel.innerHTML = '<div style="color:var(--text-tertiary);font-size:11px;text-align:center;padding:10px;">Drop fields here</div>';
+              return;
+            }
+            row.fields.forEach(function(child) {
+              var cc = nbFormBuilder._makeFieldCard(child);
+              if (cc) panel.appendChild(cc);
             });
-          })(panel, idx);
+          }
+
+          renderPanelFields();
+
+          (function(panelEl, tabIdx, rowRef) {
+            panelEl.addEventListener('dragover', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              panelEl.classList.add('drag-col-over');
+            });
+
+            panelEl.addEventListener('dragleave', function(e) {
+              if (!panelEl.contains(e.relatedTarget)) panelEl.classList.remove('drag-col-over');
+            });
+
+            panelEl.addEventListener('drop', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              panelEl.classList.remove('drag-col-over');
+
+              var droppedType = e.dataTransfer.getData('nb-field-type');
+              if (!droppedType || droppedType === 'group' || droppedType === 'tab') return;
+
+              if (!Array.isArray(rowRef.fields)) rowRef.fields = [];
+              rowRef.fields.push(nbFormBuilder._makeDefaultField(droppedType));
+              renderPanelFields();
+
+              try {
+                console.log('[nb patch] tab drop', {
+                  tabIndex: tabIdx,
+                  field: field
+                });
+              } catch (err) {}
+            });
+          })(panel, idx, row);
+
           tabPanes.appendChild(panel);
         });
 
@@ -1502,25 +1642,53 @@ if (!window._nbFormsModuleInit) {
         addBtn.textContent = '+ Tab';
         addBtn.addEventListener('click', function(e) {
           e.stopPropagation();
-          f.tabs.push({ label: 'Tab ' + (f.tabs.length + 1), children: [] });
+
+          field.tabs.push({
+            label: 'Tab ' + (field.tabs.length + 1),
+            rows: [{ fields: [] }]
+          });
+
           var parent = card.parentElement;
-          var next   = card.nextSibling;
-          if (parent) { parent.removeChild(card); var nc = nbFormBuilder._makeFieldCard(f); if (nc) parent.insertBefore(nc, next); }
+          var next = card.nextSibling;
+          if (parent) {
+            parent.removeChild(card);
+            var nc = nbFormBuilder._makeFieldCard(field);
+            if (nc) parent.insertBefore(nc, next);
+          }
+
+          try { console.log('[nb patch] add tab', field); } catch (err) {}
         });
+
         tabNav.appendChild(addBtn);
-        card.appendChild(tabNav);
-        card.appendChild(tabPanes);
       }
 
-      return card;
-    };
+      renderTabs();
+      card.appendChild(tabNav);
+      card.appendChild(tabPanes);
+    }
 
-    nbFormBuilder._makeDefaultField = function(type) {
-      return { id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), type: type,
-               label: type.charAt(0).toUpperCase() + type.slice(1),
-               name:  type + '_' + Math.random().toString(36).slice(2,6), col: 6 };
+    return card;
+  };
+
+  nbFormBuilder._makeDefaultField = function(type) {
+    if (typeof _origMakeDefaultField === 'function') {
+      var made = _origMakeDefaultField.call(nbFormBuilder, type);
+      if (made && typeof made === 'object') return made;
+    }
+
+    return {
+      id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      type: type,
+      label: type.charAt(0).toUpperCase() + type.slice(1) + ' Field',
+      name: type + '_' + Math.random().toString(36).slice(2, 6),
+      col: 6,
+      required: false,
+      help_text: '',
+      placeholder: '',
+      default_value: ''
     };
-  }
+  };
+}
 
 } // end _nbFormsModuleInit guard
 
@@ -1554,6 +1722,7 @@ if (!window._nbFormsModuleInit) {
         aceJsAfterSave:  'formJsAfterSave',
         aceCustomPhp:    'formCustomPhp',
         aceCustomCss:    'formCustomCss',
+        aceBrowsePhp:    'formBrowsePhp',
       };
       var snapshot = {};
       Object.keys(aceMap).forEach(function(aceId) {
