@@ -130,7 +130,8 @@ VALUES
   ('DB & Server Inspector', 'form', 'inspector',         @admin_group,    50,  'globeadmin,admin',  1, 'inspector'),
   ('Error Log',             'form', 'errorlog',          @admin_group,    60,  'globeadmin,admin',  1, 'alert'),
   ('Password Policy',       'form', 'password_policy',   @admin_group,    70,  'globeadmin,admin',  1, 'shield'),
-  ('App Cloner',            'form', 'appcloner',         @admin_group,    80,  'globeadmin,admin',  1, 'copy');
+  ('App Cloner',            'form', 'appcloner',         @admin_group,    80,  'globeadmin,admin',  1, 'copy'),
+  ('System Updater',        'form', 'updater',           @admin_group,    90,  'globeadmin,admin',  1, 'refresh');
 
 
 -- ---------------------------------------------------------------------------
