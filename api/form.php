@@ -349,6 +349,43 @@ function nu_current_user_is_admin() {
     return $result;
 }
 
+
+function nu_customnumber_normalize_value($value, $field = []) {
+    $v = (string)$value;
+    $prefix = (string)($field['prefix'] ?? '');
+    $suffix = (string)($field['suffix'] ?? '');
+    $thousand = (string)($field['thousand_separator'] ?? ',');
+    $decimal = (string)($field['decimal_separator'] ?? '.');
+
+    if ($prefix !== '' && str_starts_with($v, $prefix)) {
+        $v = substr($v, strlen($prefix));
+    }
+    if ($suffix !== '' && $suffix !== '' && substr($v, -strlen($suffix)) === $suffix) {
+        $v = substr($v, 0, -strlen($suffix));
+    }
+
+    $v = trim($v);
+    if ($thousand !== '') $v = str_replace($thousand, '', $v);
+    if ($decimal !== '.' && $decimal !== '') $v = str_replace($decimal, '.', $v);
+    $v = preg_replace('/[^0-9\.\-]/', '', $v);
+
+    return $v;
+}
+
+function nu_customnumber_display_value($value, $field = []) {
+    if ($value === null || $value === '') return '';
+    $num = nu_customnumber_normalize_value($value, $field);
+    if ($num === '' || !is_numeric($num)) return (string)$value;
+
+    $decimals = isset($field['decimals']) ? (int)$field['decimals'] : 2;
+    $thousand = (string)($field['thousand_separator'] ?? ',');
+    $decimal = (string)($field['decimal_separator'] ?? '.');
+    $prefix = (string)($field['prefix'] ?? '');
+    $suffix = (string)($field['suffix'] ?? '');
+
+    return $prefix . number_format((float)$num, $decimals, $decimal, $thousand) . $suffix;
+}
+
 function nu_render_field($field, $value = '', $record = []) {
     $type  = nu_field_type($field);
     $name  = nu_field_name($field);
@@ -397,6 +434,241 @@ function nu_render_field($field, $value = '', $record = []) {
     $isReadonly   = nu_field_readonly($field);
     $readonlyAttr = $isReadonly ? ' readonly' : '';
     $readonlyStyle = $isReadonly ? 'background:var(--bg-offset,#f5f5f5);color:#888;cursor:default;' : '';
+
+    if ($type === 'uploadbutton') {
+        $buttonText = trim((string)($field['button_text'] ?? 'Upload'));
+        $accept = trim((string)($field['accept'] ?? ''));
+        $multiple = !empty($field['multiple']) ? ' multiple' : '';
+        $preview = !empty($field['preview']);
+        $currentValue = is_string($value) ? $value : '';
+        $acceptAttr = $accept !== '' ? ' accept="' . nu_attr($accept) . '"' : '';
+
+        $html = '<div class="nu-field-wrap nu-field-uploadbutton">';
+        $html .= '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+        $html .= '<label class="nu-btn nu-btn-ghost nu-btn-sm" style="margin:0;cursor:pointer;">' . nu_html($buttonText) .
+                 '<input type="file" name="' . nu_attr($name) . '__file" id="' . nu_attr($name) . '__file" style="display:none;"' .
+                 $acceptAttr . $multiple . $required . '></label>';
+        $html .= '<input type="text" class="' . nu_attr($cssClass) . '" name="' . nu_attr($name) . '" id="' . nu_attr($name) . '" value="' . nu_attr($currentValue) . '"' . $placeholder . ' readonly>';
+        $html .= '</div>';
+
+        if ($preview && $currentValue !== '') {
+            $html .= '<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);">Current: ' . nu_html(basename($currentValue)) . '</div>';
+        }
+
+        $html .= $helpHtml;
+        $html .= '</div>';
+
+        $html .= '<script>
+        (function(){
+          var f = document.getElementById(' . json_encode($name . '__file') . ');
+          var t = document.getElementById(' . json_encode($name) . ');
+          if(!f || !t || f.dataset.nbBound) return;
+          f.dataset.nbBound = "1";
+          f.addEventListener("change", function(){
+            if(!f.files || !f.files.length){
+              t.value = "";
+              return;
+            }
+            if(f.hasAttribute("multiple")){
+              t.value = Array.prototype.map.call(f.files, function(x){ return x.name; }).join(", ");
+            } else {
+              t.value = f.files[0].name;
+            }
+          });
+        })();
+        </script>';
+
+        return $html;
+    }
+
+    if ($type === 'picturecanvas') {
+        $canvasWidth = max(100, (int)($field['canvas_width'] ?? 400));
+        $canvasHeight = max(80, (int)($field['canvas_height'] ?? 220));
+        $bg = (string)($field['background_color'] ?? '#ffffff');
+        $pen = (string)($field['pen_color'] ?? '#000000');
+        $penWidth = max(1, (int)($field['pen_width'] ?? 2));
+        $clearButton = !empty($field['clear_button']);
+        $canvasId = $name . '__canvas';
+        $hiddenId = $name . '__hidden';
+
+        $html = '<div class="nu-field-wrap nu-field-picturecanvas">';
+        $html .= '<input type="hidden" name="' . nu_attr($name) . '" id="' . nu_attr($hiddenId) . '" value="' . nu_attr((string)$value) . '"' . $required . '>';
+        $html .= '<div style="border:1px solid #d9dee7;border-radius:8px;padding:8px;background:#fff;display:inline-block;max-width:100%;">';
+        $html .= '<canvas id="' . nu_attr($canvasId) . '" width="' . $canvasWidth . '" height="' . $canvasHeight . '" style="display:block;border:1px solid #cfd6df;border-radius:6px;background:' . nu_attr($bg) . ';max-width:100%;touch-action:none;"></canvas>';
+        if ($clearButton) {
+            $html .= '<div style="margin-top:8px;"><button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" id="' . nu_attr($canvasId . '__clear') . '">Clear</button></div>';
+        }
+        $html .= '</div>';
+        $html .= $helpHtml;
+        $html .= '</div>';
+
+        $html .= '<script>
+        (function(){
+          var canvas = document.getElementById(' . json_encode($canvasId) . ');
+          var hidden = document.getElementById(' . json_encode($hiddenId) . ');
+          if(!canvas || !hidden || canvas.dataset.nbBound) return;
+          canvas.dataset.nbBound = "1";
+
+          var ctx = canvas.getContext("2d");
+          var drawing = false;
+          var rect = null;
+
+          function resetBg(){
+            ctx.fillStyle = ' . json_encode($bg) . ';
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+          }
+
+          function pos(e){
+            rect = rect || canvas.getBoundingClientRect();
+            var p = e.touches ? e.touches[0] : e;
+            return {
+              x: (p.clientX - rect.left) * (canvas.width / rect.width),
+              y: (p.clientY - rect.top) * (canvas.height / rect.height)
+            };
+          }
+
+          function save(){
+            hidden.value = canvas.toDataURL("image/png");
+          }
+
+          function start(e){
+            drawing = true;
+            rect = canvas.getBoundingClientRect();
+            var p = pos(e);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            e.preventDefault();
+          }
+
+          function move(e){
+            if(!drawing) return;
+            var p = pos(e);
+            ctx.lineWidth = ' . (int)$penWidth . ';
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.strokeStyle = ' . json_encode($pen) . ';
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            e.preventDefault();
+          }
+
+          function end(){
+            if(!drawing) return;
+            drawing = false;
+            save();
+          }
+
+          resetBg();
+
+          if(hidden.value){
+            var img = new Image();
+            img.onload = function(){
+              ctx.clearRect(0,0,canvas.width,canvas.height);
+              resetBg();
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = hidden.value;
+          }
+
+          canvas.addEventListener("mousedown", start);
+          canvas.addEventListener("mousemove", move);
+          window.addEventListener("mouseup", end);
+
+          canvas.addEventListener("touchstart", start, {passive:false});
+          canvas.addEventListener("touchmove", move, {passive:false});
+          canvas.addEventListener("touchend", end, {passive:false});
+
+          var clearBtn = document.getElementById(' . json_encode($canvasId . '__clear') . ');
+          if(clearBtn){
+            clearBtn.addEventListener("click", function(){
+              ctx.clearRect(0,0,canvas.width,canvas.height);
+              resetBg();
+              hidden.value = "";
+            });
+          }
+        })();
+        </script>';
+
+        return $html;
+    }
+
+    if ($type === 'customnumber') {
+        $displayValue = nu_customnumber_display_value($value, $field);
+        $decimals = isset($field['decimals']) ? (int)$field['decimals'] : 2;
+        $thousand = (string)($field['thousand_separator'] ?? ',');
+        $decimal = (string)($field['decimal_separator'] ?? '.');
+        $prefix = (string)($field['prefix'] ?? '');
+        $suffix = (string)($field['suffix'] ?? '');
+        $allowNegative = !empty($field['allow_negative']) ? '1' : '0';
+
+        $html = '<div class="nu-field-wrap nu-field-customnumber">';
+        $html .= '<input type="text" class="' . nu_attr($cssClass) . '" ' .
+                 'name="' . nu_attr($name) . '" ' .
+                 'id="' . nu_attr($name) . '" ' .
+                 'value="' . nu_attr($displayValue) . '"' .
+                 $placeholder . $required .
+                 ' data-decimals="' . nu_attr((string)$decimals) . '"' .
+                 ' data-thousand="' . nu_attr($thousand) . '"' .
+                 ' data-decimal="' . nu_attr($decimal) . '"' .
+                 ' data-prefix="' . nu_attr($prefix) . '"' .
+                 ' data-suffix="' . nu_attr($suffix) . '"' .
+                 ' data-allow-negative="' . nu_attr($allowNegative) . '">';
+        $html .= $helpHtml;
+        $html .= '</div>';
+
+        $html .= '<script>
+        (function(){
+          var el = document.getElementById(' . json_encode($name) . ');
+          if(!el || el.dataset.nbBound) return;
+          el.dataset.nbBound = "1";
+
+          function normalize(v){
+            var prefix = el.dataset.prefix || "";
+            var suffix = el.dataset.suffix || "";
+            var thousand = el.dataset.thousand || ",";
+            var decimal = el.dataset.decimal || ".";
+            if(prefix && v.indexOf(prefix) === 0) v = v.slice(prefix.length);
+            if(suffix && v.slice(-suffix.length) === suffix) v = v.slice(0, -suffix.length);
+            if(thousand) v = v.split(thousand).join("");
+            if(decimal && decimal !== ".") v = v.split(decimal).join(".");
+            v = v.replace(/[^0-9.\-]/g, "");
+            return v;
+          }
+
+          function format(v){
+            if(v === "" || isNaN(v)) return "";
+            var decimals = parseInt(el.dataset.decimals || "2", 10);
+            var thousand = el.dataset.thousand || ",";
+            var decimal = el.dataset.decimal || ".";
+            var prefix = el.dataset.prefix || "";
+            var suffix = el.dataset.suffix || "";
+            var n = Number(v);
+            var parts = n.toFixed(decimals).split(".");
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, thousand);
+            return prefix + parts.join(decimal) + suffix;
+          }
+
+          el.addEventListener("blur", function(){
+            var raw = normalize(el.value);
+            if(raw === "") return;
+            el.value = format(raw);
+          });
+
+          var form = el.closest("form");
+          if(form && !form.dataset.nbCustomNumberBound){
+            form.dataset.nbCustomNumberBound = "1";
+            form.addEventListener("submit", function(){
+              var nums = form.querySelectorAll(".nu-field-customnumber input[data-decimals]");
+              nums.forEach(function(inp){
+                inp.value = normalize(inp.value);
+              });
+            });
+          }
+        })();
+        </script>';
+
+        return $html;
+    }
 
     $fullWidthTypes = ['subform', 'html', 'content', 'button', 'fieldset', 'checkbox'];
 
@@ -468,9 +740,12 @@ function nu_render_field($field, $value = '', $record = []) {
         }
     }
 
+
     if ($type === 'hidden') {
         return '<input type="hidden" data-field="' . nu_attr($name) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '">';
     }
+    
+    
 
     // ── uuid — always build $control first, then fall through to wrapper ────
     if ($type === 'uuid') {
@@ -1510,8 +1785,21 @@ function nu_handle_list() {
     if ($pageSize < 1) $pageSize = 20;
 
     $pk         = nu_get_pk($table);
-    $sortSql    = trim((string)($form[$c['browse_default_sort']] ?? ''));
-    $defaultOrder = $sortSql !== '' ? $sortSql : "`{$pk}` DESC";
+    
+    // Support dynamic sorting
+    $reqSort = $_GET['sort'] ?? '';
+    $reqDir  = strtoupper($_GET['dir'] ?? 'ASC');
+    if (!in_array($reqDir, ['ASC', 'DESC'])) $reqDir = 'ASC';
+
+    $sortSql      = trim((string)($form[$c['browse_default_sort']] ?? ''));
+    $defaultOrder = $sortSql !== '' ? $sortSql : "`{$table}`.`{$pk}` DESC";
+
+    if ($reqSort !== '') {
+        $safeReqSort = nu_safe_ident($reqSort);
+        $orderClause = "`{$safeReqSort}` {$reqDir}";
+    } else {
+        $orderClause = $defaultOrder;
+    }
 
     $browsePhp = trim((string)($form[$c['browse_php']] ?? ''));
     $nuHash    = nu_get_hash();
@@ -1538,7 +1826,7 @@ function nu_handle_list() {
         if ($searchEnabled && $q !== '') {
             $fields = array_filter(array_map('trim', explode(',', $searchFields)));
             if (!$fields) {
-                foreach (nu_flatten_layout($layout) as $field) {
+                foreach (nu_flatten_layout_for_grid($layout) as $field) {
                     $fname = nu_safe_ident(nu_field_name($field));
                     if ($fname !== '') $fields[] = $fname;
                 }
@@ -1555,16 +1843,30 @@ function nu_handle_list() {
             }
         }
 
-        $orderClause = $nuOrder !== '' ? $nuOrder : $defaultOrder;
+        $finalOrder = $nuOrder !== '' ? $nuOrder : $orderClause;
         $total  = (int)nu_q("SELECT COUNT(*) FROM ({$baseSql}) _nu_cnt", $baseParams)->fetchColumn();
         $pages  = max(1, (int)ceil($total / $pageSize));
         if ($page > $pages) $page = $pages;
         $offset = ($page - 1) * $pageSize;
-        $records = nu_q($baseSql . " ORDER BY {$orderClause} LIMIT {$pageSize} OFFSET {$offset}", $baseParams)
+        $records = nu_q($baseSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}", $baseParams)
                        ->fetchAll(PDO::FETCH_ASSOC);
 
     } else {
         $where = []; $params = [];
+        $joins = [];
+        $selectCols = ["`{$table}`.*"];
+
+        // Handle custom Joins from layout
+        $flatLayout = nu_flatten_layout_for_grid($layout);
+        foreach ($flatLayout as $f) {
+            $jSql = trim($f['join_sql'] ?? '');
+            $jDisp = trim($f['join_display_field'] ?? '');
+            $fName = nu_field_name($f);
+            if ($jSql !== '' && $jDisp !== '') {
+                $joins[] = $jSql;
+                $selectCols[] = "{$jDisp} AS `{$fName}_display`";
+            }
+        }
 
         if ($nuWhere !== '') {
             $where[]  = '(' . $nuWhere . ')';
@@ -1574,7 +1876,7 @@ function nu_handle_list() {
         if ($searchEnabled && $q !== '') {
             $fields = array_filter(array_map('trim', explode(',', $searchFields)));
             if (!$fields) {
-                foreach (nu_flatten_layout($layout) as $field) {
+                foreach ($flatLayout as $field) {
                     $fname = nu_safe_ident(nu_field_name($field));
                     if ($fname !== '') $fields[] = $fname;
                 }
@@ -1583,6 +1885,10 @@ function nu_handle_list() {
             foreach ($fields as $fn) {
                 $fn = nu_safe_ident($fn);
                 if ($fn === '') continue;
+                // If it's a join display field, we might need to handle it differently, 
+                // but usually searching by the alias or original field works if SQL allows.
+                // To be safe, we wrap in subquery or use the join field directly if we knew it.
+                // For now, let's assume it's a column in the main table or we use the alias.
                 $likes[] = "`{$fn}` LIKE ?";
                 $params[] = '%' . $q . '%';
             }
@@ -1590,17 +1896,23 @@ function nu_handle_list() {
         }
 
         $whereSql    = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
-        $orderClause = $nuOrder !== '' ? $nuOrder : $defaultOrder;
-        $total       = (int)nu_q("SELECT COUNT(*) FROM `{$table}`" . $whereSql, $params)->fetchColumn();
+        $joinSql     = $joins ? (' ' . implode(' ', $joins)) : '';
+        $selectSql   = implode(', ', $selectCols);
+        
+        $finalOrder = $nuOrder !== '' ? $nuOrder : $orderClause;
+        
+        $totalSql    = "SELECT COUNT(*) FROM `{$table}`" . $joinSql . $whereSql;
+        $total       = (int)nu_q($totalSql, $params)->fetchColumn();
         $pages       = max(1, (int)ceil($total / $pageSize));
         if ($page > $pages) $page = $pages;
         $offset      = ($page - 1) * $pageSize;
-        $records     = nu_q("SELECT * FROM `{$table}`" . $whereSql . " ORDER BY {$orderClause} LIMIT {$pageSize} OFFSET {$offset}", $params)
-                           ->fetchAll(PDO::FETCH_ASSOC);
+        
+        $recordsSql  = "SELECT {$selectSql} FROM `{$table}`" . $joinSql . $whereSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}";
+        $records     = nu_q($recordsSql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     nu_json(['success' => true, 'data' => [
-        'layout'  => $layout, 'records' => $records,
+        'layout'  => nu_flatten_layout_for_grid($layout), 'records' => $records,
         'page'    => $page,   'pages'   => $pages,   'total' => $total,
         'query'   => $q,      'browsesearchenabled'   => $searchEnabled,
         'browsesearchplaceholder' => $form[$c['browse_search_placeholder']] ?? 'Search...'
