@@ -850,6 +850,8 @@ foreach ($forms as $f) {
             <div class="nb-tools-group-label">Advanced</div>
             <div class="nb-tool" data-type="lookup"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Lookup</div>
             <div class="nb-tool" data-type="subform"    draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Subform</div>
+            <div class="nb-tool" data-type="upload"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Upload</div>
+            <div class="nb-tool" data-type="photo_canvas" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Photo Canvas</div>
             <div class="nb-tool" data-type="calculated" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h8M4 17h12"/></svg>Calc</div>
             <div class="nb-tool" data-type="range"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="12" r="2"/><path d="M2 12h4M10 12h12"/></svg>Range</div>
             <div class="nb-tool" data-type="color"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Color</div>
@@ -1407,15 +1409,28 @@ if (!window._nbFormsModuleInit) {
 
     var _origMakeFieldCard = nbFormBuilder._makeFieldCard;
    nbFormBuilder._makeFieldCard = function(type, label, name, required, extra) {
-  var card = typeof _origMakeFieldCard === 'function'
-    ? _origMakeFieldCard.call(nbFormBuilder, type, label, name, required, extra) : null;
-      if (!card) return card;
+      var f = (typeof type === 'object') ? type : (extra || {});
+      var fType = f.type || type;
 
-      if (field.type === 'group') {
+      var card = typeof _origMakeFieldCard === 'function'
+        ? _origMakeFieldCard.call(nbFormBuilder, type, label, name, required, extra) : null;
+
+      if (!card) {
+          if (fType === 'group' || fType === 'tab') {
+              card = document.createElement('div');
+              card.className = 'nb-cfield';
+              card.dataset.type = fType;
+              card.innerHTML = '<div class="nb-cfield-header"><span class="nb-cfield-label">' + (f.label || fType) + '</span></div>';
+          } else {
+              return null;
+          }
+      }
+
+      if (fType === 'group') {
         var groupBody = document.createElement('div');
         groupBody.className = 'nb-cfield-group-body';
-        groupBody.dataset.groupId = field.id;
-        var children = field.children || [];
+        groupBody.dataset.groupId = f.id || '';
+        var children = f.children || [];
         if (!children.length) {
           groupBody.innerHTML = '<div style="color:var(--text-tertiary);font-size:11px;text-align:center;padding:10px;">Drop fields here</div>';
         } else {
@@ -1426,23 +1441,23 @@ if (!window._nbFormsModuleInit) {
         groupBody.addEventListener('drop', function(e) {
           e.preventDefault(); e.stopPropagation();
           groupBody.classList.remove('drag-col-over');
-          var type = e.dataTransfer.getData('nb-field-type');
-          if (!type || type === 'group' || type === 'tab') return;
-          if (!field.children) field.children = [];
-          field.children.push(nbFormBuilder._makeDefaultField(type));
+          var dType = e.dataTransfer.getData('nb-field-type');
+          if (!dType || dType === 'group' || dType === 'tab') return;
+          if (!f.children) f.children = [];
+          f.children.push(nbFormBuilder._makeDefaultField(dType));
           groupBody.innerHTML = '';
-          field.children.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) groupBody.appendChild(cc); });
+          f.children.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) groupBody.appendChild(cc); });
         });
         card.appendChild(groupBody);
       }
 
-      if (field.type === 'tab') {
-        if (!field.tabs || !field.tabs.length) field.tabs = [{ label: 'Tab 1', children: [] }];
+      if (fType === 'tab') {
+        if (!f.tabs || !f.tabs.length) f.tabs = [{ label: 'Tab 1', children: [] }];
         var tabNav   = document.createElement('div');
         tabNav.className = 'nb-cfield-tab-nav';
         var tabPanes = document.createElement('div');
 
-        field.tabs.forEach(function(tab, idx) {
+        f.tabs.forEach(function(tab, idx) {
           var navBtn = document.createElement('button');
           navBtn.type = 'button';
           navBtn.className = 'nb-cfield-tab-nav-item' + (idx === 0 ? ' active' : '');
@@ -1470,12 +1485,12 @@ if (!window._nbFormsModuleInit) {
             panelEl.addEventListener('drop', function(e) {
               e.preventDefault(); e.stopPropagation();
               panelEl.classList.remove('drag-col-over');
-              var type = e.dataTransfer.getData('nb-field-type');
-              if (!type || type === 'group' || type === 'tab') return;
-              if (!field.tabs[tabIdx].children) field.tabs[tabIdx].children = [];
-              field.tabs[tabIdx].children.push(nbFormBuilder._makeDefaultField(type));
+              var dType = e.dataTransfer.getData('nb-field-type');
+              if (!dType || dType === 'group' || dType === 'tab') return;
+              if (!f.tabs[tabIdx].children) f.tabs[tabIdx].children = [];
+              f.tabs[tabIdx].children.push(nbFormBuilder._makeDefaultField(dType));
               panelEl.innerHTML = '';
-              field.tabs[tabIdx].children.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) panelEl.appendChild(cc); });
+              f.tabs[tabIdx].children.forEach(function(child) { var cc = nbFormBuilder._makeFieldCard(child); if (cc) panelEl.appendChild(cc); });
             });
           })(panel, idx);
           tabPanes.appendChild(panel);
@@ -1487,10 +1502,10 @@ if (!window._nbFormsModuleInit) {
         addBtn.textContent = '+ Tab';
         addBtn.addEventListener('click', function(e) {
           e.stopPropagation();
-          field.tabs.push({ label: 'Tab ' + (field.tabs.length + 1), children: [] });
+          f.tabs.push({ label: 'Tab ' + (f.tabs.length + 1), children: [] });
           var parent = card.parentElement;
           var next   = card.nextSibling;
-          if (parent) { parent.removeChild(card); var nc = nbFormBuilder._makeFieldCard(field); if (nc) parent.insertBefore(nc, next); }
+          if (parent) { parent.removeChild(card); var nc = nbFormBuilder._makeFieldCard(f); if (nc) parent.insertBefore(nc, next); }
         });
         tabNav.appendChild(addBtn);
         card.appendChild(tabNav);
