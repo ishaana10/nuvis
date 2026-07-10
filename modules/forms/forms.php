@@ -853,8 +853,8 @@ foreach ($forms as $f) {
             <div class="nb-tool" data-type="calculated" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h8M4 17h12"/></svg>Calc</div>
             <div class="nb-tool" data-type="range"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="12" r="2"/><path d="M2 12h4M10 12h12"/></svg>Range</div>
             <div class="nb-tool" data-type="color"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Color</div>
-            <div class="nb-tool" data-type="uploadbutton" draggable="true">Upload Button</div>
-<div class="nb-tool" data-type="picturecanvas" draggable="true">Picture Canvas</div>
+           <div class="nb-tool" data-type="uploadbutton" draggable="true">Upload Button</div>
+<div class="nb-tool" data-type="signaturepad" draggable="true">Signature Pad</div>
 <div class="nb-tool" data-type="customnumber" draggable="true">Custom Number</div>
           </div>
           <div class="nb-tools-group">
@@ -1579,7 +1579,7 @@ if (!nbFormBuilder._groupTabPatched) {
       `;
     }
 
-    if (field.type === 'picturecanvas') {
+    if (field.type === 'signaturepad' || field.type === 'picturecanvas') {
       blockHtml += `
         <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);">
           <div class="nb-fp nb-fp-full" style="font-size:10px;font-weight:700;color:var(--text-tertiary);letter-spacing:.05em;text-transform:uppercase;">Canvas Options</div>
@@ -1931,11 +1931,12 @@ if (!nbFormBuilder._groupTabPatched) {
 
   return card;
 };
- nbFormBuilder._makeDefaultField = function(type) {
+nbFormBuilder._makeDefaultField = function(type) {
   if (typeof _origMakeDefaultField === 'function') {
     var made = _origMakeDefaultField.call(nbFormBuilder, type);
     if (made && typeof made === 'object') {
       if (type === 'uploadbutton') {
+        made.type = 'uploadbutton';
         made.label = made.label || 'Upload Button';
         made.name = made.name || ('upload_' + Math.random().toString(36).slice(2, 6));
         made.col = made.col || 6;
@@ -1948,10 +1949,13 @@ if (!nbFormBuilder._groupTabPatched) {
         made.upload_path = made.upload_path || 'uploads/';
         made.allowed_extensions = made.allowed_extensions || '';
         made.preview = made.preview !== false;
+        made.hide_in_grid = made.hide_in_grid !== undefined ? made.hide_in_grid : true;
         made.required = !!made.required;
-      } else if (type === 'picturecanvas') {
-        made.label = made.label || 'Picture Canvas';
-        made.name = made.name || ('canvas_' + Math.random().toString(36).slice(2, 6));
+      } else if (type === 'signaturepad' || type === 'picturecanvas') {
+        made.type = 'signaturepad';
+        made.label = made.label || 'Signature Pad';
+        made.name = made.name || ('signature_' + Math.random().toString(36).slice(2, 6));
+        made.hide_in_grid = made.hide_in_grid !== undefined ? made.hide_in_grid : true;
         made.col = made.col || 6;
         made.canvas_width = made.canvas_width || 400;
         made.canvas_height = made.canvas_height || 220;
@@ -1963,6 +1967,7 @@ if (!nbFormBuilder._groupTabPatched) {
         made.clear_button = made.clear_button !== false;
         made.required = !!made.required;
       } else if (type === 'customnumber') {
+        made.type = 'customnumber';
         made.label = made.label || 'Custom Number';
         made.name = made.name || ('number_' + Math.random().toString(36).slice(2, 6));
         made.col = made.col || 6;
@@ -1976,6 +1981,7 @@ if (!nbFormBuilder._groupTabPatched) {
         made.min_value = made.min_value != null ? made.min_value : '';
         made.max_value = made.max_value != null ? made.max_value : '';
         made.step = made.step != null ? made.step : '1';
+        made.hide_in_grid = made.hide_in_grid !== undefined ? made.hide_in_grid : false;
         made.required = !!made.required;
       }
       return made;
@@ -1995,6 +2001,7 @@ if (!nbFormBuilder._groupTabPatched) {
   };
 
   if (type === 'uploadbutton') {
+    base.type = 'uploadbutton';
     base.label = 'Upload Button';
     base.name = 'upload_' + Math.random().toString(36).slice(2, 6);
     base.button_text = 'Upload';
@@ -2006,12 +2013,15 @@ if (!nbFormBuilder._groupTabPatched) {
     base.upload_path = 'uploads/';
     base.allowed_extensions = '';
     base.preview = true;
+    base.hide_in_grid = true;
     return base;
   }
 
-  if (type === 'picturecanvas') {
-    base.label = 'Picture Canvas';
-    base.name = 'canvas_' + Math.random().toString(36).slice(2, 6);
+  if (type === 'signaturepad' || type === 'picturecanvas') {
+    base.type = 'signaturepad';
+    base.label = 'Signature Pad';
+    base.name = 'signature_' + Math.random().toString(36).slice(2, 6);
+    base.hide_in_grid = true;
     base.canvas_width = 400;
     base.canvas_height = 220;
     base.background_color = '#ffffff';
@@ -2024,6 +2034,7 @@ if (!nbFormBuilder._groupTabPatched) {
   }
 
   if (type === 'customnumber') {
+    base.type = 'customnumber';
     base.label = 'Custom Number';
     base.name = 'number_' + Math.random().toString(36).slice(2, 6);
     base.format_type = 'number';
@@ -2036,6 +2047,7 @@ if (!nbFormBuilder._groupTabPatched) {
     base.min_value = '';
     base.max_value = '';
     base.step = '1';
+    base.hide_in_grid = false;
     return base;
   }
 
