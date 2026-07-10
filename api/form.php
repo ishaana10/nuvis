@@ -388,6 +388,9 @@ function nu_customnumber_display_value($value, $field = []) {
 
 function nu_render_field($field, $value = '', $record = []) {
     $type  = nu_field_type($field);
+     if ($type === 'signaturepad') {
+        $type = 'picturecanvas';
+    }
     $name  = nu_field_name($field);
     $label = nu_field_label($field);
 
@@ -481,7 +484,7 @@ function nu_render_field($field, $value = '', $record = []) {
         return $html;
     }
 
-    if ($type === 'picturecanvas') {
+    if ($type === 'signaturepad' || $type === 'picturecanvas') {
         $canvasWidth = max(100, (int)($field['canvas_width'] ?? 400));
         $canvasHeight = max(80, (int)($field['canvas_height'] ?? 220));
         $bg = (string)($field['background_color'] ?? '#ffffff');
@@ -1372,11 +1375,15 @@ function nu_flatten_fields(array $layout): array {
 }
 
 
-
 function nu_flatten_layout_for_grid($layout) {
     return array_values(array_filter(
-        nu_flatten_fields($layout),   // ← use the local function, it handles tabs
-        function ($f) { return !nu_field_hide_in_grid($f); }
+        nu_flatten_fields($layout),
+        function ($f) {
+            $type = nu_field_type($f);
+            if (nu_field_hide_in_grid($f)) return false;
+            if (in_array($type, ['uploadbutton', 'signaturepad', 'picturecanvas'], true)) return false;
+            return true;
+        }
     ));
 }
 
