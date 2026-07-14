@@ -77,7 +77,95 @@ class WorkflowEngine
         );
 
         $this->logHistory($instanceId, (int)$instance['wfi_stage_id'], (int)$transition['wft_to_id'], $transition['wft_action'], $userId, $comment);
+
+        // Execute Action Hook
+        $this->executeHook($transition, $instance, $userId);
+
         return true;
+    }
+
+    // ── Execute Hook ───────────────────────────────────────────────────────────
+    private function executeHook(array $transition, array $instance, int $userId): void
+    {
+        $hook = $transition['wft_hook'] ?? null;
+        if (!$hook) {
+            return;
+        }
+
+        switch ($hook) {
+            case 'send_email':
+                try {
+                    require_once __DIR__ . '/EmailService.php';
+                    $service = new NuEmailService();
+
+                    // Fetch actor and target details
+                    $actor = $this->db->fetchOne('SELECT usr_name, usr_email FROM nu_users WHERE usr_id = :id', [':id' => $userId]);
+                    $actorName = $actor['usr_name'] ?? 'System';
+
+                    // Send to current workflow owner or started_by user
+                    $startedBy = $this->db->fetchOne('SELECT usr_email, usr_name FROM nu_users WHERE usr_id = :id', [':id' => (int)$instance['wfi_started_by']]);
+                    if ($startedBy && !empty($startedBy['usr_email'])) {
+                        $toEmail = $startedBy['usr_email'];
+                        $subject = "Workflow Notification: [" . $instance['wf_name'] . "] #" . $instance['wfi_id'];
+                        $body = "<h2>Workflow Notification</h2>" .
+                                "<p>The workflow <b>" . htmlspecialchars($instance['wf_name']) . "</b> (Instance #" . $instance['wfi_id'] . ") has advanced.</p>" .
+                                "<p><b>Action:</b> " . htmlspecialchars($transition['wft_label']) . "</p>" .
+                                "<p><b>By Actor:</b> " . htmlspecialchars($actorName) . "</p>" .
+                                "<p>You can check the dashboard/workflow module for details.</p>";
+
+                        $service->sendEmail($toEmail, $subject, $body);
+                    }
+                } catch (Throwable $e) {
+                    error_log('[Workflow Hook Error - Email] ' . $e->getMessage());
+                }
+                break;
+
+            case 'call_webhook':
+                try {
+                    $url = getenv('NU_BASE_URL') ?: 'http://127.0.0.1';
+                    $payload = json_encode([
+                        'event'         => 'workflow_advance',
+                        'workflow'      => $instance['wf_name'],
+                        'instance_id'   => $instance['wfi_id'],
+                        'action'        => $transition['wft_label'],
+                        'from_stage_id' => $transition['wft_from_id'],
+                        'to_stage_id'   => $transition['wft_to_id'],
+                        'actor_id'      => $userId,
+                        'timestamp'     => date('Y-m-d H:i:s')
+                    ]);
+
+                    $ch = curl_init();
+                    curl_setopt($ch, CURLOPT_URL, $url . '/api/webhook.php');
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+                    curl_exec($ch);
+                    curl_close($ch);
+                } catch (Throwable $e) {
+                    error_log('[Workflow Hook Error - Webhook] ' . $e->getMessage());
+                }
+                break;
+
+            case 'update_record':
+                try {
+                    $table = $instance['wfi_record_table'] ?? null;
+                    $recId = $instance['wfi_record_id'] ?? null;
+                    if ($table && $recId) {
+                        $toStage = $this->db->fetchOne('SELECT wfs_code FROM nu_workflow_stages WHERE wfs_id = :id', [':id' => $transition['wft_to_id']]);
+                        if ($toStage && !empty($toStage['wfs_code'])) {
+                            $this->db->query(
+                                "UPDATE `" . preg_replace('/[^a-zA-Z0-9_]/', '', $table) . "` SET `status` = :status WHERE id = :id",
+                                [':status' => $toStage['wfs_code'], ':id' => $recId]
+                            );
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('[Workflow Hook Error - Update Record] ' . $e->getMessage());
+                }
+                break;
+        }
     }
 
     // ── Reject / cancel ────────────────────────────────────────────────────────
