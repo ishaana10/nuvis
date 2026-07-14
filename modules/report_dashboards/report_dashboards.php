@@ -566,6 +566,14 @@ $isAdmin = ($userRole === 'globeadmin' || $userRole === 'admin');
           wrap.innerHTML = '<select class="nu-input" id="df_' + esc(f.field) + '">' +
             '<option value="">' + esc(f.label || 'Select Month') + '</option>' +
             monthOpts + '</select>';
+        } else if (f.type === 'quarter') {
+          var quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+          var qOpts = quarters.map(function (q) {
+            return '<option value="' + q + '">' + q + '</option>';
+          }).join('');
+          wrap.innerHTML = '<select class="nu-input" id="df_' + esc(f.field) + '">' +
+            '<option value="">' + esc(f.label || 'Select Quarter') + '</option>' +
+            qOpts + '</select>';
         } else if (f.type === 'year') {
           var years = [];
           var cy = new Date().getFullYear();
@@ -819,6 +827,7 @@ $isAdmin = ($userRole === 'globeadmin' || $userRole === 'admin');
           '<label style="font-size:11px;">Input Type</label>' +
           '<select class="nu-input dfr-type" onchange="dashOnFilterTypeChanged(\'' + rowId + '\', this.value)">' +
             '<option value="month"'  + (type === 'month'  ? ' selected' : '') + '>Month Picker</option>' +
+            '<option value="quarter"'+ (type === 'quarter'? ' selected' : '') + '>Quarter Picker</option>' +
             '<option value="year"'   + (type === 'year'   ? ' selected' : '') + '>Year Picker</option>' +
             '<option value="lookup"' + (type === 'lookup' ? ' selected' : '') + '>Lookup Dropdown</option>' +
             '<option value="text"'   + (type === 'text'   ? ' selected' : '') + '>Plain Text Input</option>' +

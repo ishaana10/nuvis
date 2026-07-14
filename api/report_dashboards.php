@@ -57,29 +57,6 @@ try {
     } catch (Throwable $t2) {}
 }
 
-try {
-    $db->fetchAll("SELECT 1 FROM nu_stations LIMIT 1");
-} catch (Throwable $t) {
-    try {
-        $db->exec("
-            CREATE TABLE IF NOT EXISTS nu_stations (
-                station_id INT AUTO_INCREMENT PRIMARY KEY,
-                station_name VARCHAR(100) NOT NULL,
-                station_code VARCHAR(20) NOT NULL UNIQUE,
-                station_active TINYINT(1) DEFAULT 1
-            ) ENGINE=InnoDB;
-        ");
-        $db->exec("
-            INSERT INTO nu_stations (station_name, station_code) VALUES
-            ('North Station', 'STN_NORTH'),
-            ('South Station', 'STN_SOUTH'),
-            ('East Station', 'STN_EAST'),
-            ('West Station', 'STN_WEST')
-            ON DUPLICATE KEY UPDATE station_name=VALUES(station_name);
-        ");
-    } catch (Throwable $t2) {}
-}
-
 $body = [];
 if ($method === 'POST') {
     $raw  = file_get_contents('php://input');
