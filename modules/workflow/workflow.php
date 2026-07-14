@@ -173,6 +173,49 @@ $totalRun     = array_sum(array_column($workflows, 'total_instances'));
       </div>
     </div>
 
+    <!-- ── Live Diagram Visual ─────────────────────────────────────────────── -->
+    <div class="nu-card" style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h4 style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-tertiary);margin:0;">Live Flowchart Diagram</h4>
+        <span style="font-size:11px;color:var(--text-tertiary);background:var(--bg-secondary);padding:2px 8px;border-radius:99px;">Auto-generated</span>
+      </div>
+      <div id="wfMermaidContainer" style="background:var(--bg-secondary,#f9fafb); border:1px solid var(--border-color); border-radius:12px; padding:16px; min-height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:auto; position:relative;">
+        <div id="wfMermaidDiagram" style="width:100%;"></div>
+      </div>
+    </div>
+
+    <!-- ── Test Run & Simulation ──────────────────────────────────────────────── -->
+    <div class="nu-card" style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h4 style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-tertiary);margin:0;">Test Run & Simulation</h4>
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" id="btnToggleSim" onclick="WF.toggleSimulation()" style="font-size:11px;padding:2px 8px;">Show Simulator</button>
+      </div>
+
+      <div id="wfSimulationPanel" style="display:none;border-top:1px solid var(--border-color);padding-top:12px;">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">
+          Simulate how the workflow processes a record step-by-step based on conditions and mock data.
+        </p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;">Mock Record Data (JSON)</label>
+            <textarea class="nu-input" id="wfSimData" rows="4" style="font-family:monospace;font-size:12px;" placeholder='{ "amount": 1500, "dept": "engineering" }'></textarea>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;">Simulation Log & Results</label>
+            <div id="wfSimResults" style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;padding:8px;font-family:monospace;font-size:11px;height:72px;overflow-y:auto;color:var(--text-secondary);line-height:1.4;">
+              Ready to simulate. Click "Run Simulation".
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="WF.runSimulation()" style="flex:1;">⚡ Run Simulation</button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.resetSimulation()">Reset</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Stage Pipeline Visual ─────────────────────────────────────────────── -->
     <div class="nu-card" style="margin-bottom:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -184,7 +227,7 @@ $totalRun     = array_sum(array_column($workflows, 'total_instances'));
       </div>
 
       <!-- Pipeline visual -->
-      <div id="wfPipeline" style="display:flex;align-items:center;gap:0;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;min-height:64px;"></div>
+      <div id="wfPipeline" style="display:none;align-items:center;gap:0;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;min-height:64px;"></div>
 
       <!-- Stage list -->
       <div id="wfStageList"></div>
@@ -212,12 +255,16 @@ $totalRun     = array_sum(array_column($workflows, 'total_instances'));
 ═══════════════════════════════════════════════════════════════════════════════ -->
 <div id="wfInstancesPanel" style="display:none;margin-top:28px;">
   <div class="nu-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
       <div>
         <h3 class="nu-card-title" id="wfInstancesTitle" style="margin:0;">Instances</h3>
         <span id="wfInstancesMeta" style="font-size:12px;color:var(--text-secondary);"></span>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div class="rpt-view-tabs" style="display:flex;gap:4px;">
+          <button id="wfToggleList" class="rpt-vtab active" onclick="WF.setViewLayout('list')" style="padding: 5px 10px; font-size:12px; cursor:pointer;">📋 List</button>
+          <button id="wfToggleKanban" class="rpt-vtab" onclick="WF.setViewLayout('kanban')" style="padding: 5px 10px; font-size:12px; cursor:pointer;">📊 Kanban</button>
+        </div>
         <select class="nu-input" id="wfInstancesFilter" onchange="WF.filterInstances()" style="font-size:13px;padding:5px 10px;">
           <option value="">All statuses</option>
           <option value="active">Active</option>
@@ -251,6 +298,9 @@ $totalRun     = array_sum(array_column($workflows, 'total_instances'));
 </div>
 
 </div><!-- /.nu-workflow-module -->
+
+<!-- Load Mermaid.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 
 <style>
 .wf-stage-pill {
@@ -313,6 +363,8 @@ window.WF = (() => {
   let _transCount  = 0;
   let _currentWfId = null;
   let _instancesWfId = null;
+  let _loadedInstancesList = [];
+  let _viewLayout  = 'list';
 
   function search(val) {
     const q = val.toLowerCase();
@@ -372,8 +424,15 @@ window.WF = (() => {
       _currentWfId = d.wf_id;
       $('wfEditId').value = d.wf_id;
       toast('Workflow saved', 'success');
-      const unsaved = document.querySelectorAll('.wf-stage-row[data-new="1"]');
-      for (const row of unsaved) { await _saveStageRow(row, d.wf_id); }
+
+      // Save stages (save any new or existing updated stage rows)
+      const stageRows = document.querySelectorAll('.wf-stage-row');
+      for (const row of stageRows) { await _saveStageRow(row, d.wf_id); }
+
+      // Save transitions (save any new or existing updated transition rows)
+      const transRows = document.querySelectorAll('.wf-trans-row');
+      for (const row of transRows) { await _saveTransRow(row, d.wf_id); }
+
       // Close drawer then reload workflow module in-place (no full page reload)
       closeDrawer();
       setTimeout(_reloadModule, 300);
@@ -418,7 +477,7 @@ window.WF = (() => {
       }).join('');
     }
     const list = $('wfStageList');
-    if (_stages.length === 0) { list.innerHTML = ''; return; }
+    if (_stages.length === 0) { list.innerHTML = ''; _renderMermaidDiagram(); return; }
     list.innerHTML = _stages.map((s, i) => {
       const isNew = String(s.wfs_id).startsWith('new_');
       return `<div class="wf-stage-row" data-idx="${i}" data-new="${isNew?1:0}" data-id="${esc(s.wfs_id)}"
@@ -437,6 +496,7 @@ window.WF = (() => {
         <button class="nu-btn nu-btn-danger nu-btn-sm" onclick="WF._deleteStage(${i})" style="padding:4px 7px;">×</button>
       </div>`;
     }).join('');
+    _renderMermaidDiagram();
   }
 
   function _patchStage(idx, field, val) {
@@ -503,34 +563,52 @@ window.WF = (() => {
 
   function _renderTransitions() {
     const list = $('wfTransitionList');
-    if (_stages.length < 2) { list.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px;">Add at least 2 stages first.</p>'; return; }
-    if (_transitions.length === 0) { list.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px;">No transitions yet. Click "Add Transition" to connect stages.</p>'; return; }
+    if (_stages.length < 2) { list.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px;">Add at least 2 stages first.</p>'; _renderMermaidDiagram(); return; }
+    if (_transitions.length === 0) { list.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px;">No transitions yet. Click "Add Transition" to connect stages.</p>'; _renderMermaidDiagram(); return; }
     const stageOptions = _stages.map(s => `<option value="${esc(s.wfs_id)}">${esc(s.wfs_name||'Unnamed')}</option>`).join('');
     list.innerHTML = _transitions.map((t, i) => {
       const isNew = String(t.wft_id).startsWith('new_');
-      return `<div class="wf-trans-row" data-idx="${i}" data-new="${isNew?1:0}" data-id="${esc(t.wft_id)}"
-           style="display:grid;grid-template-columns:1fr 80px 1fr 90px 32px;gap:8px;align-items:center;padding:8px;border-radius:6px;margin-bottom:6px;background:var(--bg-secondary);">
-        <select class="nu-input" onchange="WF._patchTrans(${i},'from',this.value)" style="font-size:12px;padding:5px 8px;">
-          <option value="">From stage…</option>${stageOptions.replace(`value="${esc(t.wft_from_id)}"`,`value="${esc(t.wft_from_id)}" selected`)}
-        </select>
-        <select class="nu-input" onchange="WF._patchTrans(${i},'action',this.value)" style="font-size:12px;padding:5px 8px;">
-          <option value="advance" ${t.wft_action==='advance'?'selected':''}>→ Advance</option>
-          <option value="reject"  ${t.wft_action==='reject' ?'selected':''}>✕ Reject</option>
-          <option value="return"  ${t.wft_action==='return' ?'selected':''}>↩ Return</option>
-          <option value="escalate"${t.wft_action==='escalate'?'selected':''}>↑ Escalate</option>
-        </select>
-        <select class="nu-input" onchange="WF._patchTrans(${i},'to',this.value)" style="font-size:12px;padding:5px 8px;">
-          <option value="">To stage…</option>${stageOptions.replace(`value="${esc(t.wft_to_id)}"`,`value="${esc(t.wft_to_id)}" selected`)}
-        </select>
-        <input type="text" class="nu-input" value="${esc(t.wft_label)}" oninput="WF._patchTrans(${i},'label',this.value)" placeholder="Button label" style="font-size:12px;padding:5px 8px;">
-        <button class="nu-btn nu-btn-danger nu-btn-sm" onclick="WF._deleteTrans(${i})" style="padding:4px 7px;">×</button>
+      return `<div class="wf-trans-row-container" style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div class="wf-trans-row" data-idx="${i}" data-new="${isNew?1:0}" data-id="${esc(t.wft_id)}"
+             style="display:grid;grid-template-columns:1fr 80px 1fr 100px 32px;gap:8px;align-items:center;margin-bottom:8px;">
+          <select class="nu-input" onchange="WF._patchTrans(${i},'from',this.value)" style="font-size:12px;padding:5px 8px;">
+            <option value="">From stage…</option>${stageOptions.replace(`value="${esc(t.wft_from_id)}"`,`value="${esc(t.wft_from_id)}" selected`)}
+          </select>
+          <select class="nu-input" onchange="WF._patchTrans(${i},'action',this.value)" style="font-size:12px;padding:5px 8px;">
+            <option value="advance" ${t.wft_action==='advance'?'selected':''}>→ Advance</option>
+            <option value="reject"  ${t.wft_action==='reject' ?'selected':''}>✕ Reject</option>
+            <option value="return"  ${t.wft_action==='return' ?'selected':''}>↩ Return</option>
+            <option value="escalate"${t.wft_action==='escalate'?'selected':''}>↑ Escalate</option>
+          </select>
+          <select class="nu-input" onchange="WF._patchTrans(${i},'to',this.value)" style="font-size:12px;padding:5px 8px;">
+            <option value="">To stage…</option>${stageOptions.replace(`value="${esc(t.wft_to_id)}"`,`value="${esc(t.wft_to_id)}" selected`)}
+          </select>
+          <input type="text" class="nu-input" value="${esc(t.wft_label)}" oninput="WF._patchTrans(${i},'label',this.value)" placeholder="Button label" style="font-size:12px;padding:5px 8px;">
+          <button class="nu-btn nu-btn-danger nu-btn-sm" onclick="WF._deleteTrans(${i})" style="padding:4px 7px;">×</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;border-top:1px dashed var(--border-color);padding-top:8px;">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="font-size:11px;font-weight:600;color:var(--text-tertiary);white-space:nowrap;">If Condition:</span>
+            <input type="text" class="nu-input" value="${esc(t.wft_condition||'')}" oninput="WF._patchTrans(${i},'condition',this.value)" placeholder="e.g. amount > 1000" style="font-size:11px;padding:4px 8px;font-family:monospace;flex:1;">
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="font-size:11px;font-weight:600;color:var(--text-tertiary);white-space:nowrap;">Trigger Hook:</span>
+            <select class="nu-input" onchange="WF._patchTrans(${i},'hook',this.value)" style="font-size:11px;padding:4px 8px;flex:1;">
+              <option value="">None (Just advance)</option>
+              <option value="send_email" ${t.wft_hook==='send_email'?'selected':''}>📧 Send Email</option>
+              <option value="call_webhook" ${t.wft_hook==='call_webhook'?'selected':''}>🔗 Call Webhook API</option>
+              <option value="update_record" ${t.wft_hook==='update_record'?'selected':''}>📝 Update Record Status</option>
+            </select>
+          </div>
+        </div>
       </div>`;
     }).join('');
+    _renderMermaidDiagram();
   }
 
   function _patchTrans(idx, field, val) {
     if (!_transitions[idx]) return;
-    const map = { from:'wft_from_id', to:'wft_to_id', action:'wft_action', label:'wft_label' };
+    const map = { from:'wft_from_id', to:'wft_to_id', action:'wft_action', label:'wft_label', condition:'wft_condition', hook:'wft_hook' };
     if (map[field]) _transitions[idx][map[field]] = val;
   }
 
@@ -546,6 +624,27 @@ window.WF = (() => {
     }
     _transitions.splice(idx, 1);
     _renderTransitions();
+  }
+
+  async function _saveTransRow(row, wfId) {
+    const idx = parseInt(row.dataset.idx);
+    const t   = _transitions[idx];
+    if (!t || !t.wft_from_id || !t.wft_to_id) return;
+    const payload = {
+      wft_wf_id:     wfId,
+      wft_id:        String(t.wft_id).startsWith('new_') ? null : t.wft_id,
+      wft_from_id:   t.wft_from_id,
+      wft_to_id:     t.wft_to_id,
+      wft_action:    t.wft_action || 'advance',
+      wft_label:     t.wft_label || 'Advance',
+      wft_condition: t.wft_condition || null,
+      wft_hook:      t.wft_hook || null,
+    };
+    try {
+      await fetch('api/workflow.php?action=save_transition', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+    } catch (e) { /* best effort */ }
   }
 
   async function openInstances(wfId, wfName) {
@@ -567,26 +666,115 @@ window.WF = (() => {
       const r = await fetch(`api/workflow.php?action=instances&wf_id=${wfId}&status=${encodeURIComponent(status)}`);
       const d = await r.json();
       if (!d.success) { $('wfInstancesContent').innerHTML = `<p style="color:var(--color-danger)">${esc(d.error)}</p>`; return; }
-      const rows = d.instances || [];
-      $('wfInstancesMeta').textContent = rows.length + ' instance' + (rows.length !== 1 ? 's' : '');
-      if (!rows.length) { $('wfInstancesContent').innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);padding:12px 0;">No instances found.</p>'; return; }
-      const statusColors = { active:'#f59e0b', completed:'#22c55e', rejected:'#ef4444', cancelled:'#6b7280' };
-      let html = '<table class="nu-table" style="font-size:13px;"><thead><tr><th>#</th><th>Stage</th><th>Status</th><th>Record</th><th>Started By</th><th>Started</th><th>Actions</th></tr></thead><tbody>';
-      rows.forEach(inst => {
-        const col = statusColors[inst.wfi_status] || '#888';
-        const sc  = inst.stage_color || '#6366f1';
-        html += `<tr>
-          <td style="font-weight:600;">#${esc(inst.wfi_id)}</td>
-          <td><span style="background:${sc}18;color:${sc};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;">${esc(inst.stage_name)}</span></td>
-          <td><span style="background:${col}18;color:${col};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;text-transform:capitalize;">${esc(inst.wfi_status)}</span></td>
-          <td style="font-size:12px;color:var(--text-secondary);">${inst.wfi_record_table ? esc(inst.wfi_record_table)+' #'+esc(inst.wfi_record_id) : '—'}</td>
-          <td style="font-size:12px;">${esc(inst.started_by_name||'—')}</td>
-          <td style="font-size:11px;color:var(--text-tertiary);white-space:nowrap;">${esc((inst.wfi_started_at||'').substring(0,16))}</td>
-          <td><button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.openHistory(${inst.wfi_id})">Timeline</button></td>
-        </tr>`;
-      });
-      $('wfInstancesContent').innerHTML = html + '</tbody></table>';
+      _loadedInstancesList = d.instances || [];
+      _renderInstances();
     } catch (e) { $('wfInstancesContent').innerHTML = `<p style="color:var(--color-danger);font-size:13px;">${esc(e.message)}</p>`; }
+  }
+
+  function setViewLayout(layout) {
+    _viewLayout = layout;
+    if (layout === 'kanban') {
+      $('wfToggleList').classList.remove('active');
+      $('wfToggleKanban').classList.add('active');
+    } else {
+      $('wfToggleKanban').classList.remove('active');
+      $('wfToggleList').classList.add('active');
+    }
+    _renderInstances();
+  }
+
+  function _renderInstances() {
+    const rows = _loadedInstancesList;
+    $('wfInstancesMeta').textContent = rows.length + ' instance' + (rows.length !== 1 ? 's' : '');
+    if (!rows.length) {
+      $('wfInstancesContent').innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);padding:12px 0;">No instances found.</p>';
+      return;
+    }
+
+    if (_viewLayout === 'kanban') {
+      _renderKanbanView(rows);
+    } else {
+      _renderListView(rows);
+    }
+  }
+
+  function _renderListView(rows) {
+    const statusColors = { active:'#f59e0b', completed:'#22c55e', rejected:'#ef4444', cancelled:'#6b7280' };
+    let html = '<table class="nu-table" style="font-size:13px;"><thead><tr><th>#</th><th>Stage</th><th>Status</th><th>Record</th><th>Started By</th><th>Started</th><th>Actions</th></tr></thead><tbody>';
+    rows.forEach(inst => {
+      const col = statusColors[inst.wfi_status] || '#888';
+      const sc  = inst.stage_color || '#6366f1';
+      html += `<tr>
+        <td style="font-weight:600;">#${esc(inst.wfi_id)}</td>
+        <td><span style="background:${sc}18;color:${sc};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;">${esc(inst.stage_name)}</span></td>
+        <td><span style="background:${col}18;color:${col};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;text-transform:capitalize;">${esc(inst.wfi_status)}</span></td>
+        <td style="font-size:12px;color:var(--text-secondary);">${inst.wfi_record_table ? esc(inst.wfi_record_table)+' #'+esc(inst.wfi_record_id) : '—'}</td>
+        <td style="font-size:12px;">${esc(inst.started_by_name||'—')}</td>
+        <td style="font-size:11px;color:var(--text-tertiary);white-space:nowrap;">${esc((inst.wfi_started_at||'').substring(0,16))}</td>
+        <td><button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.openHistory(${inst.wfi_id})">Timeline</button></td>
+      </tr>`;
+    });
+    $('wfInstancesContent').innerHTML = html + '</tbody></table>';
+  }
+
+  function _renderKanbanView(rows) {
+    const statuses = [
+      { key: 'active', label: 'Active', color: '#f59e0b', bg: '#f59e0b10', icon: '⚡' },
+      { key: 'completed', label: 'Completed', color: '#22c55e', bg: '#22c55e10', icon: '✓' },
+      { key: 'rejected', label: 'Rejected', color: '#ef4444', bg: '#ef444410', icon: '✕' },
+      { key: 'cancelled', label: 'Cancelled', color: '#6b7280', bg: '#6b728010', icon: '○' }
+    ];
+
+    let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;overflow-x:auto;padding-bottom:12px;align-items:start;">`;
+
+    statuses.forEach(col => {
+      const colRows = rows.filter(r => r.wfi_status === col.key);
+      html += `
+      <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:12px;padding:12px;min-height:300px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--border-color);">
+          <div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:14px;color:${col.color};">
+            <span>${col.icon}</span> <span>${col.label}</span>
+          </div>
+          <span style="background:${col.color}22;color:${col.color};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;">${colRows.length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:500px;padding:2px;">
+      `;
+
+      if (colRows.length === 0) {
+        html += `<div style="text-align:center;padding:24px 0;color:var(--text-tertiary);font-size:12px;">No items</div>`;
+      } else {
+        colRows.forEach(inst => {
+          const sc = inst.stage_color || '#6366f1';
+          const rec = inst.wfi_record_table ? `${esc(inst.wfi_record_table)} #${esc(inst.wfi_record_id)}` : 'No bound record';
+          html += `
+          <div class="nu-card" style="padding:12px;border:1px solid var(--border-color);background:var(--bg-primary);border-left:4px solid ${sc};margin:0;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+              <span style="font-weight:700;font-size:13px;color:var(--text-primary);">#${inst.wfi_id}</span>
+              <span style="background:${sc}12;color:${sc};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;">${esc(inst.stage_name)}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${rec}">
+              📋 ${rec}
+            </div>
+            <div style="font-size:11px;color:var(--text-tertiary);display:flex;flex-direction:column;gap:2px;">
+              <span>By: <b>${esc(inst.started_by_name||'—')}</b></span>
+              <span>Started: ${esc((inst.wfi_started_at||'').substring(0,16))}</span>
+            </div>
+            <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.openHistory(${inst.wfi_id})" style="padding:4px 0;font-size:11px;width:100%;margin-top:4px;">
+              View Timeline
+            </button>
+          </div>
+          `;
+        });
+      }
+
+      html += `
+        </div>
+      </div>
+      `;
+    });
+
+    html += `</div>`;
+    $('wfInstancesContent').innerHTML = html;
   }
 
   async function openHistory(instanceId) {
@@ -687,6 +875,214 @@ window.WF = (() => {
     _renderStages(); _renderTransitions();
   }
 
+  function _renderMermaidDiagram(walkedStages = [], walkedTransitions = []) {
+    if (typeof mermaid === 'undefined') {
+      const container = $('wfMermaidDiagram');
+      if (container) container.innerHTML = '<div style="color:var(--text-tertiary);font-size:13px;">Mermaid.js loading...</div>';
+      return;
+    }
+
+    if (_stages.length === 0) {
+      $('wfMermaidDiagram').innerHTML = '<div style="color:var(--text-tertiary);font-size:13px;text-align:center;padding:24px 0;">No stages added yet. Add stages below to auto-generate the diagram.</div>';
+      return;
+    }
+
+    try {
+      // Setup unique IDs mapping to prevent any weird character issues
+      const idMap = {};
+      _stages.forEach((s, idx) => {
+        idMap[s.wfs_id] = `stage_${idx}`;
+      });
+
+      let diagramText = 'graph LR\n';
+
+      // Theme colors & classes setup
+      const isDark = document.body.classList.contains('dark-theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+      // Node definitions with Custom Colors
+      _stages.forEach((s, idx) => {
+        const id = idMap[s.wfs_id];
+        const name = s.wfs_name || `Stage ${idx + 1}`;
+        const isStart = s.wfs_is_start == 1;
+        const isEnd = s.wfs_is_end == 1;
+
+        let shapeLeft = '[', shapeRight = ']';
+        if (isStart) { shapeLeft = '(('; shapeRight = '))'; }
+        else if (isEnd) { shapeLeft = '{'; shapeRight = '}'; }
+
+        diagramText += `  ${id}${shapeLeft}"${name}"${shapeRight}\n`;
+      });
+
+      // Transitions (Links)
+      let linkIndex = 0;
+      const linkStyles = [];
+      _transitions.forEach((t) => {
+        const fromId = idMap[t.wft_from_id];
+        const toId = idMap[t.wft_to_id];
+        if (fromId && toId) {
+          const label = t.wft_label ? `|"${t.wft_label}"|` : '';
+          diagramText += `  ${fromId} -->${label} ${toId}\n`;
+
+          const isWalkedLink = walkedTransitions.some(wt => wt.wft_from_id == t.wft_from_id && wt.wft_to_id == t.wft_to_id);
+
+          // Action mapping to link style colors
+          let color = '#6366f1'; // advance (blue-ish)
+          if (t.wft_action === 'reject') color = '#ef4444'; // red
+          else if (t.wft_action === 'return') color = '#f59e0b'; // orange/yellow
+          else if (t.wft_action === 'escalate') color = '#06b6d4'; // cyan
+
+          if (walkedTransitions.length > 0) {
+            if (isWalkedLink) {
+              linkStyles.push(`linkStyle ${linkIndex} stroke:${color},stroke-width:4px;`);
+            } else {
+              linkStyles.push(`linkStyle ${linkIndex} stroke:${color},stroke-width:1.5px,opacity:0.35;`);
+            }
+          } else {
+            linkStyles.push(`linkStyle ${linkIndex} stroke:${color},stroke-width:2px;`);
+          }
+          linkIndex++;
+        }
+      });
+
+      // Style Node fills/borders based on stage colors
+      _stages.forEach((s, idx) => {
+        const id = idMap[s.wfs_id];
+        const color = s.wfs_color || '#6366f1';
+        const isWalked = walkedStages.includes(s.wfs_id);
+        const borderStyle = isWalked ? 'stroke-width:4px' : 'stroke-width:2px';
+        const fillStyle = isWalked ? `fill:${color}33` : `fill:${color}18`;
+        diagramText += `  style ${id} ${fillStyle},stroke:${color},${borderStyle}\n`;
+      });
+
+      // Append link styles
+      linkStyles.forEach(style => {
+        diagramText += `  ${style}\n`;
+      });
+
+      // Render Mermaid
+      const elementId = 'mermaid-temp-' + Date.now();
+      $('wfMermaidDiagram').innerHTML = `<div id="${elementId}">${diagramText}</div>`;
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: isDark ? 'dark' : 'default',
+        securityLevel: 'loose',
+        flowchart: { useMaxWidth: true, htmlLabels: true }
+      });
+
+      mermaid.run({
+        nodes: [document.getElementById(elementId)]
+      });
+
+    } catch (e) {
+      console.error('Mermaid render error:', e);
+      $('wfMermaidDiagram').innerHTML = '<div style="color:var(--color-danger);font-size:12px;">Visual Diagram generation error. Please check stage connections.</div>';
+    }
+  }
+
+  function toggleSimulation() {
+    const panel = $('wfSimulationPanel');
+    const btn = $('btnToggleSim');
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Simulator';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Show Simulator';
+      resetSimulation();
+    }
+  }
+
+  function resetSimulation() {
+    $('wfSimResults').innerHTML = 'Ready to simulate. Click "Run Simulation".';
+    _renderMermaidDiagram();
+  }
+
+  function runSimulation() {
+    let mockData = {};
+    try {
+      const txt = $('wfSimData').value.trim();
+      if (txt) mockData = JSON.parse(txt);
+    } catch(e) {
+      $('wfSimResults').innerHTML = '<span style="color:var(--color-danger)">Error: Invalid JSON mock data.</span>';
+      return;
+    }
+
+    const startStage = _stages.find(s => s.wfs_is_start == 1);
+    if (!startStage) {
+      $('wfSimResults').innerHTML = '<span style="color:var(--color-danger)">Error: No start stage defined in this workflow.</span>';
+      return;
+    }
+
+    let currentStage = startStage;
+    const walkedStages = [currentStage.wfs_id];
+    const walkedTransitions = [];
+    const log = [];
+    log.push(`▶ Start: <b>${esc(currentStage.wfs_name)}</b>`);
+
+    let steps = 0;
+    const maxSteps = 20;
+
+    while (steps < maxSteps) {
+      steps++;
+      if (currentStage.wfs_is_end == 1) {
+        log.push(`✓ Completed at End Stage: <b>${esc(currentStage.wfs_name)}</b>`);
+        break;
+      }
+
+      const outs = _transitions.filter(t => t.wft_from_id == currentStage.wfs_id);
+      if (outs.length === 0) {
+        log.push(`⚠ Stuck: No outgoing transitions from <b>${esc(currentStage.wfs_name)}</b>`);
+        break;
+      }
+
+      let matchedTrans = null;
+      for (const t of outs) {
+        const cond = t.wft_condition || '';
+        if (evaluateCondition(cond, mockData)) {
+          matchedTrans = t;
+          break;
+        }
+      }
+
+      if (!matchedTrans) {
+        log.push(`✕ Stopped: No transition conditions met from <b>${esc(currentStage.wfs_name)}</b>`);
+        break;
+      }
+
+      const nextStage = _stages.find(s => s.wfs_id == matchedTrans.wft_to_id);
+      if (!nextStage) {
+        log.push(`✕ Error: Target stage not found for transition.`);
+        break;
+      }
+
+      walkedTransitions.push(matchedTrans);
+      walkedStages.push(nextStage.wfs_id);
+      log.push(`→ ${matchedTrans.wft_label || 'Advance'} ➔ <b>${esc(nextStage.wfs_name)}</b>`);
+      currentStage = nextStage;
+    }
+
+    if (steps >= maxSteps) {
+      log.push(`⚠ Limit reached: Stopped after ${maxSteps} simulation steps to prevent infinite loop.`);
+    }
+
+    $('wfSimResults').innerHTML = log.join('<br>');
+    _renderMermaidDiagram(walkedStages, walkedTransitions);
+  }
+
+  function evaluateCondition(conditionStr, data) {
+    if (!conditionStr || conditionStr.trim() === '') return true;
+    try {
+      const keys = Object.keys(data);
+      const vals = Object.values(data);
+      const evaluator = new Function(...keys, `return (${conditionStr});`);
+      return !!evaluator(...vals);
+    } catch (e) {
+      console.warn('Condition evaluate error:', e);
+      return false;
+    }
+  }
+
   function autoCode() {
     if ($('wfEditId').value) return;
     const name = $('wfName').value;
@@ -706,7 +1102,8 @@ window.WF = (() => {
     addTransition, _patchTrans, _deleteTrans,
     openInstances, filterInstances,
     openHistory, doTransition, doReject, closeHistory,
-    _renderStages, _renderTransitions, _cleanup,
+    toggleSimulation, resetSimulation, runSimulation,
+    _renderStages, _renderTransitions, _renderMermaidDiagram, _cleanup,
   };
 })();
 } // end if (!window.WF)
