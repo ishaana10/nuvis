@@ -87,6 +87,7 @@ nuvis/
 │   ├── widgets/                  # Dashboard widget builder
 │   ├── workflow/                 # Workflow engine UI
 │   ├── ai/                       # AI integration module
+│   ├── updater/                  # System Updater (Git auto-update & config manager)
 │   └── email-settings.html       # Standalone email settings UI
 │
 └── assets/
@@ -206,6 +207,8 @@ cp config.local.php.example config.local.php
 - Report builder with SQL + column definitions + chart support
 - Query builder with parameter definitions
 - Menu builder for navigation management
+- Embedded PHP code editor (Ace) for advanced browse/query customization
+- Signature pad / picture canvas fields for drawn signatures and images
 
 ### Business Modules
 - Dashboard with KPI cards and activity feed
@@ -218,6 +221,7 @@ cp config.local.php.example config.local.php
 - Password management + configurable password policies
 - App Cloner — clone and template entire applications
 - Dashboard widgets (configurable, icon support)
+- System Updater — Git auto-update & config manager (restricted to globeadmin/admin)
 
 ### Extended Modules (In Progress)
 - **Workflow engine** — `core/Workflow.php` + `modules/workflow/` scaffolded
@@ -288,6 +292,10 @@ cp config.local.php.example config.local.php
 - [x] MenuRenderer core class
 - [x] Workflow engine core (`Workflow.php`)
 - [x] Plugin manager core (`PluginManager.php`)
+- [x] System Updater (Git auto-update & config manager)
+- [x] Layout flattening helpers + JSON response updates for forms
+- [x] Embedded PHP code editor (Ace)
+- [x] Signature pad / picture canvas field support
 - [ ] Workflow engine — UI builder + trigger configuration
 - [ ] Calendar / Scheduler — full UI + recurring events
 - [ ] Document management — full UI + versioning
