@@ -37,10 +37,17 @@ CREATE TABLE IF NOT EXISTS `nu_menus` (
   `menu_order`     SMALLINT         NOT NULL DEFAULT 0,
   -- Lower numbers appear first.  Items with equal order sort by menu_id ASC.
 
+  `menu_role_access` VARCHAR(512)   DEFAULT NULL,
+
   `menu_roles`     VARCHAR(500)     NOT NULL DEFAULT '',
   -- Comma-separated role codes, e.g. 'admin,manager'
   -- EMPTY = visible to ALL authenticated users.
   -- 'globeadmin' and 'admin' always bypass this check regardless.
+
+  `menu_open_mode`    VARCHAR(30)   NOT NULL DEFAULT 'inline|browse',
+  `menu_browse_mode`  VARCHAR(10)   NOT NULL DEFAULT 'inline',
+  `menu_preview_mode` VARCHAR(10)   NOT NULL DEFAULT 'inline',
+  `menu_default_view` VARCHAR(10)   NOT NULL DEFAULT 'browse',
 
   `menu_active`    TINYINT(1)       NOT NULL DEFAULT 1,
   -- 0 = hidden from sidebar (but record kept for reference)

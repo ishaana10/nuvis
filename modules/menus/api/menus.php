@@ -85,6 +85,8 @@ function mu_roles_to_array($stored): array {
 
 // ── AUTO-MIGRATE: ensure all columns exist ───────────────────────────────────
 $autoMigrations = [
+    "ALTER TABLE nu_menus ADD COLUMN menu_role_access  VARCHAR(512) DEFAULT NULL",
+    "ALTER TABLE nu_menus ADD COLUMN menu_roles        VARCHAR(500) NOT NULL DEFAULT ''",
     "ALTER TABLE nu_menus ADD COLUMN menu_open_mode    VARCHAR(30)  NOT NULL DEFAULT 'inline|browse'",
     "ALTER TABLE nu_menus ADD COLUMN menu_browse_mode  VARCHAR(10)  NOT NULL DEFAULT 'inline'",
     "ALTER TABLE nu_menus ADD COLUMN menu_preview_mode VARCHAR(10)  NOT NULL DEFAULT 'inline'",

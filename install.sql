@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS nu_files (
 CREATE TABLE IF NOT EXISTS nu_forms (
     form_id          INT AUTO_INCREMENT PRIMARY KEY,
     form_code        VARCHAR(50)  NOT NULL UNIQUE,
+    form_type        VARCHAR(20)  NOT NULL DEFAULT 'main',
     form_name        VARCHAR(100) NOT NULL,
     form_table       VARCHAR(50),
     form_description TEXT,
@@ -177,12 +178,17 @@ CREATE TABLE IF NOT EXISTS nu_menus (
     menu_parent_id INT DEFAULT 0,
     menu_code VARCHAR(50) NOT NULL,
     menu_label VARCHAR(100) NOT NULL,
-    menu_type ENUM('form','report','query','url','divider') DEFAULT 'form',
+    menu_type ENUM('form','report','query','url','group','divider') DEFAULT 'form',
     menu_target VARCHAR(100),
     menu_icon VARCHAR(50),
     menu_order INT DEFAULT 0,
     menu_active TINYINT(1) DEFAULT 1,
-    menu_role_access JSON,
+    menu_role_access VARCHAR(512) DEFAULT NULL,
+    menu_roles VARCHAR(500) NOT NULL DEFAULT '',
+    menu_open_mode VARCHAR(30) NOT NULL DEFAULT 'inline|browse',
+    menu_browse_mode VARCHAR(10) NOT NULL DEFAULT 'inline',
+    menu_preview_mode VARCHAR(10) NOT NULL DEFAULT 'inline',
+    menu_default_view VARCHAR(10) NOT NULL DEFAULT 'browse',
     menu_created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 

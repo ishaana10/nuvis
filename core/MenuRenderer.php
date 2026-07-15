@@ -79,74 +79,44 @@ class NuMenuRenderer
 
         $rows = array();
         try {
-            $db   = NuDatabase::getInstance();
-            $rows = $db->fetchAll(
-                "SELECT menu_id, menu_label, menu_type,
-                        COALESCE(menu_target, '') AS menu_target,
-                        menu_parent_id, menu_order,
-                        COALESCE(menu_role_access, '') AS menu_role_access,
-                        COALESCE(menu_roles, '')       AS menu_roles,
-                        menu_active, menu_icon,
-                        COALESCE(menu_browse_mode,  'inline') AS menu_browse_mode,
-                        COALESCE(menu_preview_mode, 'inline') AS menu_preview_mode,
-                        COALESCE(menu_default_view, 'browse') AS menu_default_view
-                 FROM   nu_menus
+            $db  = NuDatabase::getInstance();
+            $raw = $db->fetchAll(
+                "SELECT * FROM nu_menus
                  WHERE  menu_active = 1
                  ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
             );
-        } catch (Exception $e) {
-            // New open-mode columns not yet added — try legacy menu_open_mode
-            try {
-                $db  = NuDatabase::getInstance();
-                $raw = $db->fetchAll(
-                    "SELECT menu_id, menu_label, menu_type,
-                            COALESCE(menu_target, '') AS menu_target,
-                            menu_parent_id, menu_order,
-                            COALESCE(menu_role_access, '') AS menu_role_access,
-                            COALESCE(menu_roles, '')       AS menu_roles,
-                            menu_active, menu_icon,
-                            COALESCE(menu_open_mode, 'inline') AS menu_open_mode
-                     FROM   nu_menus
-                     WHERE  menu_active = 1
-                     ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
-                );
-                $rows = array();
-                foreach ($raw as $r) {
-                    $parts = explode('|', isset($r['menu_open_mode']) ? $r['menu_open_mode'] : 'inline|browse', 2);
-                    $bm    = in_array(isset($parts[0]) ? $parts[0] : '', array('inline', 'popup'))   ? $parts[0] : 'inline';
-                    $dv    = in_array(isset($parts[1]) ? $parts[1] : '', array('browse', 'preview')) ? $parts[1] : 'browse';
+            $rows = array();
+            foreach ($raw as $r) {
+                // Ensure all expected keys exist in the row array
+                if (!isset($r['menu_target'])) {
+                    $r['menu_target'] = '';
+                }
+
+                // Align roles columns safely
+                if (!isset($r['menu_role_access'])) {
+                    $r['menu_role_access'] = isset($r['menu_roles']) ? $r['menu_roles'] : '';
+                }
+                if (!isset($r['menu_roles'])) {
+                    $r['menu_roles'] = isset($r['menu_role_access']) ? $r['menu_role_access'] : '';
+                }
+
+                // Align open mode columns safely
+                if (!isset($r['menu_browse_mode'])) {
+                    $old = isset($r['menu_open_mode']) ? $r['menu_open_mode'] : 'inline|browse';
+                    $parts = explode('|', $old, 2);
+                    $bm = (isset($parts[0]) && in_array($parts[0], array('inline', 'popup'), true)) ? $parts[0] : 'inline';
+                    $dv = (isset($parts[1]) && in_array($parts[1], array('browse', 'preview'), true)) ? $parts[1] : 'browse';
+
                     $r['menu_browse_mode']  = $bm;
                     $r['menu_preview_mode'] = 'inline';
                     $r['menu_default_view'] = $dv;
-                    $rows[] = $r;
                 }
-            } catch (Exception $e2) {
-                // Last resort: bare minimum columns
-                try {
-                    $db  = NuDatabase::getInstance();
-                    $raw = $db->fetchAll(
-                        "SELECT menu_id, menu_label, menu_type,
-                                COALESCE(menu_target, '') AS menu_target,
-                                menu_parent_id, menu_order,
-                                COALESCE(menu_role_access, '') AS menu_role_access,
-                                COALESCE(menu_roles, '')       AS menu_roles,
-                                menu_active, menu_icon
-                         FROM   nu_menus
-                         WHERE  menu_active = 1
-                         ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
-                    );
-                    $rows = array();
-                    foreach ($raw as $r) {
-                        $r['menu_browse_mode']  = 'inline';
-                        $r['menu_preview_mode'] = 'inline';
-                        $r['menu_default_view'] = 'browse';
-                        $rows[] = $r;
-                    }
-                } catch (Exception $e3) {
-                    error_log('[MenuRenderer] ' . $e3->getMessage());
-                    return '';
-                }
+
+                $rows[] = $r;
             }
+        } catch (Exception $e) {
+            error_log('[MenuRenderer] ' . $e->getMessage());
+            return '';
         }
 
         if (empty($rows)) return '';

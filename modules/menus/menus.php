@@ -2,7 +2,17 @@
 declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
-$db    = NuDatabase::getInstance();
+$db = NuDatabase::getInstance();
+
+// Safe auto-migrations to prevent any missing column errors on load
+try { $db->query("ALTER TABLE nu_forms ADD COLUMN form_type VARCHAR(20) NOT NULL DEFAULT 'main' AFTER form_code"); } catch (Throwable $ignored) {}
+try { $db->query("ALTER TABLE nu_menus ADD COLUMN menu_role_access VARCHAR(512) DEFAULT NULL"); } catch (Throwable $ignored) {}
+try { $db->query("ALTER TABLE nu_menus ADD COLUMN menu_roles VARCHAR(500) NOT NULL DEFAULT ''"); } catch (Throwable $ignored) {}
+try { $db->query("ALTER TABLE nu_menus ADD COLUMN menu_open_mode VARCHAR(30) NOT NULL DEFAULT 'inline|browse'"); } catch (Throwable $ignored) {}
+try { $db->query("ALTER TABLE nu_menus ADD COLUMN menu_browse_mode VARCHAR(10) NOT NULL DEFAULT 'inline'"); } catch (Throwable $ignored) {}
+try { $db->query("ALTER TABLE nu_menus ADD COLUMN menu_preview_mode VARCHAR(10) NOT NULL DEFAULT 'inline'"); } catch (Throwable $ignored) {}
+try { $db->query("ALTER TABLE nu_menus ADD COLUMN menu_default_view VARCHAR(10) NOT NULL DEFAULT 'browse'"); } catch (Throwable $ignored) {}
+
 $menus = $db->fetchAll("SELECT * FROM nu_menus WHERE menu_active = 1 ORDER BY menu_parent_id ASC, menu_order ASC");
 
 $forms = $db->fetchAll("SELECT form_code, form_name, form_type FROM nu_forms WHERE form_active = 1 ORDER BY form_name");
