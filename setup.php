@@ -163,7 +163,9 @@ function checkRequirement($name, $check, $required = true) {
                 try {
                     require_once 'config.php';
                     $dsn = "mysql:host={$nuConfig['dbHost']};dbname={$nuConfig['dbName']};charset={$nuConfig['dbCharset']}";
-                    $pdo = new PDO($dsn, $nuConfig['dbUser'], $nuConfig['dbPassword']);
+                    $pdo = new PDO($dsn, $nuConfig['dbUser'], $nuConfig['dbPassword'], [
+                        PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true
+                    ]);
                     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
                     $sql = file_get_contents($sqlFile);
@@ -212,7 +214,14 @@ function checkRequirement($name, $check, $required = true) {
                     foreach ($statements as $stmt) {
                         if (!empty($stmt)) {
                             try {
-                                $pdo->exec($stmt);
+                                if (preg_match('/^\s*select\s/i', $stmt)) {
+                                    $stmt_obj = $pdo->query($stmt);
+                                    if ($stmt_obj) {
+                                        $stmt_obj->closeCursor();
+                                    }
+                                } else {
+                                    $pdo->exec($stmt);
+                                }
                             } catch (PDOException $e) {
                                 $msg = $e->getMessage();
                                 if (strpos($msg, 'already exists') === false && strpos($msg, 'Duplicate entry') === false) {
