@@ -207,9 +207,49 @@ function checkRequirement($name, $check, $required = true) {
                     }
                     file_put_contents($configLocalPath, $existingConfig);
 
-                    // Split and execute statements
-                    // Handle DELIMITER for stored procedures/triggers if any
-                    $statements = array_filter(array_map('trim', explode(';', $sql)));
+                    // Split and execute statements safely by parsing quotes and escapes
+                    // This ensures semicolons inside string literals/HTML/JSON do not cause syntax errors
+                    $statements = [];
+                    $length = strlen($sql);
+                    $current = '';
+                    $inSingleQuote = false;
+                    $inDoubleQuote = false;
+                    $escaped = false;
+
+                    for ($i = 0; $i < $length; $i++) {
+                        $char = $sql[$i];
+
+                        if ($escaped) {
+                            $current .= $char;
+                            $escaped = false;
+                            continue;
+                        }
+
+                        if ($char === '\\') {
+                            $current .= $char;
+                            $escaped = true;
+                            continue;
+                        }
+
+                        if ($char === "'" && !$inDoubleQuote) {
+                            $inSingleQuote = !$inSingleQuote;
+                        } elseif ($char === '"' && !$inSingleQuote) {
+                            $inDoubleQuote = !$inDoubleQuote;
+                        }
+
+                        if ($char === ';' && !$inSingleQuote && !$inDoubleQuote) {
+                            $statements[] = $current;
+                            $current = '';
+                        } else {
+                            $current .= $char;
+                        }
+                    }
+
+                    if (trim($current) !== '') {
+                        $statements[] = $current;
+                    }
+
+                    $statements = array_filter(array_map('trim', $statements));
 
                     foreach ($statements as $stmt) {
                         if (!empty($stmt)) {
