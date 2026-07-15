@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS `nu_files` (
 CREATE TABLE IF NOT EXISTS `nu_forms` (
     `form_id` INT AUTO_INCREMENT PRIMARY KEY,
     `form_code` VARCHAR(50) NOT NULL UNIQUE,
+    `form_type` VARCHAR(20) NOT NULL DEFAULT 'main',
     `form_name` VARCHAR(100) NOT NULL,
     `form_table` VARCHAR(50),
     `form_description` TEXT,
@@ -705,6 +706,7 @@ INSERT IGNORE INTO `nu_email_templates` (`name`, `slug`, `subject`, `body`, `des
 -- Seed App Cloner Form Definition
 INSERT IGNORE INTO `nu_forms` (
     `form_code`,
+    `form_type`,
     `form_name`,
     `form_table`,
     `form_description`,
@@ -715,6 +717,7 @@ INSERT IGNORE INTO `nu_forms` (
     `form_table_mode`
 ) VALUES (
     'appcloner',
+    'main',
     'App Cloner',
     NULL,
     'Clone or export the nuBuilder 5 application database and files.',

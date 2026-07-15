@@ -61,7 +61,7 @@ if (!$auth->hasPermission('roles.view')) {
 </div>
 
 <script>
-const Roles = (() => {
+var Roles = (() => {
   let _roles     = [];
   let _forms     = [];
   let _editCode  = null;
