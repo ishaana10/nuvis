@@ -18,9 +18,9 @@ class NuReportRenderer {
         );
         if (!$report) return ['error' => 'Report not found'];
 
-        $sql = $report['report_sql'];
-        $columns = json_decode($report['report_columns'], true) ?? [];
-        $filters = json_decode($report['report_filters'], true) ?? [];
+        $sql = $report['report_sql'] ?? '';
+        $columns = json_decode($report['report_columns'] ?? '[]', true) ?? [];
+        $filters = json_decode($report['report_filters'] ?? '[]', true) ?? [];
 
         // Validate SQL is read-only (SELECT only)
         $cleanSql = preg_replace('/\s+/', ' ', strtolower(trim($sql)));

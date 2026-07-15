@@ -32,7 +32,7 @@ class NuQueryExecutor {
         }
 
         $boundParams = [];
-        $queryParams = json_decode($query['query_parameters'], true) ?? [];
+        $queryParams = json_decode($query['query_parameters'] ?? '[]', true) ?? [];
         foreach ($queryParams as $key => $config) {
             if (isset($parameters[$key]) && $parameters[$key] !== '') {
                 $boundParams[':' . $key] = $this->sanitizeParam($parameters[$key], $config['type'] ?? 'text');
@@ -104,7 +104,7 @@ class NuQueryExecutor {
         );
         if (!$query) return '';
 
-        $params = json_decode($query['query_parameters'], true) ?? [];
+        $params = json_decode($query['query_parameters'] ?? '[]', true) ?? [];
         if (empty($params)) return '';
 
         $html  = '<form class="nu-query-params" onsubmit="runQuery(event, \'' . htmlspecialchars($queryCode, ENT_QUOTES) . '\')">';

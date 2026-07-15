@@ -42,7 +42,7 @@ $queries = $db->fetchAll("SELECT * FROM nu_queries WHERE query_active = 1 ORDER 
           <span class="nu-badge <?php echo $q['query_active'] ? 'nu-badge-success' : 'nu-badge-muted'; ?>" style="margin-left:8px;flex-shrink:0;"><?php echo $q['query_active'] ? 'Active' : 'Inactive'; ?></span>
         </div>
         <p style="color:var(--text-secondary);font-size:12px;font-family:monospace;background:var(--bg-secondary);border-radius:4px;padding:6px 8px;margin-bottom:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-          <?php echo htmlspecialchars(substr(trim($q['query_sql']), 0, 80)) . (strlen(trim($q['query_sql'])) > 80 ? '…' : ''); ?>
+          <?php echo htmlspecialchars(substr(trim((string)$q['query_sql']), 0, 80)) . (strlen(trim((string)$q['query_sql'])) > 80 ? '…' : ''); ?>
         </p>
         <div style="display:flex;gap:6px;">
           <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="QB.run(<?php echo $q['query_id']; ?>)">

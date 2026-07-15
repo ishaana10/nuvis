@@ -382,7 +382,7 @@ if (!class_exists('Auth')) {
 
 function base32_decode($input) {
     $map = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    $input = strtoupper(str_replace('=', '', $input));
+    $input = strtoupper(str_replace('=', '', (string)$input));
     $output = '';
     $buffer = 0;
     $bufferSize = 0;

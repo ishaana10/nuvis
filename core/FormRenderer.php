@@ -317,7 +317,7 @@ class NuFormRenderer {
                     $html .= '<option value="">-- Select --</option>';
                 }
                 $selectedValues = $isMulti
-                    ? (is_array($value) ? $value : (strlen($value) ? explode(',', $value) : []))
+                    ? (is_array($value) ? $value : (strlen((string)$value) ? explode(',', (string)$value) : []))
                     : [$value];
                 foreach ($options as $opt) {
                     $sel  = in_array($opt['value'], $selectedValues) ? 'selected' : '';
@@ -347,7 +347,7 @@ class NuFormRenderer {
                        . ' ' . $disabledAttr . '>';
                 if (!$s2Multiple) $html .= '<option value=""></option>';
                 $selectedValues = $s2Multiple
-                    ? (is_array($value) ? $value : (strlen($value) ? explode(',', $value) : []))
+                    ? (is_array($value) ? $value : (strlen((string)$value) ? explode(',', (string)$value) : []))
                     : [$value];
                 foreach ($options as $opt) {
                     $sel  = in_array($opt['value'], $selectedValues) ? 'selected' : '';
