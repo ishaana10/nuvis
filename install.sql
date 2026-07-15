@@ -634,7 +634,7 @@ VALUES
  2, 1, 30),
 -- My recent activity table
 (NULL, 'user', 'table', 'My Recent Activity', NULL,
- '{"source":"query","sql":"SELECT audit_action AS Action, audit_table AS Area, DATE_FORMAT(audit_timestamp,'%b %e %l:%i %p') AS Time FROM nu_audit_log WHERE audit_user_id={{user_id}} ORDER BY audit_timestamp DESC LIMIT 6","columns":["Action","Area","Time"]}',
+ '{"source":"query","sql":"SELECT audit_action AS Action, audit_table AS Area, DATE_FORMAT(audit_timestamp,\\\'%b %e %l:%i %p\\\') AS Time FROM nu_audit_log WHERE audit_user_id={{user_id}} ORDER BY audit_timestamp DESC LIMIT 6","columns":["Action","Area","Time"]}',
  4, 2, 40);
 
 INSERT IGNORE INTO `nu_dashboard_widgets`
