@@ -32,7 +32,7 @@ function handleMockAi($action, $prompt) {
         case 'chat':
             $responses = [
                 'I can help you with that. To build a customer form, you would need fields for name, contact info, and order details.',
-                'For that SQL query, you could use: SELECT * FROM orders WHERE status = 'active' ORDER BY created_at DESC.',
+                'For that SQL query, you could use: SELECT * FROM orders WHERE status = \'active\' ORDER BY created_at DESC.',
                 'I recommend creating a workflow with manager approval for documents over $1000.',
                 'You can set up a dashboard widget to track daily sales using the orders table.',
             ];
