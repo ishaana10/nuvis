@@ -146,12 +146,19 @@ try {
             $toId   = (int)($body['wft_to_id']    ?? 0);
             $tId    = (int)($body['wft_id']       ?? 0);
             if (!$wfId || !$fromId || !$toId) { echo json_encode(['success' => false, 'error' => 'wf_id, from_id, to_id required']); break; }
+
+            $hookVal = null;
+            if (isset($body['wft_hook'])) {
+                $hookVal = is_array($body['wft_hook']) ? json_encode($body['wft_hook']) : (string)$body['wft_hook'];
+            }
+
             $data = [
                 'wft_wf_id'   => $wfId,
                 'wft_from_id' => $fromId,
                 'wft_to_id'   => $toId,
                 'wft_action'  => trim((string)($body['wft_action'] ?? 'advance')),
                 'wft_label'   => trim((string)($body['wft_label']  ?? 'Advance')),
+                'wft_hook'    => $hookVal,
             ];
             if ($tId > 0) {
                 $db->update('nu_workflow_transitions', $data, 'wft_id = :id', [':id' => $tId]);

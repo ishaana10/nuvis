@@ -1701,6 +1701,30 @@ function nu_handle_subform_save() {
         $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
         $newId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
+
+        // Auto-start workflow if bound to this form code
+        try {
+            if (!class_exists('WorkflowEngine')) {
+                require_once __DIR__ . '/../core/Workflow.php';
+            }
+            $dbInst = NuDatabase::getInstance();
+            $wfBound = $dbInst->fetchOne('SELECT wf_id FROM nu_workflows WHERE LOWER(wf_form_code) = LOWER(:fcode) AND wf_active = 1 LIMIT 1', [':fcode' => $code]);
+            if ($wfBound) {
+                $userIdVal = (int)($_SESSION['nu_user_id'] ?? ($_SESSION['user_id'] ?? 0));
+                if ($userIdVal === 0 && class_exists('NuAuth')) {
+                    $authInst = NuAuth::getInstance();
+                    if ($authInst->checkAuth()) {
+                        $cUser = $authInst->getCurrentUser();
+                        $userIdVal = (int)($cUser['usr_id'] ?? 0);
+                    }
+                }
+                $wfEngine = new WorkflowEngine();
+                $wfEngine->start((int)$wfBound['wf_id'], $userIdVal, $table, (string)$newId);
+            }
+        } catch (\Throwable $wfe) {
+            error_log('[Auto Workflow Start Error] ' . $wfe->getMessage());
+        }
+
         nu_json(['success' => true, 'id' => $newId]);
     }
 }
