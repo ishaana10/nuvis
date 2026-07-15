@@ -176,8 +176,18 @@ function checkRequirement($name, $check, $required = true) {
                             '$1VARCHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY',
                             $sql
                         );
-                        // Also fix the seed INSERT so globeadmin gets a UUID automatically
-                        // (no change needed — DEFAULT (UUID()) fires on INSERT with no usr_id supplied)
+                        // Also replace all foreign key column types referencing usr_id
+                        $fk_cols = [
+                            'umeta_user_id', 'token_user_id', 'usage_user_id', 'file_uploaded_by',
+                            'form_created_by', 'report_created_by', 'query_created_by', 'doc_created_by',
+                            'sig_user_id', 'event_user_id', 'ph_user_id', 'wf_created_by',
+                            'wfi_started_by', 'wfh_actor_id', 'errlog_user_id', 'audit_user_id',
+                            'widget_user_id'
+                        ];
+                        foreach ($fk_cols as $col) {
+                            $pattern = '/(`' . $col . '`\s+)INT(?:\(\d+\))?(?:\s+UNSIGNED)?/i';
+                            $sql = preg_replace($pattern, '$1VARCHAR(36)', $sql);
+                        }
                     }
                     // else: leave SQL as-is for auto_increment
 
