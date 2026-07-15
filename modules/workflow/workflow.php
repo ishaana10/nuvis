@@ -250,6 +250,62 @@ $totalRun     = array_sum(array_column($workflows, 'total_instances'));
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     TRANSITION HOOK CONFIGURATION MODAL
+═══════════════════════════════════════════════════════════════════════════════ -->
+<div id="wfTransHookModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:910;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-primary,#fff);border-radius:12px;width:min(480px,94vw);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <h3 style="font-size:15px;font-weight:600;margin:0 0 16px;">Configure Transition Action Hook</h3>
+
+    <div class="nu-field">
+      <label>Action Hook Type</label>
+      <select class="nu-input" id="wfHookType" onchange="WF.changeHookType(this.value)" style="font-size:13px;padding:5px 10px;">
+        <option value="">None (No automatic actions)</option>
+        <option value="send_email">📧 Send Email Notification</option>
+        <option value="call_webhook">🔗 Call External Webhook</option>
+        <option value="update_record">🗄 Automatically Update Record</option>
+      </select>
+    </div>
+
+    <!-- Configuration fields for send_email -->
+    <div id="wfHookSendEmailSec" style="display:none;margin-top:12px;">
+      <div class="nu-field" style="margin-bottom:8px;">
+        <label>Email Template</label>
+        <select class="nu-input" id="wfHookEmailTemplate" style="font-size:13px;padding:5px 10px;"></select>
+      </div>
+      <div class="nu-field">
+        <label>Recipient Emails <span style="font-size:11px;color:var(--text-tertiary);font-weight:normal;">(comma-separated. Optional - defaults to assignee or workflow starter)</span></label>
+        <input type="text" class="nu-input" id="wfHookEmailTo" placeholder="admin@example.com, manager@example.com">
+      </div>
+    </div>
+
+    <!-- Configuration fields for call_webhook -->
+    <div id="wfHookCallWebhookSec" style="display:none;margin-top:12px;">
+      <div class="nu-field">
+        <label>Webhook URL</label>
+        <input type="url" class="nu-input" id="wfHookWebhookUrl" placeholder="https://api.yourdomain.com/webhook">
+      </div>
+    </div>
+
+    <!-- Configuration fields for update_record -->
+    <div id="wfHookUpdateRecordSec" style="display:none;margin-top:12px;">
+      <div class="nu-field" style="margin-bottom:8px;">
+        <label>Column Name</label>
+        <input type="text" class="nu-input" id="wfHookUpdateColumn" placeholder="status">
+      </div>
+      <div class="nu-field">
+        <label>New Value</label>
+        <input type="text" class="nu-input" id="wfHookUpdateValue" placeholder="approved">
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:12px;border-top:1px solid var(--border-color);">
+      <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.closeHookModal()">Cancel</button>
+      <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="WF.saveHookConfig()">Apply Settings</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /.nu-workflow-module -->
 
 <style>
@@ -345,7 +401,15 @@ window.WF = (() => {
       $('wfDrawerTitle').textContent = wf.wf_name;
       $('wfDrawerCode').textContent  = wf.wf_code;
       _stages      = d.stages      || [];
-      _transitions = d.transitions || [];
+
+      // Parse transitions hook property
+      _transitions = (d.transitions || []).map(t => {
+        if (t.wft_hook && typeof t.wft_hook === 'string') {
+          try { t.wft_hook = JSON.parse(t.wft_hook); } catch (e) {}
+        }
+        return t;
+      });
+
       _renderStages();
       _renderTransitions();
     } catch (e) { toast('Failed to load workflow', 'error'); }
@@ -372,8 +436,15 @@ window.WF = (() => {
       _currentWfId = d.wf_id;
       $('wfEditId').value = d.wf_id;
       toast('Workflow saved', 'success');
+
+      // Save stages
       const unsaved = document.querySelectorAll('.wf-stage-row[data-new="1"]');
       for (const row of unsaved) { await _saveStageRow(row, d.wf_id); }
+
+      // Save all transitions
+      const transRows = document.querySelectorAll('.wf-trans-row');
+      for (const row of transRows) { await _saveTransitionRow(row, d.wf_id); }
+
       // Close drawer then reload workflow module in-place (no full page reload)
       closeDrawer();
       setTimeout(_reloadModule, 300);
@@ -508,8 +579,10 @@ window.WF = (() => {
     const stageOptions = _stages.map(s => `<option value="${esc(s.wfs_id)}">${esc(s.wfs_name||'Unnamed')}</option>`).join('');
     list.innerHTML = _transitions.map((t, i) => {
       const isNew = String(t.wft_id).startsWith('new_');
+      const hasHook = t.wft_hook && t.wft_hook.type;
+      const hookBtnStyle = hasHook ? 'background:var(--accent-light,#eef2ff);color:var(--accent);border-color:var(--accent);font-weight:bold;' : 'color:var(--text-secondary);';
       return `<div class="wf-trans-row" data-idx="${i}" data-new="${isNew?1:0}" data-id="${esc(t.wft_id)}"
-           style="display:grid;grid-template-columns:1fr 80px 1fr 90px 32px;gap:8px;align-items:center;padding:8px;border-radius:6px;margin-bottom:6px;background:var(--bg-secondary);">
+           style="display:grid;grid-template-columns:1fr 80px 1fr 90px 40px 32px;gap:8px;align-items:center;padding:8px;border-radius:6px;margin-bottom:6px;background:var(--bg-secondary);">
         <select class="nu-input" onchange="WF._patchTrans(${i},'from',this.value)" style="font-size:12px;padding:5px 8px;">
           <option value="">From stage…</option>${stageOptions.replace(`value="${esc(t.wft_from_id)}"`,`value="${esc(t.wft_from_id)}" selected`)}
         </select>
@@ -523,6 +596,7 @@ window.WF = (() => {
           <option value="">To stage…</option>${stageOptions.replace(`value="${esc(t.wft_to_id)}"`,`value="${esc(t.wft_to_id)}" selected`)}
         </select>
         <input type="text" class="nu-input" value="${esc(t.wft_label)}" oninput="WF._patchTrans(${i},'label',this.value)" placeholder="Button label" style="font-size:12px;padding:5px 8px;">
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.openHookModal(${i})" style="padding:4px 7px;font-size:14px;${hookBtnStyle}" title="Configure Hook Action">⚙️</button>
         <button class="nu-btn nu-btn-danger nu-btn-sm" onclick="WF._deleteTrans(${i})" style="padding:4px 7px;">×</button>
       </div>`;
     }).join('');
@@ -546,6 +620,108 @@ window.WF = (() => {
     }
     _transitions.splice(idx, 1);
     _renderTransitions();
+  }
+
+  async function _saveTransitionRow(row, wfId) {
+    const idx   = parseInt(row.dataset.idx);
+    const trans = _transitions[idx];
+    if (!trans) return;
+    const payload = {
+      wft_wf_id:   wfId,
+      wft_id:      String(trans.wft_id).startsWith('new_') ? null : trans.wft_id,
+      wft_from_id: trans.wft_from_id,
+      wft_to_id:   trans.wft_to_id,
+      wft_action:  trans.wft_action || 'advance',
+      wft_label:   trans.wft_label || 'Advance',
+      wft_hook:    trans.wft_hook ? JSON.stringify(trans.wft_hook) : null,
+    };
+    try {
+      const r = await fetch('api/workflow.php?action=save_transition', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+      });
+      const d = await r.json();
+      if (d.success) {
+        trans.wft_id = d.wft_id;
+      }
+    } catch (e) { /* best effort */ }
+  }
+
+  let _emailTemplates = [];
+  async function _loadEmailTemplates() {
+    try {
+      const r = await fetch('api/email.php?action=templates');
+      const d = await r.json();
+      if (d.success) _emailTemplates = d.data || [];
+    } catch(e) {}
+  }
+
+  let _editingTransIdx = null;
+
+  function openHookModal(idx) {
+    _editingTransIdx = idx;
+    const trans = _transitions[idx];
+    if (!trans) return;
+
+    _loadEmailTemplates().then(() => {
+      const select = $('wfHookEmailTemplate');
+      if (select) {
+        select.innerHTML = _emailTemplates.map(tpl => `<option value="${esc(tpl.slug)}">${esc(tpl.name)} (${esc(tpl.slug)})</option>`).join('');
+      }
+
+      const hook = trans.wft_hook || {};
+      $('wfHookType').value = hook.type || '';
+      changeHookType(hook.type || '');
+
+      if (hook.type === 'send_email') {
+        $('wfHookEmailTemplate').value = hook.template_slug || '';
+        $('wfHookEmailTo').value       = hook.to || '';
+      } else if (hook.type === 'call_webhook') {
+        $('wfHookWebhookUrl').value    = hook.url || '';
+      } else if (hook.type === 'update_record') {
+        $('wfHookUpdateColumn').value  = hook.column || '';
+        $('wfHookUpdateValue').value   = hook.value || '';
+      }
+
+      $('wfTransHookModal').style.display = 'flex';
+    });
+  }
+
+  function changeHookType(type) {
+    $('wfHookSendEmailSec').style.display   = type === 'send_email' ? 'block' : 'none';
+    $('wfHookCallWebhookSec').style.display = type === 'call_webhook' ? 'block' : 'none';
+    $('wfHookUpdateRecordSec').style.display = type === 'update_record' ? 'block' : 'none';
+  }
+
+  function saveHookConfig() {
+    if (_editingTransIdx === null) return;
+    const trans = _transitions[_editingTransIdx];
+    if (!trans) return;
+
+    const type = $('wfHookType').value;
+    if (!type) {
+      trans.wft_hook = null;
+    } else {
+      const hook = { type };
+      if (type === 'send_email') {
+        hook.template_slug = $('wfHookEmailTemplate').value;
+        hook.to            = $('wfHookEmailTo').value.trim();
+      } else if (type === 'call_webhook') {
+        hook.url           = $('wfHookWebhookUrl').value.trim();
+      } else if (type === 'update_record') {
+        hook.column        = $('wfHookUpdateColumn').value.trim();
+        hook.value         = $('wfHookUpdateValue').value.trim();
+      }
+      trans.wft_hook = hook;
+    }
+
+    closeHookModal();
+    _renderTransitions();
+    toast('Action Hook configuration applied. Click Save to persist.', 'success');
+  }
+
+  function closeHookModal() {
+    $('wfTransHookModal').style.display = 'none';
+    _editingTransIdx = null;
   }
 
   async function openInstances(wfId, wfName) {
@@ -707,6 +883,7 @@ window.WF = (() => {
     openInstances, filterInstances,
     openHistory, doTransition, doReject, closeHistory,
     _renderStages, _renderTransitions, _cleanup,
+    openHookModal, changeHookType, saveHookConfig, closeHookModal,
   };
 })();
 } // end if (!window.WF)

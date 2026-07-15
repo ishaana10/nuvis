@@ -296,6 +296,22 @@ function handleSave($db, $formCode) {
             unset($safeInput['id']);
             $db->insert($form['form_table'], $safeInput);
             $recordId = $db->lastInsertId();
+
+            // Auto-start workflow if bound to this form code
+            try {
+                if (!class_exists('WorkflowEngine')) {
+                    require_once __DIR__ . '/../core/Workflow.php';
+                }
+                $dbInst = NuDatabase::getInstance();
+                $wfBound = $dbInst->fetchOne('SELECT wf_id FROM nu_workflows WHERE LOWER(wf_form_code) = LOWER(:fcode) AND wf_active = 1 LIMIT 1', [':fcode' => $formCode]);
+                if ($wfBound) {
+                    $userIdVal = (int)($currentUserId ?? $_SESSION['nu_user_id'] ?? $_SESSION['user_id'] ?? 0);
+                    $wfEngine = new WorkflowEngine();
+                    $wfEngine->start((int)$wfBound['wf_id'], $userIdVal, $form['form_table'], (string)$recordId);
+                }
+            } catch (\Throwable $wfe) {
+                error_log('[Auto Workflow Start Error] ' . $wfe->getMessage());
+            }
         } else {
             unset($safeInput['created_at']);
             unset($safeInput['created_by']); // ✅ Never overwrite original creator
