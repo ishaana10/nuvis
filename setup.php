@@ -163,7 +163,9 @@ function checkRequirement($name, $check, $required = true) {
                 try {
                     require_once 'config.php';
                     $dsn = "mysql:host={$nuConfig['dbHost']};dbname={$nuConfig['dbName']};charset={$nuConfig['dbCharset']}";
-                    $pdo = new PDO($dsn, $nuConfig['dbUser'], $nuConfig['dbPassword']);
+                    $pdo = new PDO($dsn, $nuConfig['dbUser'], $nuConfig['dbPassword'], [
+                        PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true
+                    ]);
                     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
                     $sql = file_get_contents($sqlFile);
@@ -176,8 +178,18 @@ function checkRequirement($name, $check, $required = true) {
                             '$1VARCHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY',
                             $sql
                         );
-                        // Also fix the seed INSERT so globeadmin gets a UUID automatically
-                        // (no change needed — DEFAULT (UUID()) fires on INSERT with no usr_id supplied)
+                        // Also replace all foreign key column types referencing usr_id
+                        $fk_cols = [
+                            'umeta_user_id', 'token_user_id', 'usage_user_id', 'file_uploaded_by',
+                            'form_created_by', 'report_created_by', 'query_created_by', 'doc_created_by',
+                            'sig_user_id', 'event_user_id', 'ph_user_id', 'wf_created_by',
+                            'wfi_started_by', 'wfh_actor_id', 'errlog_user_id', 'audit_user_id',
+                            'widget_user_id'
+                        ];
+                        foreach ($fk_cols as $col) {
+                            $pattern = '/(`' . $col . '`\s+)INT(?:\(\d+\))?(?:\s+UNSIGNED)?/i';
+                            $sql = preg_replace($pattern, '$1VARCHAR(36)', $sql);
+                        }
                     }
                     // else: leave SQL as-is for auto_increment
 
@@ -195,14 +207,93 @@ function checkRequirement($name, $check, $required = true) {
                     }
                     file_put_contents($configLocalPath, $existingConfig);
 
-                    // Split and execute statements
-                    // Handle DELIMITER for stored procedures/triggers if any
-                    $statements = array_filter(array_map('trim', explode(';', $sql)));
+                    // Split and execute statements using a robust SQL parser
+                    // that respects quotes and comments and doesn't break on inline semicolons.
+                    $statements = [];
+                    $query = '';
+                    $in_string = false;
+                    $string_char = '';
+                    $escaped = false;
+                    $len = strlen($sql);
+
+                    for ($i = 0; $i < $len; $i++) {
+                        $char = $sql[$i];
+
+                        if ($escaped) {
+                            $query .= $char;
+                            $escaped = false;
+                            continue;
+                        }
+
+                        if ($char === '\\' && $in_string) {
+                            $query .= $char;
+                            $escaped = true;
+                            continue;
+                        }
+
+                        if ($in_string) {
+                            $query .= $char;
+                            if ($char === $string_char) {
+                                // Check if doubled quote
+                                if ($i + 1 < $len && $sql[$i + 1] === $string_char) {
+                                    $query .= $sql[$i + 1];
+                                    $i++;
+                                } else {
+                                    $in_string = false;
+                                    $string_char = '';
+                                }
+                            }
+                        } else {
+                            // Comments
+                            if ($char === '-' && $i + 1 < $len && $sql[$i + 1] === '-') {
+                                while ($i < $len && $sql[$i] !== "\n" && $sql[$i] !== "\r") {
+                                    $i++;
+                                }
+                                continue;
+                            }
+                            if ($char === '/' && $i + 1 < $len && $sql[$i + 1] === '*') {
+                                $i += 2;
+                                while ($i < $len && !($sql[$i] === '*' && $i + 1 < $len && $sql[$i + 1] === '/')) {
+                                    $i++;
+                                }
+                                $i++;
+                                continue;
+                            }
+                            if ($char === '#') {
+                                while ($i < $len && $sql[$i] !== "\n" && $sql[$i] !== "\r") {
+                                    $i++;
+                                }
+                                continue;
+                            }
+
+                            if ($char === "'" || $char === '"' || $char === '`') {
+                                $in_string = true;
+                                $string_char = $char;
+                                $query .= $char;
+                            } elseif ($char === ';') {
+                                $statements[] = $query;
+                                $query = '';
+                            } else {
+                                $query .= $char;
+                            }
+                        }
+                    }
+                    if (trim($query) !== '') {
+                        $statements[] = $query;
+                    }
+                    $statements = array_filter(array_map('trim', $statements));
 
                     foreach ($statements as $stmt) {
                         if (!empty($stmt)) {
                             try {
-                                $pdo->exec($stmt);
+                                if (preg_match('/^\s*select\s/i', $stmt)) {
+                                    $stmt_obj = $pdo->query($stmt);
+                                    if ($stmt_obj) {
+                                        $stmt_obj->closeCursor();
+                                    }
+                                } else {
+                                    $pdo->exec($stmt);
+                                }
                             } catch (PDOException $e) {
                                 $msg = $e->getMessage();
                                 if (strpos($msg, 'already exists') === false && strpos($msg, 'Duplicate entry') === false) {
