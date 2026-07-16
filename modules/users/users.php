@@ -61,7 +61,7 @@ if (file_exists($metaConfigFile)) {
                 <td style="display:flex;gap:6px;">
                     <?php if ($auth->hasPermission('users.edit')): ?>
                     <button class="nu-btn nu-btn-ghost nu-btn-sm"
-                        onclick="Users.openEdit(<?php echo $u['usr_id']; ?>)"
+                        onclick="Users.openEdit('<?php echo $u['usr_id']; ?>')"
                         data-user='<?php echo htmlspecialchars(json_encode($u), ENT_QUOTES); ?>'
                         data-meta='<?php echo htmlspecialchars(json_encode($meta), ENT_QUOTES); ?>'>
                         ✎ Edit
@@ -69,7 +69,7 @@ if (file_exists($metaConfigFile)) {
                     <?php endif; ?>
                     <?php if ($auth->hasPermission('users.delete') && $u['usr_username'] !== 'globeadmin'): ?>
                     <button class="nu-btn nu-btn-danger nu-btn-sm"
-                        onclick="Users.deleteUser(<?php echo $u['usr_id']; ?>, '<?php echo htmlspecialchars($u['usr_username']); ?>')">✕</button>
+                        onclick="Users.deleteUser('<?php echo $u['usr_id']; ?>', '<?php echo htmlspecialchars($u['usr_username']); ?>')">✕</button>
                     <?php endif; ?>
                 </td>
             </tr>
@@ -170,7 +170,7 @@ var Users = (() => {
   }
 
   function openEdit(id) {
-    const btn = document.querySelector(`[onclick="Users.openEdit(${id})"]`);
+    const btn = document.querySelector(`[onclick="Users.openEdit('${id}')"]`);
     const user = JSON.parse(btn.dataset.user);
     const meta = JSON.parse(btn.dataset.meta || '{}');
     $('userModalTitle').textContent = 'Edit User';
@@ -211,7 +211,7 @@ var Users = (() => {
 
     const payload = { username, email, role, active, meta };
     if (password) payload.password = password;
-    if (id) payload.id = parseInt(id);
+    if (id) payload.id = isNaN(id) ? id : parseInt(id); // Allow UUID strings
 
     try {
       await api('api/users.php?action=' + (id ? 'update' : 'create'), {

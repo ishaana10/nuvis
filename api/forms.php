@@ -126,6 +126,8 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
         foreach ($desired as $col => $def) {
             $colsSql .= ",\n  `{$col}` {$def}";
         }
+        $colsSql .= ",\n  `user_id` VARCHAR(36) NULL DEFAULT NULL";
+        $colsSql .= ",\n  `location` VARCHAR(255) NULL DEFAULT NULL";
         $colsSql .= ",\n  `created_at` DATETIME NULL DEFAULT NULL";
         $colsSql .= ",\n  `updated_at` DATETIME NULL DEFAULT NULL";
 
@@ -140,7 +142,13 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
         $existing[$row['Field']] = true;
     }
 
-        foreach ($desired as $col => $def) {
+    // Ensure system columns are present in $desired so they are added if missing
+    $desired['user_id'] = 'VARCHAR(36) NULL DEFAULT NULL';
+    $desired['location'] = 'VARCHAR(255) NULL DEFAULT NULL';
+    $desired['created_at'] = 'DATETIME NULL DEFAULT NULL';
+    $desired['updated_at'] = 'DATETIME NULL DEFAULT NULL';
+
+    foreach ($desired as $col => $def) {
         if (isset($existing[$col])) continue;
         try {
             // MySQL uses AFTER, not BEFORE. Find the column just before created_at.

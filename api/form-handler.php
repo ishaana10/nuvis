@@ -286,12 +286,13 @@ function handleSave($db, $formCode) {
         }
 
         if ($isNew) {
-            $safeInput['created_at'] = $now;
-            $safeInput['updated_at'] = $now;
-            // ✅ Set created_by and updated_by on insert
+            if (isset($tableColumns['created_at'])) $safeInput['created_at'] = $now;
+            if (isset($tableColumns['updated_at'])) $safeInput['updated_at'] = $now;
+            // ✅ Set created_by, updated_by, and user_id on insert
             if ($currentUserId !== null) {
                 if (isset($tableColumns['created_by'])) $safeInput['created_by'] = $currentUserId;
                 if (isset($tableColumns['updated_by'])) $safeInput['updated_by'] = $currentUserId;
+                if (isset($tableColumns['user_id'])) $safeInput['user_id'] = $currentUserId;
             }
             unset($safeInput['id']);
             $db->insert($form['form_table'], $safeInput);
@@ -316,7 +317,7 @@ function handleSave($db, $formCode) {
             unset($safeInput['created_at']);
             unset($safeInput['created_by']); // ✅ Never overwrite original creator
             unset($safeInput['id']);
-            $safeInput['updated_at'] = $now;
+            if (isset($tableColumns['updated_at'])) $safeInput['updated_at'] = $now;
             // ✅ Set updated_by on update
             if ($currentUserId !== null && isset($tableColumns['updated_by'])) {
                 $safeInput['updated_by'] = $currentUserId;
