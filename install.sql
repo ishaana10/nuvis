@@ -765,7 +765,8 @@ INSERT INTO nu_reports (report_code, report_name, report_type, report_sql, repor
 ON DUPLICATE KEY UPDATE report_name=VALUES(report_name), report_sql=VALUES(report_sql), report_columns=VALUES(report_columns);
 
 INSERT INTO nu_menus (menu_parent_id, menu_label, menu_type, menu_target, menu_icon, menu_order) VALUES
-(0, 'report_dashboards', 'form', 'report_dashboards', 'pie-chart', 5)
+(0, 'report_dashboards', 'form', 'report_dashboards', 'pie-chart', 5),
+ (0, 'email_settings', 'form', 'email_settings', 'email_settings', 14)   
 ON DUPLICATE KEY UPDATE menu_label=VALUES(menu_label);
 
 
