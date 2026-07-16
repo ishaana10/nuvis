@@ -56,32 +56,7 @@ function nu_col_def_for_type(string $type): string {
 }
 
 function nu_flatten_fields(array $layout): array {
-  /*  $out = [];
-    foreach ($layout as $node) {
-        $t = $node['type'] ?? 'field';
 
-        if ($t === 'tab') {
-            // tab → tabs[] → rows[] → fields[]
-            foreach ($node['tabs'] ?? [] as $tab) {
-                foreach ($tab['rows'] ?? [] as $row) {
-                    foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
-                }
-            }
-        } elseif ($t === 'group') {
-            // group → rows[] → fields[]
-            foreach ($node['rows'] ?? [] as $row) {
-                foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
-            }
-        } elseif ($t === 'section' || $t === 'row') {
-            // legacy flat children[]
-            foreach (nu_flatten_fields($node['children'] ?? []) as $f) $out[] = $f;
-        } elseif ($t === 'subform') {
-            // never a DB column — skip
-            continue;
-        } else {
-            $out[] = $node;
-        }
-    }*/
    return nu_flatten_layout_fields($layout);
 }
 
@@ -309,67 +284,6 @@ function actionList($db) {
     }
 }
 
-
-/*
-function nu_flatten_layout_fields($layout) {
-    if (is_string($layout)) {
-        $decoded = json_decode($layout, true);
-        $layout = is_array($decoded) ? $decoded : [];
-    }
-
-    $out = [];
-
-    $walk = function($items) use (&$walk, &$out) {
-        if (!is_array($items)) {
-            return;
-        }
-
-        foreach ($items as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-
-            if (isset($item['fields']) && is_array($item['fields'])) {
-                $walk($item['fields']);
-                continue;
-            }
-
-            $type = strtolower(trim((string)($item['type'] ?? '')));
-
-            if ($type === 'tab') {
-                foreach (($item['tabs'] ?? []) as $tab) {
-                    if (!is_array($tab)) {
-                        continue;
-                    }
-                    $walk($tab['rows'] ?? []);
-                }
-                continue;
-            }
-
-            if ($type === 'group') {
-                $walk($item['rows'] ?? []);
-                continue;
-            }
-
-            if ($type === 'subform') {
-                continue;
-            }
-
-            if (!empty($item['name'])) {
-                $out[] = $item;
-            }
-        }
-    };
-
-    $walk($layout);
-    return $out;
-}
-
-function nu_flatten_layout($layout) {
-    return nu_flatten_layout_fields($layout);
-}
-
-*/
 
 
 // ── SAVE (insert or update) ───────────────────────────────────────────────
