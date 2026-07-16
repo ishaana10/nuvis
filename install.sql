@@ -703,6 +703,27 @@ INSERT IGNORE INTO `nu_email_templates` (`name`, `slug`, `subject`, `body`, `des
   'Workflow step notification. Variables: {{recipient_name}}, {{workflow_name}}, {{step_name}}, {{message}}, {{action_url}}'
 );
 
+-- Seed System Users Form Definition (for GlobeAdmin Customization)
+INSERT IGNORE INTO `nu_forms` (
+    `form_code`,
+    `form_type`,
+    `form_name`,
+    `form_table`,
+    `form_description`,
+    `form_active`,
+    `form_pk_type`,
+    `form_table_mode`
+) VALUES (
+    'sys_users',
+    'main',
+    'System Users',
+    'nu_users',
+    'Admin tool to add custom fields to the users table.',
+    1,
+    'autoincrement',
+    'existing'
+);
+
 -- Seed App Cloner Form Definition
 INSERT IGNORE INTO `nu_forms` (
     `form_code`,

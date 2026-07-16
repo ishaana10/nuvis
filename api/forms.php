@@ -126,6 +126,8 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
         foreach ($desired as $col => $def) {
             $colsSql .= ",\n  `{$col}` {$def}";
         }
+        $colsSql .= ",\n  `user_id` VARCHAR(36) NULL DEFAULT NULL";
+        $colsSql .= ",\n  `location` VARCHAR(255) NULL DEFAULT NULL";
         $colsSql .= ",\n  `created_at` DATETIME NULL DEFAULT NULL";
         $colsSql .= ",\n  `updated_at` DATETIME NULL DEFAULT NULL";
 
@@ -140,7 +142,13 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
         $existing[$row['Field']] = true;
     }
 
-        foreach ($desired as $col => $def) {
+    // Ensure system columns are present in $desired so they are added if missing
+    $desired['user_id'] = 'VARCHAR(36) NULL DEFAULT NULL';
+    $desired['location'] = 'VARCHAR(255) NULL DEFAULT NULL';
+    $desired['created_at'] = 'DATETIME NULL DEFAULT NULL';
+    $desired['updated_at'] = 'DATETIME NULL DEFAULT NULL';
+
+    foreach ($desired as $col => $def) {
         if (isset($existing[$col])) continue;
         try {
             // MySQL uses AFTER, not BEFORE. Find the column just before created_at.
@@ -185,6 +193,7 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
         'form_js_after_save'  => "MEDIUMTEXT NULL DEFAULT NULL",
         'form_custom_php'     => "MEDIUMTEXT NULL DEFAULT NULL",
         'form_custom_css'     => "MEDIUMTEXT NULL DEFAULT NULL",
+        'browse_conditions'   => "JSON NULL DEFAULT NULL",
     ];
 
     foreach ($needed as $col => $def) {
@@ -376,6 +385,7 @@ function actionSave($db) {
             'browse_page_size'          => isset($data['browse_page_size']) ? (int)$data['browse_page_size'] : 20,
             'browse_default_sort'       => (string)($data['browse_default_sort'] ?? ''),
             'browse_display_mode'       => (string)($data['browse_display_mode'] ?? 'inline'),
+            'browse_conditions'         => isset($data['browse_conditions']) && is_array($data['browse_conditions']) ? json_encode($data['browse_conditions'], JSON_UNESCAPED_UNICODE) : null,
             'form_custom_js'            => (string)($data['form_custom_js'] ?? ''),
             'form_js_before_save'       => (string)($data['form_js_before_save'] ?? ''),
             'form_js_after_save'        => (string)($data['form_js_after_save'] ?? ''),

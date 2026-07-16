@@ -286,12 +286,13 @@ function handleSave($db, $formCode) {
         }
 
         if ($isNew) {
-            $safeInput['created_at'] = $now;
-            $safeInput['updated_at'] = $now;
-            // ✅ Set created_by and updated_by on insert
+            if (isset($tableColumns['created_at'])) $safeInput['created_at'] = $now;
+            if (isset($tableColumns['updated_at'])) $safeInput['updated_at'] = $now;
+            // ✅ Set created_by, updated_by, and user_id on insert
             if ($currentUserId !== null) {
                 if (isset($tableColumns['created_by'])) $safeInput['created_by'] = $currentUserId;
                 if (isset($tableColumns['updated_by'])) $safeInput['updated_by'] = $currentUserId;
+                if (isset($tableColumns['user_id'])) $safeInput['user_id'] = $currentUserId;
             }
             unset($safeInput['id']);
             $db->insert($form['form_table'], $safeInput);
@@ -316,7 +317,7 @@ function handleSave($db, $formCode) {
             unset($safeInput['created_at']);
             unset($safeInput['created_by']); // ✅ Never overwrite original creator
             unset($safeInput['id']);
-            $safeInput['updated_at'] = $now;
+            if (isset($tableColumns['updated_at'])) $safeInput['updated_at'] = $now;
             // ✅ Set updated_by on update
             if ($currentUserId !== null && isset($tableColumns['updated_by'])) {
                 $safeInput['updated_by'] = $currentUserId;
@@ -359,10 +360,38 @@ function handleBrowse($db, $formCode) {
     $records = [];
     $pages = 0;
     
+    $auth = NuAuth::getInstance();
+    $currentRole = $auth->getCurrentRole();
+    $browseConds = json_decode($form['browse_conditions'] ?? '[]', true) ?: [];
+
+    $nuWhere = '';
+    $nuColumns = '*';
+
+    if (!empty($browseConds) && is_array($browseConds)) {
+        foreach ($browseConds as $cond) {
+            if (isset($cond['role']) && ($cond['role'] === '*' || $cond['role'] === $currentRole)) {
+                if (!empty($cond['where'])) {
+                    $nuWhere = $auth->resolveHashes($cond['where']);
+                }
+                if (!empty($cond['columns'])) {
+                    $cols = [];
+                    foreach(explode(',', trim($cond['columns'])) as $c) {
+                        $c = preg_replace('/[^a-zA-Z0-9_]/', '', trim($c));
+                        if ($c !== '') $cols[] = "`{$c}`";
+                    }
+                    if (!empty($cols)) $nuColumns = implode(', ', $cols);
+                }
+                break;
+            }
+        }
+    }
+
+    $whereSql = $nuWhere !== '' ? "WHERE ({$nuWhere})" : "";
+
     try {
-        $totalRow = $db->fetchOne("SELECT COUNT(*) as c FROM {$form['form_table']}");
+        $totalRow = $db->fetchOne("SELECT COUNT(*) as c FROM `{$form['form_table']}` {$whereSql}");
         $total = $totalRow['c'] ?? 0;
-        $records = $db->fetchAll("SELECT * FROM {$form['form_table']} ORDER BY id DESC LIMIT {$limit} OFFSET {$offset}");
+        $records = $db->fetchAll("SELECT {$nuColumns} FROM `{$form['form_table']}` {$whereSql} ORDER BY id DESC LIMIT {$limit} OFFSET {$offset}");
         $pages = ceil($total / $limit);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => 'Table error: ' . $e->getMessage()]);

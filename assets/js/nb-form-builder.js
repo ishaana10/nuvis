@@ -990,6 +990,7 @@ fields.forEach(function (f) {
         .forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
       var ps = document.getElementById('formBrowsePageSize'); if (ps) ps.value = '20';
       var srch = document.getElementById('formBrowseSearchEnabled'); if (srch) srch.checked = false;
+      var cList = document.getElementById('browseConditionsList'); if (cList) cList.innerHTML = '';
       var canvas = document.getElementById('formCanvas');
       if (canvas) canvas.querySelectorAll('.nb-row,.nb-container').forEach(function (r) { r.remove(); });
       this._updateEmptyState();
@@ -1205,6 +1206,60 @@ if (canvasType === 'subform' && sfData) {
       var badge = card.querySelector('.nb-cfield-span-badge'); if (badge) badge.textContent = c + '/12';
     },
 
+    _collectBrowseConditions: function() {
+      var list = document.getElementById('browseConditionsList');
+      if (!list) return [];
+      var conditions = [];
+      list.querySelectorAll('.nb-browse-cond-row').forEach(function(row) {
+        var role = row.querySelector('.nb-cond-role').value;
+        var where = row.querySelector('.nb-cond-where').value.trim();
+        var cols = row.querySelector('.nb-cond-cols').value.trim();
+        if (role || where || cols) {
+          conditions.push({ role: role, where: where, columns: cols });
+        }
+      });
+      return conditions;
+    },
+
+    addBrowseCondition: function(data) {
+      var d = data || { role: '', where: '', columns: '' };
+      var list = document.getElementById('browseConditionsList');
+      if (!list) return;
+
+      var row = document.createElement('div');
+      row.className = 'nb-browse-cond-row';
+      row.style.cssText = 'display:flex;gap:8px;align-items:flex-end;background:var(--bg-offset);padding:10px;border-radius:6px;border:1px solid var(--border-color);';
+
+      var rolesOpts = '<option value="*">All Roles (*)</option>';
+      if (window.nuRolesList) {
+        window.nuRolesList.forEach(function(r) {
+          var sel = (d.role === r.role_code) ? ' selected' : '';
+          rolesOpts += '<option value="' + r.role_code + '"' + sel + '>' + r.role_name + '</option>';
+        });
+      } else {
+        if (d.role && d.role !== '*') {
+          rolesOpts += '<option value="' + d.role + '" selected>' + d.role + '</option>';
+        }
+      }
+
+      row.innerHTML = `
+        <div style="flex: 1;">
+          <label style="font-size:11px;display:block;margin-bottom:4px;color:var(--text-secondary);">Role</label>
+          <select class="nu-input nb-cond-role">${rolesOpts}</select>
+        </div>
+        <div style="flex: 2;">
+          <label style="font-size:11px;display:block;margin-bottom:4px;color:var(--text-secondary);">WHERE Clause (e.g., station = '##location##')</label>
+          <input type="text" class="nu-input nb-cond-where" value="${(d.where || '').replace(/"/g, '&quot;')}">
+        </div>
+        <div style="flex: 1;">
+          <label style="font-size:11px;display:block;margin-bottom:4px;color:var(--text-secondary);">Columns (comma-sep)</label>
+          <input type="text" class="nu-input nb-cond-cols" value="${(d.columns || '').replace(/"/g, '&quot;')}">
+        </div>
+        <button type="button" class="nu-btn nu-btn-danger nu-btn-sm" style="padding:4px 8px;margin-bottom:2px;" onclick="this.closest('.nb-browse-cond-row').remove()">✕</button>
+      `;
+      list.appendChild(row);
+    },
+
     getLayout: function () {
       var canvas = document.getElementById('formCanvas'); if (!canvas) return [];
       var layout = [];
@@ -1252,7 +1307,8 @@ if (canvasType === 'subform' && sfData) {
         browse_display_mode: _v('browseDisplayMode'), browse_sql: _v('formBrowseSql'), browse_columns: _v('formBrowseColumns'),
         browse_page_size: _v('formBrowsePageSize'), browse_default_sort: _v('formBrowseDefaultSort'),
         browse_search_enabled: _c('formBrowseSearchEnabled') ? 1 : 0, browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
-        browse_search_fields: _v('formBrowseSearchFields'), form_custom_js: _v('formCustomJs'),
+        browse_search_fields: _v('formBrowseSearchFields'), browse_conditions: this._collectBrowseConditions(),
+        form_custom_js: _v('formCustomJs'),
         form_js_before_save: _v('formJsBeforeSave'), form_js_after_save: _v('formJsAfterSave'),
         form_custom_php: _v('formCustomPhp'), form_custom_css: _v('formCustomCss')
       };
@@ -1286,6 +1342,11 @@ if (canvasType === 'subform' && sfData) {
       me.selectTableMode(formData.form_table_mode || 'existing', _sel('formTableMode', formData.form_table_mode || 'existing'));
       me.selectPkType(formData.form_pk_type || 'autoincrement', _sel('formPkType', formData.form_pk_type || 'autoincrement'));
       var titleEl = document.getElementById('builderTitle'); if (titleEl) titleEl.textContent = 'Edit: ' + (formData.form_name || formData.name || '');
+
+      if (formData.browse_conditions && Array.isArray(formData.browse_conditions)) {
+        formData.browse_conditions.forEach(function(cond) { me.addBrowseCondition(cond); });
+      }
+
       var layout = [];
       try { layout = JSON.parse(formData.form_layout || '[]'); } catch (e) { layout = []; }
       if (!Array.isArray(layout)) layout = [];
