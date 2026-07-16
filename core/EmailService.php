@@ -23,7 +23,24 @@ class EmailService {
             'reply_to'      => '',
         ];
 
-        // Pull from global config.php constants if defined
+        // First attempt to load dynamic SMTP settings from the database
+        try {
+            $db = NuDatabase::getInstance();
+            $rows = $db->fetchAll("SELECT setting_key, setting_value FROM nu_email_settings");
+            foreach ($rows as $row) {
+                $k = $row['setting_key'];
+                $v = $row['setting_value'];
+                if ($k === 'smtp_auth') {
+                    $defaults[$k] = ($v == '1');
+                } else if ($v !== '') {
+                    $defaults[$k] = $v;
+                }
+            }
+        } catch (\Throwable $t) {
+            // DB table might not be seeded or created yet
+        }
+
+        // Pull from global config.php constants if defined (take priority over DB)
         if (defined('EMAIL_DRIVER'))        $defaults['driver']        = EMAIL_DRIVER;
         if (defined('EMAIL_SMTP_HOST'))     $defaults['smtp_host']     = EMAIL_SMTP_HOST;
         if (defined('EMAIL_SMTP_PORT'))     $defaults['smtp_port']     = EMAIL_SMTP_PORT;
@@ -70,7 +87,7 @@ class EmailService {
         $textBody = $options['text_body'] ?? strip_tags($body);
 
         // Multipart MIME
-        $boundary = md5(uniqid(time()));
+        $boundary = md5(uniqid((string)time()));
         $headers .= "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n";
 
         $fullBody  = "--$boundary\r\n";
@@ -94,7 +111,7 @@ class EmailService {
     private function sendSmtp($to, string $subject, string $body, array $options): array {
         $host    = $this->config['smtp_host'];
         $port    = (int)$this->config['smtp_port'];
-        $secure  = strtolower($this->config['smtp_secure']);
+        $secure  = strtolower((string)$this->config['smtp_secure']);
         $timeout = 15;
 
         $address = ($secure === 'ssl') ? "ssl://{$host}" : $host;
@@ -114,8 +131,8 @@ class EmailService {
 
         if ($this->config['smtp_auth']) {
             $this->smtpSend($sock, 'AUTH LOGIN');
-            $this->smtpSend($sock, base64_encode($this->config['smtp_username']));
-            $this->smtpSend($sock, base64_encode($this->config['smtp_password']));
+            $this->smtpSend($sock, base64_encode((string)$this->config['smtp_username']));
+            $this->smtpSend($sock, base64_encode((string)$this->config['smtp_password']));
         }
 
         $fromEmail = $this->config['from_email'];
@@ -130,7 +147,7 @@ class EmailService {
 
         $this->smtpSend($sock, 'DATA', '354');
 
-        $boundary = md5(uniqid(time()));
+        $boundary = md5(uniqid((string)time()));
         $textBody = $options['text_body'] ?? strip_tags($body);
         $toStr    = $this->formatRecipients($to);
         $fromStr  = $this->config['from_name'] ? "{$this->config['from_name']} <{$fromEmail}>" : $fromEmail;
@@ -185,73 +202,36 @@ class EmailService {
      * @return array ['subject' => string, 'body' => string] or null if not found
      */
     public static function renderTemplate(string $slug, array $variables = [], $db = null): ?array {
-        if (!$db) {
-            global $db; // fall back to global DB connection
-        }
-        if (!$db) return null;
+        try {
+            $db = NuDatabase::getInstance();
+            $tpl = $db->fetchOne("SELECT subject, body FROM nu_email_templates WHERE slug = ? AND is_active = 1 LIMIT 1", [$slug]);
+            if (!$tpl) return null;
 
-        $slug = $db->real_escape_string($slug);
-        $row = $db->query("SELECT subject, body FROM nu_email_templates WHERE slug = '{$slug}' AND is_active = 1 LIMIT 1");
-        if (!$row || $row->num_rows === 0) return null;
-
-        $tpl = $row->fetch_assoc();
-        foreach ($variables as $key => $value) {
-            $tpl['subject'] = str_replace('{{' . $key . '}}', $value, $tpl['subject']);
-            $tpl['body']    = str_replace('{{' . $key . '}}', $value, $tpl['body']);
+            foreach ($variables as $key => $value) {
+                $tpl['subject'] = str_replace('{{' . $key . '}}', (string)$value, $tpl['subject']);
+                $tpl['body']    = str_replace('{{' . $key . '}}', (string)$value, $tpl['body']);
+            }
+            return $tpl;
+        } catch (\Throwable $t) {
+            return null;
         }
-        return $tpl;
     }
 
     // -------------------------------------------------------------------------
     // Logging
     // -------------------------------------------------------------------------
     private function logEmail(string $status, $to, string $subject, string $error = ''): void {
-        global $db;
-        if (!$db) return;
+        try {
+            $db = NuDatabase::getInstance();
+            $toStr   = is_array($to) ? implode(',', array_keys($to)) : $to;
 
-        $toStr   = is_array($to) ? implode(',', array_keys($to)) : $to;
-        $toStr   = $db->real_escape_string($toStr);
-        $subject = $db->real_escape_string($subject);
-        $error   = $db->real_escape_string(substr($error, 0, 1000));
-        $status  = $db->real_escape_string($status);
-
-        $db->query("INSERT INTO nu_email_log (recipient, subject, status, error_message, sent_at)
-                    VALUES ('{$toStr}', '{$subject}', '{$status}', '{$error}', NOW())");
-    }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-    private function normalizeRecipients($to): array {
-        if (is_string($to)) return [$to => ''];
-        if (isset($to[0])) { // indexed array of emails
-            $out = [];
-            foreach ($to as $email) $out[$email] = '';
-            return $out;
-        }
-        return $to; // already ['email' => 'name']
-    }
-
-    private function formatRecipients($to): string {
-        $parts = [];
-        foreach ($this->normalizeRecipients($to) as $email => $name) {
-            $parts[] = $name ? "{$name} <{$email}>" : $email;
-        }
-        return implode(', ', $parts);
-    }
-
-    private function buildHeaders(array $options): string {
-        $fromEmail = $this->config['from_email'];
-        $fromName  = $this->config['from_name'];
-        $replyTo   = $options['reply_to'] ?? $this->config['reply_to'];
-        $fromStr   = $fromName ? "=?UTF-8?B?" . base64_encode($fromName) . "?= <{$fromEmail}>" : $fromEmail;
-
-        $h  = "From: {$fromStr}\r\n";
-        $h .= "MIME-Version: 1.0\r\n";
-        if ($replyTo)                        $h .= "Reply-To: {$replyTo}\r\n";
-        if (!empty($options['cc']))          $h .= "Cc: " . implode(', ', $options['cc']) . "\r\n";
-        if (!empty($options['bcc']))         $h .= "Bcc: " . implode(', ', $options['bcc']) . "\r\n";
-        $h .= "X-Mailer: nub5-dev\r\n";
-        return $h;
+            $db->insert('nu_email_log', [
+                'recipient'     => $toStr,
+                'subject'       => $subject,
+                'status'        => $status,
+                'error_message' => substr($error, 0, 1000),
+                'sent_at'       => date('Y-m-d H:i:s')
+            ]);
+        } catch (\Throwable $t) {}
     }
 }

@@ -233,7 +233,8 @@ INSERT INTO nu_menus (menu_parent_id, menu_code, menu_label, menu_type, menu_tar
 (0, 'users',     'Users',      'form', 'users',     'users',     10),
 (0, 'roles',     'Roles',      'form', 'roles',     'shield',    11),
 (0, 'audit',     'Audit Trail','form', 'audit',     'clipboard', 12),
-(0, 'files',     'Files',      'form', 'files',     'paperclip', 13);
+(0, 'files',     'Files',      'form', 'files',     'paperclip', 13),
+(0, 'email_settings', 'Email Settings', 'form', 'email_settings', 'email_settings', 14);
 
 -- ─── REPORT DASHBOARDS MODULE ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS nu_report_dashboards (
