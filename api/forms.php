@@ -56,33 +56,7 @@ function nu_col_def_for_type(string $type): string {
 }
 
 function nu_flatten_fields(array $layout): array {
-    $out = [];
-    foreach ($layout as $node) {
-        $t = $node['type'] ?? 'field';
-
-        if ($t === 'tab') {
-            // tab → tabs[] → rows[] → fields[]
-            foreach ($node['tabs'] ?? [] as $tab) {
-                foreach ($tab['rows'] ?? [] as $row) {
-                    foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
-                }
-            }
-        } elseif ($t === 'group') {
-            // group → rows[] → fields[]
-            foreach ($node['rows'] ?? [] as $row) {
-                foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
-            }
-        } elseif ($t === 'section' || $t === 'row') {
-            // legacy flat children[]
-            foreach (nu_flatten_fields($node['children'] ?? []) as $f) $out[] = $f;
-        } elseif ($t === 'subform') {
-            // never a DB column — skip
-            continue;
-        } else {
-            $out[] = $node;
-        }
-    }
-    return $out;
+    return nu_flatten_layout_fields($layout);
 }
 
 function nu_resolve_col_name(array $field): string {
