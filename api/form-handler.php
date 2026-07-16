@@ -275,19 +275,23 @@ function handleSave($db, $formCode) {
 
         $tableColumns = [];
         foreach ($db->fetchAll("DESCRIBE `{$form['form_table']}`") as $row) {
-            $tableColumns[$row['Field']] = true;
+            $fName = $row['Field'] ?? $row['field'] ?? null;
+            if ($fName !== null) {
+                $tableColumns[$fName] = true;
+                $tableColumns[strtolower($fName)] = true;
+            }
         }
 
         $safeInput = [];
         foreach ($input as $k => $v) {
-            if (isset($tableColumns[$k])) {
+            if (isset($tableColumns[$k]) || isset($tableColumns[strtolower($k)])) {
                 $safeInput[$k] = $v;
             }
         }
 
         if ($isNew) {
-            $safeInput['created_at'] = $now;
-            $safeInput['updated_at'] = $now;
+            if (isset($tableColumns['created_at'])) $safeInput['created_at'] = $now;
+            if (isset($tableColumns['updated_at'])) $safeInput['updated_at'] = $now;
             // ✅ Set created_by and updated_by on insert
             if ($currentUserId !== null) {
                 if (isset($tableColumns['created_by'])) $safeInput['created_by'] = $currentUserId;
@@ -300,7 +304,9 @@ function handleSave($db, $formCode) {
             unset($safeInput['created_at']);
             unset($safeInput['created_by']); // ✅ Never overwrite original creator
             unset($safeInput['id']);
-            $safeInput['updated_at'] = $now;
+            if (isset($tableColumns['updated_at'])) {
+                $safeInput['updated_at'] = $now;
+            }
             // ✅ Set updated_by on update
             if ($currentUserId !== null && isset($tableColumns['updated_by'])) {
                 $safeInput['updated_by'] = $currentUserId;

@@ -119,8 +119,8 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
         foreach ($desired as $col => $def) {
             $colsSql .= ",\n  `{$col}` {$def}";
         }
-        $colsSql .= ",\n  `created_at` DATETIME NULL DEFAULT NULL";
-        $colsSql .= ",\n  `updated_at` DATETIME NULL DEFAULT NULL";
+        $colsSql .= ",\n  `created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP";
+        $colsSql .= ",\n  `updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP";
 
         $createSql = "CREATE TABLE `{$table}` (\n  {$pkDef}{$colsSql}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
         nu_ddl($db, $createSql);  // uses exec(), not query()
