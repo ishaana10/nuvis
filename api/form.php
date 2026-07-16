@@ -1338,39 +1338,7 @@ function nu_inject_parent_context(array $layout, string $parentTable, string $pa
 }
 
 function nu_flatten_fields(array $layout): array {
-  /*  $out = [];
-    foreach ($layout as $node) {
-        $t = $node['type'] ?? 'field';
 
-        if (in_array($t, ['section', 'group', 'row'], true)) {
-            // top-level group/section uses children[]
-            foreach (nu_flatten_fields($node['children'] ?? []) as $f) $out[] = $f;
-            // group inside a tab uses rows[].fields[]
-            foreach (($node['rows'] ?? []) as $row) {
-                foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
-            }
-
-        } elseif ($t === 'tab') {
-            // tab container: iterate each tab panel's rows
-            foreach (($node['tabs'] ?? []) as $tab) {
-                foreach (($tab['rows'] ?? []) as $row) {
-                    $rowType = $row['type'] ?? 'row';
-                    if ($rowType === 'group') {
-                        // group inside tab panel
-                        foreach (($row['rows'] ?? []) as $innerRow) {
-                            foreach (nu_flatten_fields($innerRow['fields'] ?? []) as $f) $out[] = $f;
-                        }
-                    } else {
-                        // plain row inside tab panel
-                        foreach (nu_flatten_fields($row['fields'] ?? []) as $f) $out[] = $f;
-                    }
-                }
-            }
-
-        } else {
-            $out[] = $node;
-        }
-    }*/
     return nu_flatten_layout_fields($layout);
 }
 
