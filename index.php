@@ -214,7 +214,14 @@ if ($isLoggedIn && $currentUser) {
                 </svg>
                 <span>Forms</span>
             </a>
-            <a href="#reports" class="nu-nav-item" data-module="reports"
+            <a href="#report_dashboards" class="nu-nav-item" data-module="report_dashboards"
+               onclick="NuApp.loadModule('report_dashboards'); return false;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                </svg>
+                <span>Reports Dashboard </span>
+            </a>
+              <a href="#reports" class="nu-nav-item" data-module="reports"
                onclick="NuApp.loadModule('reports'); return false;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
