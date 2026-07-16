@@ -74,11 +74,20 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
         <div class="nu-card">
             <div class="nu-card-header"><h3 class="nu-card-title">Git Update</h3></div>
             <div class="nu-card-body">
-                <p style="margin-bottom:16px;font-size:14px">Fetch changes from the remote repository and pull them into the main branch.</p>
-                <div style="display:flex;gap:10px;margin-bottom:20px">
+                <p style="margin-bottom:16px;font-size:14px">Fetch changes from the remote repository and pull them into the selected branch.</p>
+
+                <div style="display: flex; gap: 20px; align-items: flex-end; margin-bottom: 20px;">
+                    <div class="nu-field" style="width: 250px;">
+                        <label style="font-size: 13px; font-weight: 500; display: block; margin-bottom: 4px;">Update Branch</label>
+                        <select id="updaterBranchSelect" class="nu-input">
+                            <option value="main">Loading branches...</option>
+                        </select>
+                    </div>
+                    <button class="nu-btn nu-btn-ghost" onclick="nuUpdSaveBranchPref()">Save Preference</button>
                     <button class="nu-btn nu-btn-primary" onclick="nuUpdGitFetch()">Fetch origin</button>
-                    <button class="nu-btn nu-btn-success" onclick="nuUpdGitPull()">Pull from main</button>
+                    <button class="nu-btn nu-btn-success" onclick="nuUpdGitPull()">1-Click Pull Update</button>
                 </div>
+
                 <div class="nu-upd-console" id="upd-git-console">Console output will appear here...</div>
             </div>
         </div>
@@ -133,7 +142,35 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
                 document.getElementById('upd-stat-branch').textContent = d.branch;
                 document.getElementById('upd-stat-git').textContent = d.status.includes('nothing to commit') ? 'Up to date' : 'Modified';
                 document.getElementById('upd-status-console').textContent = d.status;
+
+                const sel = document.getElementById('updaterBranchSelect');
+                if (sel.options.length <= 1 && d.remote_branches) {
+                    sel.innerHTML = '';
+                    d.remote_branches.forEach(b => {
+                        let opt = document.createElement('option');
+                        opt.value = b;
+                        opt.textContent = b;
+                        if (b === d.selected_branch) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                }
             });
+    };
+
+    window.nuUpdSaveBranchPref = function() {
+        const branch = document.getElementById('updaterBranchSelect').value;
+        if (!branch) return;
+        fetch(_api + '?action=save_branch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ branch: branch })
+        }).then(r => r.json()).then(res => {
+            if (res.success) {
+                alert('Branch preference saved.');
+            } else {
+                alert('Error saving branch: ' + res.error);
+            }
+        });
     };
 
     window.nuUpdGitFetch = function() {
@@ -148,13 +185,16 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
     };
 
     window.nuUpdGitPull = function() {
-        if (!confirm('This will pull the latest changes from the main branch. Continue?')) return;
+        if (!confirm('This will pull the latest changes from the selected branch. Continue?')) return;
         var console = document.getElementById('upd-git-console');
-        console.textContent = 'Pulling from main branch...';
+        console.textContent = 'Pulling from selected branch...';
         fetch(_api + '?action=git_pull')
             .then(r => r.json())
             .then(d => {
                 console.textContent = d.output || 'No output from pull.';
+                if (d.pulled_branch) {
+                    console.textContent += '\n\nUpdate finished successfully on branch: ' + d.pulled_branch;
+                }
                 nuUpdGetStatus();
             });
     };
