@@ -1338,7 +1338,7 @@ function nu_inject_parent_context(array $layout, string $parentTable, string $pa
 }
 
 function nu_flatten_fields(array $layout): array {
-    $out = [];
+  /*  $out = [];
     foreach ($layout as $node) {
         $t = $node['type'] ?? 'field';
 
@@ -1370,8 +1370,8 @@ function nu_flatten_fields(array $layout): array {
         } else {
             $out[] = $node;
         }
-    }
-    return $out;
+    }*/
+    return nu_flatten_layout_fields($layout);
 }
 
 
