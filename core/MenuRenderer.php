@@ -129,8 +129,6 @@ class NuMenuRenderer
                         "SELECT menu_id, menu_label, menu_type,
                                 COALESCE(menu_target, '') AS menu_target,
                                 menu_parent_id, menu_order,
-                                COALESCE(menu_role_access, '') AS menu_role_access,
-                                COALESCE(menu_roles, '')       AS menu_roles,
                                 menu_active, menu_icon
                          FROM   nu_menus
                          WHERE  menu_active = 1
@@ -138,6 +136,8 @@ class NuMenuRenderer
                     );
                     $rows = array();
                     foreach ($raw as $r) {
+                        $r['menu_role_access']  = '';
+                        $r['menu_roles']        = '';
                         $r['menu_browse_mode']  = 'inline';
                         $r['menu_preview_mode'] = 'inline';
                         $r['menu_default_view'] = 'browse';
