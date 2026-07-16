@@ -278,6 +278,18 @@ if ($isLoggedIn && $currentUser) {
                 </svg>
                 <span>Menus</span>
             </a>
+             <a href="#email_settings" class="nu-nav-item" data-module="email_settings"
+               onclick="NuApp.loadModule('email_settings'); return false;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                    <circle cx="20" cy="6" r="2" fill="currentColor" stroke="none"/>
+                    <circle cx="20" cy="12" r="2" fill="currentColor" stroke="none"/>
+                    <circle cx="20" cy="18" r="2" fill="currentColor" stroke="none"/>
+                </svg>
+                <span>Menus</span>
+            </a>
             <a href="#users" class="nu-nav-item" data-module="users"
                onclick="NuApp.loadModule('users'); return false;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
