@@ -23,7 +23,25 @@ class EmailService {
             'reply_to'      => '',
         ];
 
-        // Pull from global config.php constants if defined
+        
+// First attempt to load dynamic SMTP settings from the database
+        try {
+            $db = NuDatabase::getInstance();
+            $rows = $db->fetchAll("SELECT setting_key, setting_value FROM nu_email_settings");
+            foreach ($rows as $row) {
+                $k = $row['setting_key'];
+                $v = $row['setting_value'];
+                if ($k === 'smtp_auth') {
+                    $defaults[$k] = ($v == '1');
+                } else if ($v !== '') {
+                    $defaults[$k] = $v;
+                }
+            }
+        } catch (\Throwable $t) {
+            // DB table might not be seeded or created yet
+        }
+
+        // Pull from global config.php constants if defined (take priority over DB)
         if (defined('EMAIL_DRIVER'))        $defaults['driver']        = EMAIL_DRIVER;
         if (defined('EMAIL_SMTP_HOST'))     $defaults['smtp_host']     = EMAIL_SMTP_HOST;
         if (defined('EMAIL_SMTP_PORT'))     $defaults['smtp_port']     = EMAIL_SMTP_PORT;
@@ -70,7 +88,7 @@ class EmailService {
         $textBody = $options['text_body'] ?? strip_tags($body);
 
         // Multipart MIME
-        $boundary = md5(uniqid(time()));
+        $boundary = md5(uniqid((string)time()));
         $headers .= "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n";
 
         $fullBody  = "--$boundary\r\n";
@@ -94,7 +112,7 @@ class EmailService {
     private function sendSmtp($to, string $subject, string $body, array $options): array {
         $host    = $this->config['smtp_host'];
         $port    = (int)$this->config['smtp_port'];
-        $secure  = strtolower($this->config['smtp_secure']);
+        $secure  = strtolower((string)$this->config['smtp_secure']);
         $timeout = 15;
 
         $address = ($secure === 'ssl') ? "ssl://{$host}" : $host;
@@ -114,8 +132,8 @@ class EmailService {
 
         if ($this->config['smtp_auth']) {
             $this->smtpSend($sock, 'AUTH LOGIN');
-            $this->smtpSend($sock, base64_encode($this->config['smtp_username']));
-            $this->smtpSend($sock, base64_encode($this->config['smtp_password']));
+             $this->smtpSend($sock, base64_encode((string)$this->config['smtp_username']));
+            $this->smtpSend($sock, base64_encode((string)$this->config['smtp_password']));
         }
 
         $fromEmail = $this->config['from_email'];
@@ -130,7 +148,7 @@ class EmailService {
 
         $this->smtpSend($sock, 'DATA', '354');
 
-        $boundary = md5(uniqid(time()));
+       $boundary = md5(uniqid((string)time()));
         $textBody = $options['text_body'] ?? strip_tags($body);
         $toStr    = $this->formatRecipients($to);
         $fromStr  = $this->config['from_name'] ? "{$this->config['from_name']} <{$fromEmail}>" : $fromEmail;
