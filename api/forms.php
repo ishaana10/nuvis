@@ -279,7 +279,7 @@ function actionPatchLayout($db) {
     $layout = $data['form_layout'];
     if (is_array($layout)) $layout = json_encode($layout);
     try {
-        $db->update('nu_forms', ['form_layout' => $layout, 'updated_at' => date('Y-m-d H:i:s')], 'form_id = ?', [$id]);
+        $db->update('nu_forms', ['form_layout' => $layout, 'form_updated_at' => date('Y-m-d H:i:s')], 'form_id = ?', [$id]);
         $form = $db->fetchOne('SELECT form_table, form_pk_type FROM nu_forms WHERE form_id = ?', [$id]);
         if ($form && !empty($form['form_table'])) {
             try {
@@ -300,8 +300,8 @@ function actionList($db) {
         $forms = $db->fetchAll(
             'SELECT form_id, form_name, form_code, form_table, form_type,
                     form_table_mode, form_pk_type, browse_display_mode,
-                    created_at, updated_at
-             FROM nu_forms ORDER BY updated_at DESC, form_name ASC'
+                    form_created_at AS created_at, form_updated_at AS updated_at
+             FROM nu_forms ORDER BY form_updated_at DESC, form_name ASC'
         );
         echo json_encode(['success' => true, 'forms' => $forms]);
     } catch (Exception $e) {
@@ -472,7 +472,7 @@ function actionSave($db) {
         ];
 
         if ($formId) {
-            $row['updated_at'] = date('Y-m-d H:i:s');
+            $row['form_updated_at'] = date('Y-m-d H:i:s');
             $db->update('nu_forms', $row, 'form_id = ?', [$formId]);
             $savedId = $formId;
             error_log('[forms.php] actionSave: updated form_id=' . $savedId);
@@ -483,8 +483,8 @@ function actionSave($db) {
                 return;
             }
 
-            $row['created_at'] = date('Y-m-d H:i:s');
-            $row['updated_at'] = date('Y-m-d H:i:s');
+            $row['form_created_at'] = date('Y-m-d H:i:s');
+            $row['form_updated_at'] = date('Y-m-d H:i:s');
             $db->insert('nu_forms', $row);
             $savedId = $db->lastInsertId();
             error_log('[forms.php] actionSave: inserted form_id=' . $savedId);
