@@ -1801,12 +1801,34 @@ function nu_handle_list() {
     }
 
     $browsePhp = trim((string)($form[$c['browse_php']] ?? ''));
+    $browseConds = json_decode($form[$c['browse_conditions']] ?? '[]', true) ?: [];
+
     $nuHash    = nu_get_hash();
     $nuSql     = null;
     $nuParams  = [];
     $nuWhere   = '';
     $nuOrder   = '';
+    $nuColumns = '';
 
+    $auth = NuAuth::getInstance();
+    $currentRole = $auth->getCurrentRole();
+
+    // 1. Evaluate Role-Based Conditions (JSON)
+    if (!empty($browseConds) && is_array($browseConds)) {
+        foreach ($browseConds as $cond) {
+            if (isset($cond['role']) && ($cond['role'] === '*' || $cond['role'] === $currentRole)) {
+                if (!empty($cond['where'])) {
+                    $nuWhere = $auth->resolveHashes($cond['where']);
+                }
+                if (!empty($cond['columns'])) {
+                    $nuColumns = trim($cond['columns']);
+                }
+                break; // Apply only the first matching condition
+            }
+        }
+    }
+
+    // 2. Evaluate browse_php (can override JSON conditions)
     if ($browsePhp !== '') {
         try {
             eval($browsePhp);
@@ -1853,7 +1875,16 @@ function nu_handle_list() {
     } else {
         $where = []; $params = [];
         $joins = [];
+
         $selectCols = ["`{$table}`.*"];
+        if ($nuColumns !== '') {
+            $selectCols = [];
+            foreach (explode(',', $nuColumns) as $colName) {
+                $colName = nu_safe_ident(trim($colName));
+                if ($colName !== '') $selectCols[] = "`{$table}`.`{$colName}`";
+            }
+            if (empty($selectCols)) $selectCols = ["`{$table}`.*"];
+        }
 
         // Handle custom Joins from layout
         $flatLayout = nu_flatten_layout_for_grid($layout);

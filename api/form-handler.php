@@ -360,10 +360,38 @@ function handleBrowse($db, $formCode) {
     $records = [];
     $pages = 0;
     
+    $auth = NuAuth::getInstance();
+    $currentRole = $auth->getCurrentRole();
+    $browseConds = json_decode($form['browse_conditions'] ?? '[]', true) ?: [];
+
+    $nuWhere = '';
+    $nuColumns = '*';
+
+    if (!empty($browseConds) && is_array($browseConds)) {
+        foreach ($browseConds as $cond) {
+            if (isset($cond['role']) && ($cond['role'] === '*' || $cond['role'] === $currentRole)) {
+                if (!empty($cond['where'])) {
+                    $nuWhere = $auth->resolveHashes($cond['where']);
+                }
+                if (!empty($cond['columns'])) {
+                    $cols = [];
+                    foreach(explode(',', trim($cond['columns'])) as $c) {
+                        $c = preg_replace('/[^a-zA-Z0-9_]/', '', trim($c));
+                        if ($c !== '') $cols[] = "`{$c}`";
+                    }
+                    if (!empty($cols)) $nuColumns = implode(', ', $cols);
+                }
+                break;
+            }
+        }
+    }
+
+    $whereSql = $nuWhere !== '' ? "WHERE ({$nuWhere})" : "";
+
     try {
-        $totalRow = $db->fetchOne("SELECT COUNT(*) as c FROM {$form['form_table']}");
+        $totalRow = $db->fetchOne("SELECT COUNT(*) as c FROM `{$form['form_table']}` {$whereSql}");
         $total = $totalRow['c'] ?? 0;
-        $records = $db->fetchAll("SELECT * FROM {$form['form_table']} ORDER BY id DESC LIMIT {$limit} OFFSET {$offset}");
+        $records = $db->fetchAll("SELECT {$nuColumns} FROM `{$form['form_table']}` {$whereSql} ORDER BY id DESC LIMIT {$limit} OFFSET {$offset}");
         $pages = ceil($total / $limit);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => 'Table error: ' . $e->getMessage()]);

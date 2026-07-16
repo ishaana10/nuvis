@@ -17,6 +17,9 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
     'nu_forms','nu_reports','nu_queries','nu_menus'
 ], true)));
 
+// Fetch all roles for the condition builder
+$roles = $db->fetchAll("SELECT role_code, role_name FROM nu_roles ORDER BY role_name");
+
 // Group forms by type
 $formsByType = ['main' => [], 'subform' => [], 'popup' => [], 'report' => []];
 foreach ($forms as $f) {
@@ -941,7 +944,19 @@ foreach ($forms as $f) {
           <label class="nu-label">Search Fields <span style="font-weight:400;color:var(--text-tertiary);">(comma-sep)</span></label>
           <input type="text" id="formBrowseSearchFields" class="nu-input" placeholder="name, email">
         </div>
-        <div style="grid-column:1/-1;">
+        <div style="grid-column:1/-1;border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px;">
+          <label class="nu-label" style="font-size:14px;font-weight:600;margin-bottom:12px;display:block;">Role-Based Browse Conditions</label>
+          <p style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px;">Define custom WHERE clauses and columns based on the user's role. Use <code>##key##</code> to inject global user meta (e.g. <code>##location##</code>).</p>
+          <div id="browseConditionsList" style="display:flex;flex-direction:column;gap:12px;"></div>
+          <button type="button" class="nu-btn nu-btn-sm nu-btn-ghost" style="margin-top:12px;" onclick="nbFormBuilder.addBrowseCondition()">+ Add Condition</button>
+
+          <script>
+            // Store roles array in JS for dynamic rendering
+            window.nuRolesList = <?php echo json_encode($roles); ?>;
+          </script>
+        </div>
+
+        <div style="grid-column:1/-1;border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px;">
           <label class="nu-label" style="margin-bottom:6px;display:block;">
             Browse PHP
             <span style="font-weight:400;color:var(--text-tertiary);">— customize browse query (use <code>$nuSql</code>, <code>$nuWhere</code>, <code>$nuOrder</code>, <code>$nuParams</code>)</span>

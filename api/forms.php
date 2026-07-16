@@ -193,6 +193,7 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
         'form_js_after_save'  => "MEDIUMTEXT NULL DEFAULT NULL",
         'form_custom_php'     => "MEDIUMTEXT NULL DEFAULT NULL",
         'form_custom_css'     => "MEDIUMTEXT NULL DEFAULT NULL",
+        'browse_conditions'   => "JSON NULL DEFAULT NULL",
     ];
 
     foreach ($needed as $col => $def) {
@@ -384,6 +385,7 @@ function actionSave($db) {
             'browse_page_size'          => isset($data['browse_page_size']) ? (int)$data['browse_page_size'] : 20,
             'browse_default_sort'       => (string)($data['browse_default_sort'] ?? ''),
             'browse_display_mode'       => (string)($data['browse_display_mode'] ?? 'inline'),
+            'browse_conditions'         => isset($data['browse_conditions']) && is_array($data['browse_conditions']) ? json_encode($data['browse_conditions'], JSON_UNESCAPED_UNICODE) : null,
             'form_custom_js'            => (string)($data['form_custom_js'] ?? ''),
             'form_js_before_save'       => (string)($data['form_js_before_save'] ?? ''),
             'form_js_after_save'        => (string)($data['form_js_after_save'] ?? ''),
