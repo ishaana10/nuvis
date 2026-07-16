@@ -13,9 +13,10 @@
  */
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../core/Database.php';
 require_once __DIR__ . '/../core/EmailService.php';
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 // Auth guard
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -25,9 +26,85 @@ if (empty($_SESSION['user_id'])) {
     exit;
 }
 
+$db     = NuDatabase::getInstance();
 $method = $_SERVER['REQUEST_METHOD'];
-$input  = json_decode(file_get_contents('php://input'), true) ?? [];
+
+$input = [];
+if ($method === 'POST') {
+    $raw   = file_get_contents('php://input');
+    $input = json_decode($raw, true) ?? [];
+    if (empty($input)) $input = $_POST;
+}
+
 $action = $input['action'] ?? $_GET['action'] ?? '';
+
+// Ensure email tables exist
+try {
+    $db->fetchAll("SELECT 1 FROM nu_email_settings LIMIT 1");
+} catch (Throwable $t) {
+    try {
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS `nu_email_settings` (
+              `id`            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              `setting_key`   VARCHAR(100) NOT NULL UNIQUE,
+              `setting_value` TEXT NOT NULL,
+              `updated_at`    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+        $db->exec("
+            INSERT IGNORE INTO `nu_email_settings` (`setting_key`, `setting_value`) VALUES
+              ('driver',        'mail'),
+              ('smtp_host',     ''),
+              ('smtp_port',     '587'),
+              ('smtp_secure',   'tls'),
+              ('smtp_auth',     '1'),
+              ('smtp_username', ''),
+              ('smtp_password', ''),
+              ('from_email',    'noreply@example.com'),
+              ('from_name',     'nub5-dev');
+        ");
+    } catch (Throwable $t2) {}
+}
+
+try {
+    $db->fetchAll("SELECT 1 FROM nu_email_templates LIMIT 1");
+} catch (Throwable $t) {
+    try {
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS `nu_email_templates` (
+              `id`          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              `name`        VARCHAR(150) NOT NULL,
+              `slug`        VARCHAR(100) NOT NULL UNIQUE,
+              `description` TEXT,
+              `subject`     VARCHAR(255) NOT NULL,
+              `body`        LONGTEXT NOT NULL,
+              `is_active`   TINYINT(1) NOT NULL DEFAULT 1,
+              `created_at`  DATETIME DEFAULT CURRENT_TIMESTAMP,
+              `updated_at`  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    } catch (Throwable $t2) {}
+}
+
+try {
+    $db->fetchAll("SELECT 1 FROM nu_email_log LIMIT 1");
+} catch (Throwable $t) {
+    try {
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS `nu_email_log` (
+              `id`            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              `recipient`     VARCHAR(500) NOT NULL,
+              `subject`       VARCHAR(255) NOT NULL,
+              `status`        ENUM('SENT','FAIL') NOT NULL DEFAULT 'SENT',
+              `error_message` VARCHAR(1000) DEFAULT NULL,
+              `template_slug` VARCHAR(100) DEFAULT NULL,
+              `sent_at`       DATETIME DEFAULT CURRENT_TIMESTAMP,
+              INDEX `idx_status`   (`status`),
+              INDEX `idx_sent_at`  (`sent_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    } catch (Throwable $t2) {}
+}
 
 try {
     switch ($action) {
@@ -72,34 +149,35 @@ try {
 
         // ------------------------------------------------------------------
         case 'templates':
-            $rows = $db->query("SELECT * FROM nu_email_templates ORDER BY name ASC");
-            $templates = [];
-            while ($row = $rows->fetch_assoc()) $templates[] = $row;
+            $templates = $db->fetchAll("SELECT * FROM nu_email_templates ORDER BY name ASC");
             echo json_encode(['success' => true, 'data' => $templates]);
             break;
 
         // ------------------------------------------------------------------
         case 'save_template':
-            $id       = (int)($input['id'] ?? 0);
-            $name     = $db->real_escape_string($input['name']    ?? '');
-            $slug     = $db->real_escape_string($input['slug']    ?? '');
-            $subject  = $db->real_escape_string($input['subject'] ?? '');
-            $body     = $db->real_escape_string($input['body']    ?? '');
-            $desc     = $db->real_escape_string($input['description'] ?? '');
-            $active   = (int)($input['is_active'] ?? 1);
+            $id          = (int)($input['id'] ?? 0);
+            $name        = trim((string)($input['name'] ?? ''));
+            $slug        = trim((string)($input['slug'] ?? ''));
+            $subject     = trim((string)($input['subject'] ?? ''));
+            $body        = trim((string)($input['body'] ?? ''));
+            $description = trim((string)($input['description'] ?? ''));
+            $active      = (int)($input['is_active'] ?? 1);
 
             if (!$name || !$slug || !$subject || !$body)
                 throw new \InvalidArgumentException('name, slug, subject, and body are required.');
 
             if ($id > 0) {
-                $db->query("UPDATE nu_email_templates SET name='{$name}', slug='{$slug}', subject='{$subject}',
-                            body='{$body}', description='{$desc}', is_active={$active}, updated_at=NOW()
-                            WHERE id={$id}");
+                $db->query(
+                    "UPDATE nu_email_templates SET name=?, slug=?, subject=?, body=?, description=?, is_active=?, updated_at=NOW() WHERE id=?",
+                    [$name, $slug, $subject, $body, $description, $active, $id]
+                );
                 echo json_encode(['success' => true, 'message' => 'Template updated.']);
             } else {
-                $db->query("INSERT INTO nu_email_templates (name, slug, subject, body, description, is_active, created_at, updated_at)
-                            VALUES ('{$name}', '{$slug}', '{$subject}', '{$body}', '{$desc}', {$active}, NOW(), NOW())");
-                echo json_encode(['success' => true, 'id' => $db->insert_id, 'message' => 'Template created.']);
+                $db->query(
+                    "INSERT INTO nu_email_templates (name, slug, subject, body, description, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                    [$name, $slug, $subject, $body, $description, $active]
+                );
+                echo json_encode(['success' => true, 'message' => 'Template created.']);
             }
             break;
 
@@ -107,7 +185,7 @@ try {
         case 'delete_template':
             $id = (int)($input['id'] ?? 0);
             if (!$id) throw new \InvalidArgumentException('Template id required.');
-            $db->query("DELETE FROM nu_email_templates WHERE id={$id}");
+            $db->query("DELETE FROM nu_email_templates WHERE id=?", [$id]);
             echo json_encode(['success' => true, 'message' => 'Template deleted.']);
             break;
 
@@ -115,18 +193,17 @@ try {
         case 'logs':
             $limit  = min((int)($_GET['limit']  ?? 50), 200);
             $offset = (int)($_GET['offset'] ?? 0);
-            $rows   = $db->query("SELECT * FROM nu_email_log ORDER BY sent_at DESC LIMIT {$limit} OFFSET {$offset}");
-            $logs   = [];
-            while ($row = $rows->fetch_assoc()) $logs[] = $row;
-            $total  = $db->query("SELECT COUNT(*) AS c FROM nu_email_log")->fetch_assoc()['c'];
+            $logs   = $db->fetchAll("SELECT * FROM nu_email_log ORDER BY sent_at DESC LIMIT ? OFFSET ?", [$limit, $offset]);
+            $countRow = $db->fetchOne("SELECT COUNT(*) AS c FROM nu_email_log");
+            $total  = (int)($countRow['c'] ?? 0);
             echo json_encode(['success' => true, 'data' => $logs, 'total' => $total]);
             break;
 
         // ------------------------------------------------------------------
         case 'get_settings':
-            $rows   = $db->query("SELECT setting_key, setting_value FROM nu_email_settings");
+            $rows   = $db->fetchAll("SELECT setting_key, setting_value FROM nu_email_settings");
             $config = [];
-            while ($row = $rows->fetch_assoc()) {
+            foreach ($rows as $row) {
                 $config[$row['setting_key']] = $row['setting_value'];
             }
             echo json_encode(['success' => true, 'data' => $config]);
@@ -138,13 +215,15 @@ try {
             if (empty($settings)) throw new \InvalidArgumentException('No settings provided.');
 
             foreach ($settings as $setting) {
-                $key   = $db->real_escape_string($setting['key']   ?? '');
-                $value = $db->real_escape_string($setting['value'] ?? '');
+                $key   = trim((string)($setting['key']   ?? ''));
+                $value = trim((string)($setting['value'] ?? ''));
                 if (!$key) continue;
                 // UPSERT
-                $db->query("INSERT INTO nu_email_settings (setting_key, setting_value)
-                            VALUES ('{$key}', '{$value}')
-                            ON DUPLICATE KEY UPDATE setting_value='{$value}', updated_at=NOW()");
+                $db->query("
+                    INSERT INTO nu_email_settings (setting_key, setting_value)
+                    VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE setting_value=?, updated_at=NOW()
+                ", [$key, $value, $value]);
             }
             echo json_encode(['success' => true, 'message' => 'Settings saved.']);
             break;
