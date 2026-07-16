@@ -93,16 +93,10 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
     $table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
     if ($table === '') return;
 
-    $layout = is_string($formLayout) ? json_decode($formLayout, true) : $formLayout;
+    $layout = is_string($layoutJson) ? json_decode($layoutJson, true) : $layoutJson;
     if (!is_array($layout)) $layout = [];
 
-    $fields = nu_flatten_layout_fields($layout);
-    if (!is_array($layout)) {
-        error_log('[forms.php] nu_sync_table_from_layout: invalid JSON for table=' . $table);
-        return;
-    }
-
-    $fields  = nu_flatten_fields($layout);
+    $fields = nu_flatten_fields($layout);
     $desired = [];
     foreach ($fields as $field) {
         $type = $field['type'] ?? $field['fieldtype'] ?? 'text';
