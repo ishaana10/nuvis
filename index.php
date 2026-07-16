@@ -288,7 +288,7 @@ if ($isLoggedIn && $currentUser) {
                     <circle cx="20" cy="12" r="2" fill="currentColor" stroke="none"/>
                     <circle cx="20" cy="18" r="2" fill="currentColor" stroke="none"/>
                 </svg>
-                <span>Menus</span>
+                <span>Email Settings</span>
             </a>
             <a href="#users" class="nu-nav-item" data-module="users"
                onclick="NuApp.loadModule('users'); return false;">
