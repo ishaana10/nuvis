@@ -139,7 +139,7 @@ if (file_exists($metaConfigFile)) {
 </div>
 
 <script>
-const Users = (() => {
+var Users = (() => {
   const $ = id => document.getElementById(id);
 
   function toast(msg, type) {
