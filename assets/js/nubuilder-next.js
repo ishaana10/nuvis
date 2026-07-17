@@ -101,7 +101,8 @@ window.NuApp = {
   _systemModules: new Set([
     'dashboard','forms','reports','queries','calendar','ai','integrations',
     'menus','users','roles','audit','files','workflow','inspector','errorlog',
-    'password_policy','appcloner','password','report_dashboards','email_settings'
+    'password_policy','appcloner','password','report_dashboards','email_settings',
+    'updater'
   ]),
 
   init() {
