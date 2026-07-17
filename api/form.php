@@ -132,7 +132,7 @@ function nu_form_columns() {
             'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode',
             'type'=>'form_type','display_mode'=>'browse_display_mode',
             'js_before_save'=>'formjsbeforesave','js_after_save'=>'formjsaftersave',
-            'browse_php'=>'browsephp'];
+            'browse_php'=>'browsephp', 'browse_conditions'=>'browseconditions'];
     }
     return ['id'=>'form_id','name'=>'form_name','code'=>'form_code','table'=>'form_table',
         'layout'=>'form_layout','active'=>'form_active','custom_js'=>'form_custom_js',
@@ -143,7 +143,7 @@ function nu_form_columns() {
         'pk_type'=>'form_pk_type','table_mode'=>'form_table_mode',
         'type'=>'form_type','display_mode'=>'browse_display_mode',
         'js_before_save'=>'form_js_before_save','js_after_save'=>'form_js_after_save',
-        'browse_php'=>'browse_php'];
+        'browse_php'=>'browse_php', 'browse_conditions'=>'browse_conditions'];
 }
 
 function nu_get_form($code) {
@@ -2178,6 +2178,7 @@ function nu_handle_load_form() {
         'browse_page_size'         => (int)($form[$c['browse_page_size']]    ?? 20),
         'browse_default_sort'      => $form[$c['browse_default_sort']]       ?? '',
         'browse_php'               => $form[$c['browse_php']]                ?? '',
+        'browse_conditions'        => json_decode($form[$c['browse_conditions']] ?? '[]', true) ?: [],
     ]]);
 }
 
