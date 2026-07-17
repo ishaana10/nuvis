@@ -375,6 +375,14 @@ if ($isLoggedIn && $currentUser) {
                 </svg>
                 <span>App Cloner</span>
             </a>
+            <a href="#updater" class="nu-nav-item" data-module="updater"
+               onclick="NuApp.loadModule('updater'); return false;"
+               style="color:var(--warning,#f59e0b);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                </svg>
+                <span>System Updater</span>
+            </a>
             <?php endif; ?>
 
             <!-- ── Personal section (every user) ── -->
