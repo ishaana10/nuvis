@@ -16,6 +16,12 @@ if (!$auth->checkAuth()) {
 }
 
 $db     = NuDatabase::getInstance();
+// Dynamic schema upgrade to support hook actions on transitions
+try {
+    $db->query("ALTER TABLE `nu_workflow_transitions` ADD COLUMN `wft_hook` VARCHAR(64) DEFAULT NULL AFTER `wft_condition`");
+} catch (Throwable $e) {
+    // Column already exists or table doesn't exist yet
+}
 $audit  = new NuAudit();
 $engine = new WorkflowEngine();
 $userId = (int)($_SESSION['nu_user_id'] ?? 0);
@@ -146,19 +152,14 @@ try {
             $toId   = (int)($body['wft_to_id']    ?? 0);
             $tId    = (int)($body['wft_id']       ?? 0);
             if (!$wfId || !$fromId || !$toId) { echo json_encode(['success' => false, 'error' => 'wf_id, from_id, to_id required']); break; }
-
-            $hookVal = null;
-            if (isset($body['wft_hook'])) {
-                $hookVal = is_array($body['wft_hook']) ? json_encode($body['wft_hook']) : (string)$body['wft_hook'];
-            }
-
             $data = [
-                'wft_wf_id'   => $wfId,
-                'wft_from_id' => $fromId,
-                'wft_to_id'   => $toId,
-                'wft_action'  => trim((string)($body['wft_action'] ?? 'advance')),
-                'wft_label'   => trim((string)($body['wft_label']  ?? 'Advance')),
-                'wft_hook'    => $hookVal,
+                'wft_wf_id'     => $wfId,
+                'wft_from_id'   => $fromId,
+                'wft_to_id'     => $toId,
+                'wft_action'    => trim((string)($body['wft_action'] ?? 'advance')),
+                'wft_label'     => trim((string)($body['wft_label']  ?? 'Advance')),
+                'wft_condition' => trim((string)($body['wft_condition'] ?? '')) ?: null,
+                'wft_hook'      => trim((string)($body['wft_hook'] ?? '')) ?: null,
             ];
             if ($tId > 0) {
                 $db->update('nu_workflow_transitions', $data, 'wft_id = :id', [':id' => $tId]);
