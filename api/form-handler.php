@@ -298,6 +298,18 @@ function handleSave($db, $formCode) {
             $db->insert($form['form_table'], $safeInput);
             $recordId = $db->lastInsertId();
 
+            // Trigger Outgoing Webhooks for form_insert
+            try {
+                require_once __DIR__ . '/../core/WebhookSender.php';
+                NuWebhookSender::trigger('form_insert', [
+                    'table'     => $form['form_table'],
+                    'record_id' => $recordId,
+                    'data'      => array_merge($safeInput, ['id' => $recordId])
+                ]);
+            } catch (\Throwable $whe) {
+                error_log('[Webhook Form Insert Trigger Error] ' . $whe->getMessage());
+            }
+
             // Auto-start workflow if bound to this form code
             try {
                 if (!class_exists('WorkflowEngine')) {
@@ -323,6 +335,18 @@ function handleSave($db, $formCode) {
                 $safeInput['updated_by'] = $currentUserId;
             }
             $db->update($form['form_table'], $safeInput, 'id = ?', [$recordId]);
+
+            // Trigger Outgoing Webhooks for form_update
+            try {
+                require_once __DIR__ . '/../core/WebhookSender.php';
+                NuWebhookSender::trigger('form_update', [
+                    'table'     => $form['form_table'],
+                    'record_id' => $recordId,
+                    'data'      => array_merge($safeInput, ['id' => $recordId])
+                ]);
+            } catch (\Throwable $whe) {
+                error_log('[Webhook Form Update Trigger Error] ' . $whe->getMessage());
+            }
         }
 
         // ✅ Missing: after-save event and response

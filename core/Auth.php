@@ -56,6 +56,23 @@ class NuAuth {
         $this->createSession($user);
         $this->logAudit('login', 'nu_users', $user['usr_id']);
 
+        // Trigger Outgoing Webhooks for user_login
+        try {
+            require_once __DIR__ . '/WebhookSender.php';
+            NuWebhookSender::trigger('user_login', [
+                'table'     => 'nu_users',
+                'record_id' => $user['usr_id'],
+                'data'      => [
+                    'usr_id'       => $user['usr_id'],
+                    'usr_username' => $user['usr_username'],
+                    'usr_email'    => $user['usr_email'] ?? '',
+                    'usr_role'     => $user['usr_role'] ?? ''
+                ]
+            ]);
+        } catch (\Throwable $whe) {
+            error_log('[Webhook Login Trigger Error] ' . $whe->getMessage());
+        }
+
         return ['success' => true, 'user' => $this->sanitizeUser($user)];
     }
 

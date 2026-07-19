@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS `nu_api_tokens` (
     `token_user_id` INT NOT NULL,
     `token_name` VARCHAR(50),
     `token_active` TINYINT(1) DEFAULT 1,
-    `token_expires` DATETIME,
+    `token_expires_at` DATETIME,
     `token_last_used` DATETIME,
     `token_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (`token_user_id`) REFERENCES `nu_users` (`usr_id`) ON DELETE CASCADE
@@ -283,6 +283,9 @@ CREATE TABLE IF NOT EXISTS `nu_webhooks` (
     `webhook_id` INT AUTO_INCREMENT PRIMARY KEY,
     `webhook_name` VARCHAR(100) NOT NULL,
     `webhook_url` VARCHAR(500) NOT NULL,
+    `webhook_method` VARCHAR(10) NOT NULL DEFAULT 'POST',
+    `webhook_headers` TEXT DEFAULT NULL,
+    `webhook_payload_template` TEXT DEFAULT NULL,
     `webhook_events` VARCHAR(255),
     `webhook_secret` VARCHAR(255),
     `webhook_active` TINYINT(1) DEFAULT 1,
@@ -567,7 +570,7 @@ VALUES
   ('Queries',      'form', 'queries',       @main_group, 40, '', 1, 'queries', 'inline|browse', 'inline', 'inline', 'browse'),
   ('Calendar',     'form', 'calendar',      @main_group, 50, '', 1, 'calendar', 'inline|browse', 'inline', 'inline', 'browse'),
   ('AI Assistant', 'form', 'ai',            @main_group, 60, '', 1, 'ai', 'inline|browse', 'inline', 'inline', 'browse'),
-  ('Integrations', 'form', 'integrations',  @main_group, 70, '', 1, 'link', 'inline|browse', 'inline', 'inline', 'browse');
+  ('Webhooks',     'form', 'integrations',  @main_group, 70, '', 1, 'link', 'inline|browse', 'inline', 'inline', 'browse');
 
 INSERT IGNORE INTO `nu_menus`
   (`menu_label`, `menu_type`, `menu_target`, `menu_parent_id`, `menu_order`, `menu_roles`, `menu_active`, `menu_icon`, `menu_open_mode`, `menu_browse_mode`, `menu_preview_mode`, `menu_default_view`)

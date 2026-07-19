@@ -128,7 +128,18 @@ function nu_create_record($table, $data) {
     $cols  = array_keys($clean);
     $sql   = "INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', array_fill(0, count($cols), '?')) . ")";
     nu_q($sql, array_values($clean));
-    return nu_db()->lastInsertId();
+    $newId = nu_db()->lastInsertId();
+    try {
+        require_once __DIR__ . '/../core/WebhookSender.php';
+        NuWebhookSender::trigger('form_insert', [
+            'table'     => $table,
+            'record_id' => $newId,
+            'data'      => array_merge($clean, ['id' => $newId])
+        ]);
+    } catch (\Throwable $whe) {
+        error_log('[Webhook API Insert Trigger Error] ' . $whe->getMessage());
+    }
+    return $newId;
 }
 
 function nu_update_record($table, $id, $data) {
@@ -140,6 +151,16 @@ function nu_update_record($table, $id, $data) {
     if (!$sets) throw new Exception('No valid fields provided');
     $params[] = $id;
     nu_q("UPDATE `{$table}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
+    try {
+        require_once __DIR__ . '/../core/WebhookSender.php';
+        NuWebhookSender::trigger('form_update', [
+            'table'     => $table,
+            'record_id' => $id,
+            'data'      => array_merge($data, ['id' => $id])
+        ]);
+    } catch (\Throwable $whe) {
+        error_log('[Webhook API Update Trigger Error] ' . $whe->getMessage());
+    }
     return true;
 }
 
@@ -147,6 +168,16 @@ function nu_delete_record($table, $id) {
     if (!$id) throw new Exception('ID required');
     $pk = nu_get_pk($table);
     nu_q("DELETE FROM `{$table}` WHERE `{$pk}` = ?", [$id]);
+    try {
+        require_once __DIR__ . '/../core/WebhookSender.php';
+        NuWebhookSender::trigger('form_delete', [
+            'table'     => $table,
+            'record_id' => $id,
+            'data'      => ['id' => $id]
+        ]);
+    } catch (\Throwable $whe) {
+        error_log('[Webhook API Delete Trigger Error] ' . $whe->getMessage());
+    }
     return true;
 }
 
