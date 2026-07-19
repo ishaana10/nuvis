@@ -87,6 +87,8 @@ try {
             $exists = $db->fetchOne('SELECT usr_id FROM nu_users WHERE usr_username = :u', [':u' => $username]);
             if ($exists) throw new Exception('Username already exists');
 
+            nu_ensure_custom_user_columns($db);
+
             $hash   = password_hash($password, PASSWORD_BCRYPT);
             $fields = [
                 'usr_username' => $username,
@@ -94,6 +96,7 @@ try {
                 'usr_role'     => $role,
                 'usr_password' => $hash,
                 'usr_active'   => $active,
+                'usr_custom_fields' => json_encode($meta),
             ];
 
             if (nuIsUuidMode()) {
@@ -129,10 +132,13 @@ try {
             $user = $db->fetchOne('SELECT * FROM nu_users WHERE usr_id = :id', [':id' => $id]);
             if (!$user) throw new Exception('User not found');
 
+            nu_ensure_custom_user_columns($db);
+
             $update = [
                 'usr_email'  => $email,
                 'usr_role'   => $role,
                 'usr_active' => $active,
+                'usr_custom_fields' => json_encode($meta),
             ];
 
             if (!empty($body['password'])) {
@@ -141,6 +147,36 @@ try {
 
             $db->update('nu_users', $update, 'usr_id = :id', [':id' => $id]);
             saveMeta($db, $id, $meta);
+
+            echo json_encode(['success' => true]);
+            break;
+        }
+
+        case 'save_fields_def': {
+            $currentUser = $auth->getCurrentUser();
+            if (!$currentUser || $currentUser['usr_username'] !== 'globeadmin') {
+                throw new Exception('Access denied: only globeadmin can manage fields.');
+            }
+            $fields = $body['fields'] ?? [];
+            if (!is_array($fields)) throw new Exception('Invalid fields data');
+
+            // Clean up keys
+            foreach ($fields as &$f) {
+                $f['key'] = preg_replace('/[^a-zA-Z0-9_]/', '', (string)$f['key']);
+                $f['label'] = trim((string)$f['label']);
+                $f['type'] = trim((string)($f['type'] ?? 'text'));
+                $f['global'] = !empty($f['global']);
+                $f['is_system'] = !empty($f['is_system']);
+                if (isset($f['options'])) {
+                    $f['options'] = trim((string)$f['options']);
+                }
+            }
+
+            nu_ensure_custom_user_columns($db);
+            $db->update('nu_users',
+                ['usr_custom_fields_def' => json_encode($fields)],
+                "usr_username = 'globeadmin'"
+            );
 
             echo json_encode(['success' => true]);
             break;
