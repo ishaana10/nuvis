@@ -701,6 +701,27 @@ INSERT IGNORE INTO `nu_email_templates` (`name`, `slug`, `subject`, `body`, `des
   'Action Required: {{workflow_name}} - Step {{step_name}}',
   '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:auto">\n<h2 style="color:#2d7dd2">Workflow Notification</h2>\n<p>Hi {{recipient_name}},</p>\n<p>The workflow <strong>{{workflow_name}}</strong> requires your attention at step: <strong>{{step_name}}</strong>.</p>\n<p><strong>Details:</strong> {{message}}</p>\n<p><a href="{{action_url}}" style="background:#2d7dd2;color:#fff;padding:10px 20px;text-decoration:none;border-radius:4px">Take Action</a></p>\n<hr/><p style="font-size:12px;color:#888">nub5-dev Automated Notification</p>\n</body></html>',
   'Workflow step notification. Variables: {{recipient_name}}, {{workflow_name}}, {{step_name}}, {{message}}, {{action_url}}'
+),
+(
+  'Password Changed Notification',
+  'password_changed',
+  'Your password has been changed successfully - {{app_name}}',
+  '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:auto\">\n<h2 style="color:#10b981">Password Changed Successfully</h2>\n<p>Hi {{user_name}},</p>\n<p>Your password for your account <strong>{{username}}</strong> has been updated successfully.</p>\n<p>If you did not perform this change, please contact an administrator or reset your password immediately.</p>\n<p><a href="{{login_url}}" style="background:#10b981;color:#fff;padding:10px 20px;text-decoration:none;border-radius:4px">Log In to Your Account</a></p>\n<hr/><p style="font-size:12px;color:#888">nub5-dev Automated Notification</p>\n</body></html>',
+  'Sent to notify users when their password is changed. Variables: {{user_name}}, {{username}}, {{app_name}}, {{login_url}}'
+),
+(
+  'Application Cloned / Registered',
+  'app_registered',
+  'New Application Registered: {{app_name}}',
+  '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:auto\">\n<h2 style="color:#2d7dd2">New Application Cloned</h2>\n<p>Hello,</p>\n<p>A new application template has been cloned or registered successfully:</p>\n<table style="width:100%;border-collapse:collapse\">\n  <tr><td style="padding:8px;border:1px solid #ddd"><strong>App Name</strong></td><td style="padding:8px;border:1px solid #ddd">{{app_name}}</td></tr>\n  <tr><td style="padding:8px;border:1px solid #ddd"><strong>Registered By</strong></td><td style="padding:8px;border:1px solid #ddd">{{registered_by}}</td></tr>\n  <tr><td style="padding:8px;border:1px solid #ddd"><strong>Timestamp</strong></td><td style="padding:8px;border:1px solid #ddd">{{registered_at}}</td></tr>\n</table>\n<hr/><p style="font-size:12px;color:#888">nub5-dev Automated Notification</p>\n</body></html>',
+  'Sent to notify admin when a new application is registered or cloned. Variables: {{app_name}}, {{registered_by}}, {{registered_at}}'
+),
+(
+  'Account Lockout Warning',
+  'account_lockout',
+  'Security Alert: Account Temporarily Locked - {{app_name}}',
+  '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:auto\">\n<h2 style="color:#ef4444\">Security Alert: Account Locked</h2>\n<p>Hi {{user_name}},</p>\n<p>Your account has been temporarily locked due to too many failed login attempts.</p>\n<p><strong>Lockout Duration:</strong> {{lockout_duration}} minutes</p>\n<p>If this was not you, someone may be trying to access your account.</p>\n<hr/><p style="font-size:12px;color:#888">nub5-dev Automated Notification</p>\n</body></html>',
+  'Sent when a user account is locked. Variables: {{user_name}}, {{app_name}}, {{lockout_duration}}'
 );
 
 -- Seed System Users Form Definition (for GlobeAdmin Customization)
