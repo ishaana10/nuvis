@@ -81,6 +81,26 @@ class WorkflowEngine
         // Execute Action Hook
         $this->executeHook($transition, $instance, $userId);
 
+        // Trigger Outgoing Webhooks for workflow_advance
+        try {
+            require_once __DIR__ . '/WebhookSender.php';
+            NuWebhookSender::trigger('workflow_advance', [
+                'table'     => 'nu_workflow_instances',
+                'record_id' => $instanceId,
+                'data'      => [
+                    'instance_id'   => $instanceId,
+                    'workflow_name' => $instance['wf_name'] ?? '',
+                    'workflow_code' => $instance['wf_code'] ?? '',
+                    'action'        => $transition['wft_label'] ?? '',
+                    'from_stage_id' => $transition['wft_from_id'] ?? '',
+                    'to_stage_id'   => $transition['wft_to_id'] ?? '',
+                    'comment'       => $comment
+                ]
+            ]);
+        } catch (\Throwable $whe) {
+            error_log('[Webhook Workflow Advance Trigger Error] ' . $whe->getMessage());
+        }
+
         return true;
     }
 

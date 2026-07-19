@@ -2022,12 +2022,38 @@ function nu_handle_save() {
         if (!$sets) nu_json(['success' => false, 'error' => 'No fields to update'], 400);
         $params[] = $id;
         nu_q("UPDATE `{$table}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
+
+        // Trigger Outgoing Webhooks for form_update
+        try {
+            require_once __DIR__ . '/../core/WebhookSender.php';
+            NuWebhookSender::trigger('form_update', [
+                'table'     => $table,
+                'record_id' => $id,
+                'data'      => array_merge($save, ['id' => $id])
+            ]);
+        } catch (\Throwable $whe) {
+            error_log('[Webhook Dynamic Form Update Trigger Error] ' . $whe->getMessage());
+        }
+
         nu_json(['success' => true, 'id' => $id]);
     } else {
         $cols = array_keys($save);
         $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
         $newId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
+
+        // Trigger Outgoing Webhooks for form_insert
+        try {
+            require_once __DIR__ . '/../core/WebhookSender.php';
+            NuWebhookSender::trigger('form_insert', [
+                'table'     => $table,
+                'record_id' => $newId,
+                'data'      => array_merge($save, ['id' => $newId])
+            ]);
+        } catch (\Throwable $whe) {
+            error_log('[Webhook Dynamic Form Insert Trigger Error] ' . $whe->getMessage());
+        }
+
         nu_json(['success' => true, 'id' => $newId]);
     }
 }
