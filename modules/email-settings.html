@@ -740,6 +740,42 @@ code.slug {
   </div>
 </div>
 
+<!-- ============================================================
+     MODAL: Email Log Details
+============================================================ -->
+<div class="modal-overlay" id="logDetailsModal">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-header">
+      <span class="modal-title">Email Log Details</span>
+      <button class="modal-close" onclick="closeModal('logDetailsModal')">&#10005;</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;font-size:14px;line-height:1.5;">
+      <div style="font-weight:600;color:var(--color-text-muted);">Sent At:</div>
+      <div id="logSentAt"></div>
+
+      <div style="font-weight:600;color:var(--color-text-muted);">Recipient:</div>
+      <div id="logRecipient" style="word-break:break-all;"></div>
+
+      <div style="font-weight:600;color:var(--color-text-muted);">Subject:</div>
+      <div id="logSubject" style="font-weight:600;"></div>
+
+      <div style="font-weight:600;color:var(--color-text-muted);">Status:</div>
+      <div id="logStatus"></div>
+
+      <div style="font-weight:600;color:var(--color-text-muted);">Template:</div>
+      <div id="logTemplate"></div>
+
+      <div style="font-weight:600;color:var(--color-text-muted);">Error Message:</div>
+      <div id="logErrorMessage" style="color:var(--color-error);word-break:break-word;"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('logDetailsModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // THEME TOGGLE
@@ -991,7 +1027,7 @@ async function loadLogs() {
       return;
     }
     tbody.innerHTML = data.data.map(row => `
-      <tr>
+      <tr onclick='showLogDetails(${JSON.stringify(row).replace(/'/g,"&apos;").replace(/"/g,"&quot;")})' style="cursor:pointer">
         <td style="white-space:nowrap;color:var(--color-text-muted);font-size:var(--text-xs)">${esc(row.sent_at)}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(row.recipient)}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(row.subject)}</td>
@@ -1006,6 +1042,22 @@ async function loadLogs() {
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="5" style="color:var(--color-error)">Error: ${e.message}</td></tr>`;
   }
+}
+
+function showLogDetails(row) {
+  document.getElementById('logSentAt').textContent = row.sent_at || '';
+  document.getElementById('logRecipient').textContent = row.recipient || '';
+  document.getElementById('logSubject').textContent = row.subject || '';
+
+  const statusHtml = row.status === 'SENT'
+    ? '<span class="badge badge-success"><span class="status-dot status-sent"></span>Sent</span>'
+    : '<span class="badge badge-error"><span class="status-dot status-fail"></span>Failed</span>';
+  document.getElementById('logStatus').innerHTML = statusHtml;
+
+  document.getElementById('logTemplate').textContent = row.template_slug || 'None';
+  document.getElementById('logErrorMessage').textContent = row.error_message || 'None';
+
+  document.getElementById('logDetailsModal').classList.add('open');
 }
 
 // ============================================================

@@ -219,6 +219,40 @@ if (!$isAdmin) {
     </div>
   </div>
 
+  <!-- ── LOG DETAILS MODAL ────────────────────────────────────────── -->
+  <div id="esLogModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:24px;width:95%;max-width:600px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--color-divider);padding-bottom:10px;">
+        <h3 style="margin:0;font-size:16px;font-weight:600;">Email Log Details</h3>
+        <button class="modal-close" onclick="esCloseLogModal()" style="font-size:20px;cursor:pointer;background:none;border:none;color:var(--color-text-muted);">&times;</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;font-size:14px;line-height:1.5;">
+        <div style="font-weight:600;color:var(--color-text-muted);">Sent At:</div>
+        <div id="esLogSentAt"></div>
+
+        <div style="font-weight:600;color:var(--color-text-muted);">Recipient:</div>
+        <div id="esLogRecipient" style="word-break:break-all;"></div>
+
+        <div style="font-weight:600;color:var(--color-text-muted);">Subject:</div>
+        <div id="esLogSubject" style="font-weight:600;"></div>
+
+        <div style="font-weight:600;color:var(--color-text-muted);">Status:</div>
+        <div id="esLogStatus"></div>
+
+        <div style="font-weight:600;color:var(--color-text-muted);">Template:</div>
+        <div id="esLogTemplate"></div>
+
+        <div style="font-weight:600;color:var(--color-text-muted);">Error Message:</div>
+        <div id="esLogErrorMessage" style="color:var(--color-error);word-break:break-word;"></div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+        <button class="nu-btn nu-btn-ghost" onclick="esCloseLogModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <style>
@@ -549,7 +583,8 @@ if (!$isAdmin) {
       }
 
       tbody.innerHTML = data.data.map(function (row) {
-        return '<tr>' +
+        var rowJson = JSON.stringify(row).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+        return '<tr onclick=\'esShowLogDetails(' + rowJson + ')\' style="cursor:pointer;">' +
           '<td style="color:var(--color-text-muted);font-size:11px;white-space:nowrap;">' + esc(row.sent_at) + '</td>' +
           '<td>' + esc(row.recipient) + '</td>' +
           '<td style="font-weight:500;">' + esc(row.subject) + '</td>' +
@@ -563,6 +598,38 @@ if (!$isAdmin) {
       tbody.innerHTML = '<tr><td colspan="5" style="color:var(--color-error)">Failed to load logs: ' + e.message + '</td></tr>';
     }
   };
+
+  window.esShowLogDetails = function (row) {
+    document.getElementById('esLogSentAt').textContent = row.sent_at || '';
+    document.getElementById('esLogRecipient').textContent = row.recipient || '';
+    document.getElementById('esLogSubject').textContent = row.subject || '';
+
+    var statusHtml = row.status === 'SENT'
+      ? '<span class="badge" style="background:#d4dfcc;color:#437a22;"><span class="es-status-dot es-status-sent"></span>Sent</span>'
+      : '<span class="badge" style="background:#e0ced7;color:#a12c7b;"><span class="es-status-dot es-status-fail"></span>Failed</span>';
+    document.getElementById('esLogStatus').innerHTML = statusHtml;
+
+    document.getElementById('esLogTemplate').textContent = row.template_slug || 'None';
+    document.getElementById('esLogErrorMessage').textContent = row.error_message || 'None';
+
+    document.getElementById('esLogModal').style.display = 'flex';
+  };
+
+  window.esCloseLogModal = function () {
+    document.getElementById('esLogModal').style.display = 'none';
+  };
+
+  // Close modal on backdrop click
+  setTimeout(function () {
+    var modal = document.getElementById('esLogModal');
+    if (modal) {
+      modal.addEventListener('click', function (e) {
+        if (e.target === this) {
+          esCloseLogModal();
+        }
+      });
+    }
+  }, 100);
 
   // ── utility escaper ─────────────────────────────────────────────────
   function esc(s) {
