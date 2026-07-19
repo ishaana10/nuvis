@@ -118,7 +118,14 @@ class EmailService {
         $sock = @fsockopen($address, $port, $errno, $errstr, $timeout);
         if (!$sock) throw new \RuntimeException("SMTP connect failed ({$errno}): {$errstr}");
 
-        $recv = fgets($sock, 512);
+        $recv = '';
+        while ($line = fgets($sock, 512)) {
+            $recv .= $line;
+            if (strlen($line) >= 4 && $line[3] === '-') {
+                continue;
+            }
+            break;
+        }
         if (substr($recv, 0, 3) !== '220') throw new \RuntimeException("SMTP greeting failed: {$recv}");
 
         $this->smtpSend($sock, "EHLO " . gethostname());
@@ -180,7 +187,14 @@ class EmailService {
 
     private function smtpSend($sock, string $cmd, string $expectCode = null): string {
         fwrite($sock, $cmd . "\r\n");
-        $response = fgets($sock, 512);
+        $response = '';
+        while ($line = fgets($sock, 512)) {
+            $response .= $line;
+            if (strlen($line) >= 4 && $line[3] === '-') {
+                continue;
+            }
+            break;
+        }
         $code = substr($response, 0, 3);
         $expected = $expectCode ?? ($cmd === 'DATA' ? '354' : '2');
         if (strlen($expected) === 1 && $code[0] !== $expected) {
