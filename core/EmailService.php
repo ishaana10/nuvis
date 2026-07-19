@@ -137,9 +137,9 @@ class EmailService {
         }
 
         if ($this->config['smtp_auth']) {
-            $this->smtpSend($sock, 'AUTH LOGIN');
-            $this->smtpSend($sock, base64_encode((string)$this->config['smtp_username']));
-            $this->smtpSend($sock, base64_encode((string)$this->config['smtp_password']));
+            $this->smtpSend($sock, 'AUTH LOGIN', '334');
+            $this->smtpSend($sock, base64_encode((string)$this->config['smtp_username']), '334');
+            $this->smtpSend($sock, base64_encode((string)$this->config['smtp_password']), '235');
         }
 
         $fromEmail = $this->config['from_email'];
