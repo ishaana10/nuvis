@@ -1471,12 +1471,6 @@ entry.fields.forEach(function (f) {
     }
     var attrVal = e.getAttribute('value');
     var propVal = e.value;
-    if (!attrVal && !propVal) {
-      console.error('[nb-read] _val: both attr and prop empty for', sel,
-                    '| dsKey=', dsKey,
-                    '| dsVal=', card.dataset[dsKey],
-                    '| card.id=', card.id);
-    }
     return attrVal || propVal || '';
   };
 
