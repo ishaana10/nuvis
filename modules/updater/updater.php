@@ -91,6 +91,26 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
                 <div class="nu-upd-console" id="upd-git-console">Console output will appear here...</div>
             </div>
         </div>
+
+        <div class="nu-card" style="margin-top: 20px;">
+            <div class="nu-card-header"><h3 class="nu-card-title">Git Connection Configuration</h3></div>
+            <div class="nu-card-body">
+                <p style="margin-bottom:16px;font-size:14px">Configure custom paths and repository locations for Git commands.</p>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div class="nu-field">
+                        <label style="font-size: 13px; font-weight: 500; display: block; margin-bottom: 4px;">Git Executable Path</label>
+                        <input type="text" id="git_path" class="nu-input" placeholder="e.g. git or /usr/bin/git">
+                    </div>
+                    <div class="nu-field">
+                        <label style="font-size: 13px; font-weight: 500; display: block; margin-bottom: 4px;">Git Repository Root Directory</label>
+                        <input type="text" id="git_repo_dir" class="nu-input" placeholder="e.g. /app or /var/www/nbv5">
+                    </div>
+                </div>
+
+                <button class="nu-btn nu-btn-primary" onclick="nuUpdSaveGitSettings()">Save Connection Settings</button>
+            </div>
+        </div>
     </div>
 
     <!-- History -->
@@ -143,8 +163,16 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
                 document.getElementById('upd-stat-git').textContent = d.status.includes('nothing to commit') ? 'Up to date' : 'Modified';
                 document.getElementById('upd-status-console').textContent = d.status;
 
+                // Load connection settings values
+                if (document.getElementById('git_path')) {
+                    document.getElementById('git_path').value = d.git_path || 'git';
+                }
+                if (document.getElementById('git_repo_dir')) {
+                    document.getElementById('git_repo_dir').value = d.git_repo_dir || '';
+                }
+
                 const sel = document.getElementById('updaterBranchSelect');
-                if (sel.options.length <= 1 && d.remote_branches) {
+                if (d.remote_branches) {
                     sel.innerHTML = '';
                     d.remote_branches.forEach(b => {
                         let opt = document.createElement('option');
@@ -169,6 +197,31 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
                 alert('Branch preference saved.');
             } else {
                 alert('Error saving branch: ' + res.error);
+            }
+        });
+    };
+
+    window.nuUpdSaveGitSettings = function() {
+        const gitPath = document.getElementById('git_path').value;
+        const gitRepoDir = document.getElementById('git_repo_dir').value;
+        const branch = document.getElementById('updaterBranchSelect').value || 'main';
+
+        fetch(_api + '?action=save_git_settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                git_path: gitPath,
+                git_repo_dir: gitRepoDir,
+                update_branch: branch
+            })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                alert('Git Connection Settings saved successfully.');
+                nuUpdGetStatus();
+            } else {
+                alert('Error saving settings: ' + res.error);
             }
         });
     };
