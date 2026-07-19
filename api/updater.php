@@ -29,8 +29,8 @@ $action = (string)($_GET['action'] ?? '');
 try {
     switch ($action) {
         case 'git_status':
-            $status = shell_exec('git status 2>&1');
-            $branch = shell_exec('git rev-parse --abbrev-ref HEAD 2>&1');
+            $status = shell_exec('git -c safe.directory=* status 2>&1');
+            $branch = shell_exec('git -c safe.directory=* rev-parse --abbrev-ref HEAD 2>&1');
 
             $db = NuDatabase::getInstance();
             $db->query("CREATE TABLE IF NOT EXISTS `nu_settings` (
@@ -38,20 +38,12 @@ try {
                 `setting_value` TEXT NOT NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-            // Get selected update branch from DB (default to main)
+            // Get selected update branch from DB (default to main, but we always force/prefer main)
             $dbBranch = $db->fetchOne("SELECT setting_value FROM nu_settings WHERE setting_key = 'update_branch'");
-            $selectedBranch = $dbBranch ? $dbBranch['setting_value'] : 'main';
+            $selectedBranch = 'main';
 
-            // Get list of remote branches
-            $remoteBranchesRaw = shell_exec('git ls-remote --heads origin 2>&1');
-            $remoteBranches = [];
-            if ($remoteBranchesRaw) {
-                foreach (explode("\n", trim((string)$remoteBranchesRaw)) as $line) {
-                    if (preg_match('/refs\/heads\/(.+)$/', $line, $matches)) {
-                        $remoteBranches[] = $matches[1];
-                    }
-                }
-            }
+            // Get list of remote branches (we hardcode/force main)
+            $remoteBranches = ['main'];
 
             echo json_encode([
                 'success' => true,
@@ -59,51 +51,41 @@ try {
                 'branch'  => trim((string)$branch),
                 'version' => NU_VERSION,
                 'selected_branch' => $selectedBranch,
-                'remote_branches' => empty($remoteBranches) ? ['main'] : $remoteBranches
+                'remote_branches' => $remoteBranches
             ]);
             break;
 
         case 'save_branch':
-            $raw  = file_get_contents('php://input');
-            $body = json_decode($raw ?: '{}', true);
-            $newBranch = trim((string)($body['branch'] ?? 'main'));
-            if ($newBranch !== '') {
-                $db = NuDatabase::getInstance();
-                $db->query("CREATE TABLE IF NOT EXISTS `nu_settings` (
-                    `setting_key` VARCHAR(100) NOT NULL PRIMARY KEY,
-                    `setting_value` TEXT NOT NULL
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-                $db->query("INSERT INTO nu_settings (setting_key, setting_value) VALUES ('update_branch', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$newBranch, $newBranch]);
-                echo json_encode(['success' => true]);
-            } else {
-                echo json_encode(['success' => false, 'error' => 'Branch cannot be empty']);
-            }
+            // Since we always force/prefer 'main', we override any saved branch preference to 'main'
+            $newBranch = 'main';
+            $db = NuDatabase::getInstance();
+            $db->query("CREATE TABLE IF NOT EXISTS `nu_settings` (
+                `setting_key` VARCHAR(100) NOT NULL PRIMARY KEY,
+                `setting_value` TEXT NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            $db->query("INSERT INTO nu_settings (setting_key, setting_value) VALUES ('update_branch', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$newBranch, $newBranch]);
+            echo json_encode(['success' => true]);
             break;
 
         case 'git_fetch':
-            $output = shell_exec('git fetch origin 2>&1');
+            $output = shell_exec('git -c safe.directory=* fetch origin 2>&1');
             echo json_encode(['success' => true, 'output' => trim((string)$output)]);
             break;
 
         case 'git_pull':
-            // Pulling into selected branch
-            $db = NuDatabase::getInstance();
-            $dbBranch = null;
-            try {
-                $dbBranch = $db->fetchOne("SELECT setting_value FROM nu_settings WHERE setting_key = 'update_branch'");
-            } catch (Throwable $e) {}
-            $selectedBranch = $dbBranch ? $dbBranch['setting_value'] : 'main';
+            // Pulling into selected branch (always main)
+            $selectedBranch = 'main';
             $selectedBranchEscaped = escapeshellarg($selectedBranch);
 
             // Switch branch and pull
-            shell_exec("git checkout {$selectedBranchEscaped} 2>&1");
-            $output = shell_exec("git pull origin {$selectedBranchEscaped} 2>&1");
+            shell_exec("git -c safe.directory=* checkout {$selectedBranchEscaped} 2>&1");
+            $output = shell_exec("git -c safe.directory=* pull origin {$selectedBranchEscaped} 2>&1");
             echo json_encode(['success' => true, 'output' => trim((string)$output), 'pulled_branch' => $selectedBranch]);
             break;
 
         case 'git_log':
             $limit  = min(50, max(1, (int)($_GET['limit'] ?? 10)));
-            $output = shell_exec("git log -n $limit --pretty=format:'%h|%an|%ar|%s' 2>&1");
+            $output = shell_exec("git -c safe.directory=* log -n $limit --pretty=format:'%h|%an|%ar|%s' 2>&1");
             $lines  = explode("\n", trim((string)$output));
             $commits = [];
             foreach ($lines as $line) {
