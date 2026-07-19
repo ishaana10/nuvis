@@ -11,7 +11,7 @@ $db    = NuDatabase::getInstance();
 $users = $db->fetchAll("SELECT * FROM nu_users ORDER BY usr_id DESC");
 $roles = $db->fetchAll("SELECT role_code, role_name FROM nu_roles ORDER BY role_name");
 
-// Load unified user field definitions
+// Get unified user field definitions
 $fieldsDef = nu_get_user_fields_def($db);
 $systemFields = [];
 $customFields = [];
@@ -20,6 +20,22 @@ foreach ($fieldsDef as $fd) {
         $systemFields[] = $fd;
     } else {
         $customFields[] = $fd;
+    }
+}
+
+/**
+ * Fetch dynamic select option values from database lookup table/field
+ */
+function nu_get_lookup_options(NuDatabase $db, string $table, string $field): array {
+    $table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    $field = preg_replace('/[^a-zA-Z0-9_]/', '', $field);
+    if (!$table || !$field) return [];
+
+    try {
+        $rows = $db->fetchAll("SELECT DISTINCT `{$field}` as opt FROM `{$table}` WHERE `{$field}` IS NOT NULL AND `{$field}` != '' ORDER BY `{$field}` ASC LIMIT 100");
+        return array_column($rows, 'opt');
+    } catch (Exception $e) {
+        return [];
     }
 }
 ?>
@@ -127,8 +143,13 @@ foreach ($fieldsDef as $fd) {
     <?php foreach ($customFields as $cf): ?>
     <div class="nu-field" style="margin-bottom:12px;">
       <label style="font-size:13px;display:block;margin-bottom:4px;"><?php echo htmlspecialchars($cf['label']); ?><?php echo !empty($cf['global']) ? ' <span style="font-size:11px;color:#1a6fad;">(global)</span>' : ''; ?></label>
-      <?php if (($cf['type'] ?? 'text') === 'select' && !empty($cf['options'])):
-          $optsArray = array_map('trim', explode(',', $cf['options']));
+      <?php if (($cf['type'] ?? 'text') === 'select'):
+          $optsArray = [];
+          if (!empty($cf['lookup_table']) && !empty($cf['lookup_field'])) {
+              $optsArray = nu_get_lookup_options($db, $cf['lookup_table'], $cf['lookup_field']);
+          } elseif (!empty($cf['options'])) {
+              $optsArray = array_map('trim', explode(',', $cf['options']));
+          }
       ?>
       <select class="nu-input" id="um_meta_<?php echo htmlspecialchars($cf['key']); ?>" data-meta-key="<?php echo htmlspecialchars($cf['key']); ?>">
         <option value="">— select —</option>
@@ -157,7 +178,7 @@ foreach ($fieldsDef as $fd) {
 
 <!-- ═══ MANAGE FIELDS MODAL ════════════════════════════════════════════════ -->
 <div id="manageFieldsModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10001;align-items:center;justify-content:center;">
-  <div style="background:var(--card-bg,#fff);border-radius:12px;padding:28px;width:95%;max-width:850px;max-height:90vh;overflow-y:auto;">
+  <div style="background:var(--card-bg,#fff);border-radius:12px;padding:28px;width:95%;max-width:920px;max-height:90vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
       <h4 style="margin:0;font-size:18px;">Manage User Fields</h4>
       <button onclick="Users.closeManageFieldsModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666;">✕</button>
@@ -174,7 +195,7 @@ foreach ($fieldsDef as $fd) {
             <th>Field Key</th>
             <th>Label</th>
             <th>Type</th>
-            <th>Options (for select)</th>
+            <th>Options / Database Lookup</th>
             <th style="text-align:center;">Global Hash</th>
             <th style="text-align:center;">Actions</th>
           </tr>
@@ -199,6 +220,8 @@ foreach ($fieldsDef as $fd) {
 var Users = (() => {
   const $ = id => document.getElementById(id);
   let currentFieldsDef = [];
+  let dbTablesList = [];
+  let dbColumnsCache = {};
 
   function toast(msg, type) {
     if (window.NuApp && NuApp.toast) NuApp.toast(msg, type);
@@ -296,7 +319,14 @@ var Users = (() => {
     } catch(e) { toast(e.message, 'error'); }
   }
 
-  function openManageFields() {
+  async function openManageFields() {
+    try {
+      const data = await api('api/users.php?action=get_tables');
+      dbTablesList = data.tables || [];
+    } catch (e) {
+      console.error('Failed to load table list', e);
+    }
+
     currentFieldsDef = <?php echo json_encode(nu_get_user_fields_def($db)); ?>;
     renderFieldsTable();
     $('manageFieldsModalOverlay').style.display = 'flex';
@@ -304,6 +334,35 @@ var Users = (() => {
 
   function closeManageFieldsModal() {
     $('manageFieldsModalOverlay').style.display = 'none';
+  }
+
+  async function loadTableColumns(tableName, selectFieldElement, selectedValue) {
+    if (!tableName) {
+      selectFieldElement.innerHTML = '<option value="">— select field —</option>';
+      return;
+    }
+    if (dbColumnsCache[tableName]) {
+      populateFieldDropdown(selectFieldElement, dbColumnsCache[tableName], selectedValue);
+      return;
+    }
+    try {
+      const data = await api(`api/users.php?action=get_columns&table=${tableName}`);
+      dbColumnsCache[tableName] = data.columns || [];
+      populateFieldDropdown(selectFieldElement, dbColumnsCache[tableName], selectedValue);
+    } catch (e) {
+      toast('Failed to load table columns', 'error');
+    }
+  }
+
+  function populateFieldDropdown(el, cols, selectedValue) {
+    el.innerHTML = '<option value="">— select field —</option>';
+    cols.forEach(col => {
+      const opt = document.createElement('option');
+      opt.value = col;
+      opt.textContent = col;
+      if (col === selectedValue) opt.selected = true;
+      el.appendChild(opt);
+    });
   }
 
   function renderFieldsTable() {
@@ -354,7 +413,15 @@ var Users = (() => {
           if (f.type === t) opt.selected = true;
           selectType.appendChild(opt);
         });
-        selectType.onchange = (e) => { f.type = e.target.value; renderFieldsTable(); };
+        selectType.onchange = (e) => {
+          f.type = e.target.value;
+          if (f.type !== 'select') {
+            f.options = '';
+            f.lookup_table = '';
+            f.lookup_field = '';
+          }
+          renderFieldsTable();
+        };
         tdType.appendChild(selectType);
       }
       tr.appendChild(tdType);
@@ -362,6 +429,27 @@ var Users = (() => {
       // Options (select)
       const tdOptions = document.createElement('td');
       if (!f.is_system && f.type === 'select') {
+        const container = document.createElement('div');
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.gap = '4px';
+
+        const srcSelect = document.createElement('select');
+        srcSelect.className = 'nu-input';
+        srcSelect.style.padding = '2px 4px';
+        srcSelect.style.fontSize = '12px';
+
+        const optStatic = document.createElement('option');
+        optStatic.value = 'static';
+        optStatic.textContent = 'Static List';
+        srcSelect.appendChild(optStatic);
+
+        const optDb = document.createElement('option');
+        optDb.value = 'db';
+        optDb.textContent = 'Database Table';
+        srcSelect.appendChild(optDb);
+
+        const staticDiv = document.createElement('div');
         const inputOptions = document.createElement('input');
         inputOptions.type = 'text';
         inputOptions.className = 'nu-input';
@@ -369,7 +457,74 @@ var Users = (() => {
         inputOptions.placeholder = 'comma,separated,options';
         inputOptions.value = f.options || '';
         inputOptions.oninput = (e) => { f.options = e.target.value; };
-        tdOptions.appendChild(inputOptions);
+        staticDiv.appendChild(inputOptions);
+
+        const dbDiv = document.createElement('div');
+        dbDiv.style.display = 'flex';
+        dbDiv.style.gap = '4px';
+
+        const tblSelect = document.createElement('select');
+        tblSelect.className = 'nu-input';
+        tblSelect.style.padding = '2px 4px';
+        tblSelect.style.fontSize = '12px';
+        tblSelect.innerHTML = '<option value="">— select table —</option>';
+        dbTablesList.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t;
+          if (f.lookup_table === t) opt.selected = true;
+          tblSelect.appendChild(opt);
+        });
+
+        const fldSelect = document.createElement('select');
+        fldSelect.className = 'nu-input';
+        fldSelect.style.padding = '2px 4px';
+        fldSelect.style.fontSize = '12px';
+        fldSelect.innerHTML = '<option value="">— select field —</option>';
+
+        tblSelect.onchange = (e) => {
+          f.lookup_table = e.target.value;
+          f.lookup_field = '';
+          loadTableColumns(f.lookup_table, fldSelect, '');
+        };
+
+        fldSelect.onchange = (e) => {
+          f.lookup_field = e.target.value;
+        };
+
+        dbDiv.appendChild(tblSelect);
+        dbDiv.appendChild(fldSelect);
+
+        const isDb = !!f.lookup_table;
+        if (isDb) {
+          srcSelect.value = 'db';
+          staticDiv.style.display = 'none';
+          dbDiv.style.display = 'flex';
+          loadTableColumns(f.lookup_table, fldSelect, f.lookup_field);
+        } else {
+          srcSelect.value = 'static';
+          staticDiv.style.display = 'block';
+          dbDiv.style.display = 'none';
+        }
+
+        srcSelect.onchange = (e) => {
+          if (e.target.value === 'db') {
+            staticDiv.style.display = 'none';
+            dbDiv.style.display = 'flex';
+            f.options = '';
+            loadTableColumns(tblSelect.value, fldSelect, f.lookup_field);
+          } else {
+            staticDiv.style.display = 'block';
+            dbDiv.style.display = 'none';
+            f.lookup_table = '';
+            f.lookup_field = '';
+          }
+        };
+
+        container.appendChild(srcSelect);
+        container.appendChild(staticDiv);
+        container.appendChild(dbDiv);
+        tdOptions.appendChild(container);
       } else {
         tdOptions.innerHTML = '<span style="color:#cbd5e1">—</span>';
       }
@@ -413,6 +568,8 @@ var Users = (() => {
       label: '',
       type: 'text',
       options: '',
+      lookup_table: '',
+      lookup_field: '',
       is_system: false,
       global: false
     });
