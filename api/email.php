@@ -250,7 +250,7 @@ try {
         case 'logs':
             $limit  = min((int)($_GET['limit']  ?? 50), 200);
             $offset = (int)($_GET['offset'] ?? 0);
-            $logs   = $db->fetchAll("SELECT * FROM nu_email_log ORDER BY sent_at DESC LIMIT ? OFFSET ?", [$limit, $offset]);
+            $logs   = $db->fetchAll("SELECT * FROM nu_email_log ORDER BY sent_at DESC LIMIT " . (int)$limit . " OFFSET " . (int)$offset);
             $countRow = $db->fetchOne("SELECT COUNT(*) AS c FROM nu_email_log");
             $total  = (int)($countRow['c'] ?? 0);
             echo json_encode(['success' => true, 'data' => $logs, 'total' => $total]);
