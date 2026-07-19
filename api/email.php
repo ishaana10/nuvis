@@ -15,12 +15,12 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../core/Database.php';
 require_once __DIR__ . '/../core/EmailService.php';
+require_once __DIR__ . '/../core/Auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-// Auth guard
-if (session_status() === PHP_SESSION_NONE) session_start();
-if (empty($_SESSION['user_id'])) {
+$auth = new NuAuth();
+if (!$auth->checkAuth()) {
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'Unauthorised']);
     exit;
@@ -140,7 +140,8 @@ try {
 
         // ------------------------------------------------------------------
         case 'test':
-            $to  = $input['to'] ?? ($_SESSION['user_email'] ?? '');
+            $currentUser = $auth->getCurrentUser();
+            $to  = $input['to'] ?? ($currentUser['usr_email'] ?? '');
             if (!$to) throw new \InvalidArgumentException('Recipient email required.');
             $svc    = new EmailService();
             $result = $svc->send($to, 'nub5-dev Email Test', '<h2 style="font-family:sans-serif">Email system working ✓</h2><p style="font-family:sans-serif">Your nub5-dev email configuration is correct.</p>');
