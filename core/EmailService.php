@@ -234,4 +234,72 @@ class EmailService {
             ]);
         } catch (\Throwable $t) {}
     }
+
+    private function normalizeRecipients($to): array {
+        $recipients = [];
+        if (is_string($to)) {
+            $parts = explode(',', $to);
+            foreach ($parts as $part) {
+                $part = trim($part);
+                if (empty($part)) continue;
+                if (preg_match('/^(.*?)\s*<(.*?)>$/', $part, $matches)) {
+                    $email = trim($matches[2]);
+                    $name  = trim($matches[1], ' "\'');
+                    $recipients[$email] = $name;
+                } else {
+                    $recipients[$part] = '';
+                }
+            }
+        } elseif (is_array($to)) {
+            foreach ($to as $key => $val) {
+                if (is_int($key)) {
+                    $val = trim($val);
+                    if (preg_match('/^(.*?)\s*<(.*?)>$/', $val, $matches)) {
+                        $recipients[trim($matches[2])] = trim($matches[1], ' "\'');
+                    } else {
+                        $recipients[$val] = '';
+                    }
+                } else {
+                    $recipients[trim($key)] = trim($val);
+                }
+            }
+        }
+        return $recipients;
+    }
+
+    private function formatRecipients($to): string {
+        $normalized = $this->normalizeRecipients($to);
+        $formatted = [];
+        foreach ($normalized as $email => $name) {
+            if ($name !== '') {
+                $formatted[] = "\"$name\" <$email>";
+            } else {
+                $formatted[] = $email;
+            }
+        }
+        return implode(', ', $formatted);
+    }
+
+    private function buildHeaders(array $options): string {
+        $fromEmail = $this->config['from_email'];
+        $fromName  = $this->config['from_name'];
+        $fromStr   = $fromName ? "{$fromName} <{$fromEmail}>" : $fromEmail;
+        $replyTo   = $options['reply_to'] ?? $this->config['reply_to'];
+
+        $headers  = "From: {$fromStr}\r\n";
+        if ($replyTo) {
+            $headers .= "Reply-To: {$replyTo}\r\n";
+        }
+        if (!empty($options['cc'])) {
+            $cc = is_array($options['cc']) ? implode(', ', $options['cc']) : $options['cc'];
+            $headers .= "Cc: {$cc}\r\n";
+        }
+        if (!empty($options['bcc'])) {
+            $bcc = is_array($options['bcc']) ? implode(', ', $options['bcc']) : $options['bcc'];
+            $headers .= "Bcc: {$bcc}\r\n";
+        }
+        $headers .= "MIME-Version: 1.0\r\n";
+        $headers .= "X-Mailer: nub5-dev\r\n";
+        return $headers;
+    }
 }
