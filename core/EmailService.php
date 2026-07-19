@@ -198,9 +198,15 @@ class EmailService {
         $code = substr($response, 0, 3);
         $expected = $expectCode ?? ($cmd === 'DATA' ? '354' : '2');
         if (strlen($expected) === 1 && $code[0] !== $expected) {
-            throw new \RuntimeException("SMTP error for [{$cmd}]: {$response}");
+            $parts = explode(' ', trim($cmd));
+            $firstWord = strtoupper($parts[0] ?? '');
+            $displayCmd = in_array($firstWord, ['EHLO', 'HELO', 'MAIL', 'RCPT', 'DATA', 'QUIT', 'STARTTLS', 'AUTH']) ? $cmd : '***';
+            throw new \RuntimeException("SMTP error for [{$displayCmd}]: {$response}");
         } elseif (strlen($expected) === 3 && $code !== $expected) {
-            throw new \RuntimeException("SMTP error for [{$cmd}]: {$response}");
+            $parts = explode(' ', trim($cmd));
+            $firstWord = strtoupper($parts[0] ?? '');
+            $displayCmd = in_array($firstWord, ['EHLO', 'HELO', 'MAIL', 'RCPT', 'DATA', 'QUIT', 'STARTTLS', 'AUTH']) ? $cmd : '***';
+            throw new \RuntimeException("SMTP error for [{$displayCmd}]: {$response}");
         }
         return $response;
     }
