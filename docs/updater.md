@@ -6,7 +6,7 @@ The System Updater module manages core Git integrations and handles edits to the
 ---
 
 ## Architecture & Key Files
-- **`modules/updater/updater.php`**: Standard tabbed administrator viewport rendering version metrics, remote branches selectors, custom Git settings (Executable path and Directory root), fetch/pull action triggers, and integrated Ace editors.
+- **`modules/updater/updater.php`**: Standard tabbed administrator viewport rendering version metrics, remote branches selectors, custom Git settings (Executable path and Directory root), connection tester, fetch/pull action triggers, and integrated Ace editors.
 - **`api/updater.php`**: Secure administrative backend executing system CLI wrappers (such as `git status`, `git fetch`, `git pull`, and `git log`), reading configuration payloads, and writing validated code blocks.
 
 ---
@@ -33,6 +33,7 @@ Commands are verified inside `api/updater.php` to run solely when invoked by val
 | `/api/updater.php?action=git_status` | `GET` | `git_status` | Returns version numbers, active branches, configuration settings, and remote options. |
 | `/api/updater.php?action=save_branch` | `POST` | `save_branch` | Saves only the active update branch preference. |
 | `/api/updater.php?action=save_git_settings` | `POST` | `save_git_settings` | Persists custom Git paths and repository configuration to database. |
+| `/api/updater.php?action=test_git_settings` | `POST` | `test_git_settings` | Validates specified paths and checks if git is executable and repo directory is correct. |
 | `/api/updater.php?action=git_fetch` | `GET` | `git_fetch` | Connects to remote origin repositories to index incoming files using configured settings. |
 | `/api/updater.php?action=git_pull` | `GET` | `git_pull` | Runs pull sequences to merge latest branch revisions into current directory. |
 | `/api/updater.php?action=git_log` | `GET` | `git_log` | Returns a list of the 20 most recent repository commits (hash, author, date, message). |
@@ -47,7 +48,16 @@ Commands are verified inside `api/updater.php` to run solely when invoked by val
 To configure your Git integration, go to **Updates** tab under **System Updater & Config**.
 1. Set the **Git Executable Path** (usually `git` or `/usr/bin/git`).
 2. Set the **Git Repository Root Directory** (the full absolute path to the folder containing `.git`, such as `/home/user/public_html/nbv5`).
-3. Click **Save Connection Settings**.
+3. Click **⚡ Test Git Connection** to verify that both options are valid.
+4. Click **Save Connection Settings** to store settings permanently.
+
+### Troubleshooting Common Configuration Errors
+* **Error: `gh repo clone ishaana10/nuvis: No such file or directory` or command not found**
+  - **Cause:** You pasted the full GitHub CLI command (`gh repo clone...` or `git clone...`) into the **Git Executable Path** field.
+  - **Solution:** Change the Git Executable Path back to simply `git`. Do not input clone commands.
+* **Error: `fatal: not a git repository (or any of the parent directories): .git`**
+  - **Cause:** The **Git Repository Root Directory** is incorrect, or pointing to a directory that doesn't contain the `.git` metadata folder.
+  - **Solution:** Verify the full path of your application directory and ensure the `.git` folder exists. Set the field to the exact absolute path (e.g. `/home/user/public_html/nbv5`).
 
 ### SSH Keys & Host Permissions
 - Ensure the user running the PHP/Apache server process has sufficient permissions to write to the repository files.

@@ -145,6 +145,16 @@ try {
             if (!$gitPath) {
                 $gitPath = 'git';
             }
+
+            // Check for spaces/clone commands to prevent misconfiguration errors
+            if (preg_match('/\s+/', $gitPath) || stripos($gitPath, 'clone') !== false || stripos($gitPath, 'gh ') !== false) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => "Invalid Git Executable Path: Please enter only 'git' or the absolute path to the git binary (e.g. '/usr/bin/git'). Do NOT enter clone or checkout commands."
+                ]);
+                break;
+            }
+
             if (!$gitRepoDir) {
                 $gitRepoDir = realpath(__DIR__ . '/..') ?: '/app';
             }
@@ -163,6 +173,72 @@ try {
             $db->query("INSERT INTO nu_settings (setting_key, setting_value) VALUES ('update_branch', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$updateBranch, $updateBranch]);
 
             echo json_encode(['success' => true]);
+            break;
+
+        case 'test_git_settings':
+            $raw  = file_get_contents('php://input');
+            $body = json_decode($raw ?: '{}', true);
+            $gitPath = trim((string)($body['git_path'] ?? ''));
+            $gitRepoDir = trim((string)($body['git_repo_dir'] ?? ''));
+
+            if (!$gitPath) {
+                echo json_encode(['success' => false, 'error' => 'Git Executable Path cannot be empty.']);
+                break;
+            }
+
+            // Reject commands containing multiple words or clone arguments to prevent common configuration mistakes
+            if (preg_match('/\s+/', $gitPath) || stripos($gitPath, 'clone') !== false || stripos($gitPath, 'gh ') !== false) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => "Invalid Git Executable Path: Please enter only 'git' or the absolute path to the git binary (e.g. '/usr/bin/git'). Do NOT enter clone or checkout commands here."
+                ]);
+                break;
+            }
+
+            if (!$gitRepoDir) {
+                echo json_encode(['success' => false, 'error' => 'Git Repository Root Directory cannot be empty.']);
+                break;
+            }
+
+            if (!is_dir($gitRepoDir)) {
+                echo json_encode(['success' => false, 'error' => "The directory '{$gitRepoDir}' does not exist or is not accessible."]);
+                break;
+            }
+
+            if (!is_dir(rtrim($gitRepoDir, '/') . '/.git')) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => "The directory '{$gitRepoDir}' exists, but it does not appear to be a git repository (no '.git' directory found)."
+                ]);
+                break;
+            }
+
+            // Verify the Git binary is executable and works by running --version
+            $gitEscaped = escapeshellarg($gitPath);
+            $versionOutput = shell_exec("{$gitEscaped} --version 2>&1");
+            if (!$versionOutput || stripos($versionOutput, 'version') === false) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => "Failed to run Git with path '{$gitPath}'. Error details: " . trim((string)$versionOutput)
+                ]);
+                break;
+            }
+
+            // Run a quick status test using the custom prefix
+            $gitCmdPrefix = $gitEscaped . " -C " . escapeshellarg($gitRepoDir) . " -c safe.directory=* ";
+            $statusOutput = shell_exec($gitCmdPrefix . 'status 2>&1');
+            if (stripos($statusOutput, 'fatal:') !== false) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => "Git executable is working, but repository check failed. Git output: " . trim((string)$statusOutput)
+                ]);
+                break;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "Connection successful!\nGit version: " . trim((string)$versionOutput) . "\nRepository status: OK"
+            ]);
             break;
 
         case 'git_fetch':

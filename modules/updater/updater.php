@@ -95,20 +95,31 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
         <div class="nu-card" style="margin-top: 20px;">
             <div class="nu-card-header"><h3 class="nu-card-title">Git Connection Configuration</h3></div>
             <div class="nu-card-body">
-                <p style="margin-bottom:16px;font-size:14px">Configure custom paths and repository locations for Git commands.</p>
+                <p style="margin-bottom:16px;font-size:14px;color:var(--text-muted)">Configure custom paths and repository locations for Git commands. This ensures updates run correctly on any server directory structure.</p>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                     <div class="nu-field">
-                        <label style="font-size: 13px; font-weight: 500; display: block; margin-bottom: 4px;">Git Executable Path</label>
-                        <input type="text" id="git_path" class="nu-input" placeholder="e.g. git or /usr/bin/git">
+                        <label style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px;">Git Executable Path</label>
+                        <input type="text" id="git_path" class="nu-input" placeholder="e.g. git" style="font-family: monospace;">
+                        <span style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 6px; line-height: 1.4;">
+                            <strong>Note:</strong> Enter only the command name <code>git</code> or the absolute binary path (e.g., <code>/usr/bin/git</code>). <br>
+                            <span style="color: #e11d48; font-weight: 600;">DO NOT paste <code>git clone</code> or <code>gh repo clone</code> commands here.</span>
+                        </span>
                     </div>
                     <div class="nu-field">
-                        <label style="font-size: 13px; font-weight: 500; display: block; margin-bottom: 4px;">Git Repository Root Directory</label>
-                        <input type="text" id="git_repo_dir" class="nu-input" placeholder="e.g. /app or /var/www/nbv5">
+                        <label style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px;">Git Repository Root Directory</label>
+                        <input type="text" id="git_repo_dir" class="nu-input" placeholder="e.g. /home/ictfjcom/public_html/nuvis81" style="font-family: monospace;">
+                        <span style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 6px; line-height: 1.4;">
+                            <strong>Note:</strong> Specify the full server path where the application is installed and where the <code>.git</code> folder lives.<br>
+                            For example: <code>/home/ictfjcom/public_html/nuvis81</code>
+                        </span>
                     </div>
                 </div>
 
-                <button class="nu-btn nu-btn-primary" onclick="nuUpdSaveGitSettings()">Save Connection Settings</button>
+                <div style="display: flex; gap: 12px;">
+                    <button class="nu-btn nu-btn-ghost" onclick="nuUpdTestGitSettings()">⚡ Test Git Connection</button>
+                    <button class="nu-btn nu-btn-primary" onclick="nuUpdSaveGitSettings()">Save Connection Settings</button>
+                </div>
             </div>
         </div>
     </div>
@@ -223,6 +234,38 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
             } else {
                 alert('Error saving settings: ' + res.error);
             }
+        });
+    };
+
+    window.nuUpdTestGitSettings = function() {
+        const gitPath = document.getElementById('git_path').value;
+        const gitRepoDir = document.getElementById('git_repo_dir').value;
+
+        var consoleOutput = document.getElementById('upd-git-console');
+        consoleOutput.textContent = 'Testing connection settings...\n';
+
+        fetch(_api + '?action=test_git_settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                git_path: gitPath,
+                git_repo_dir: gitRepoDir
+            })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                alert('Success!\n\n' + res.message);
+                consoleOutput.textContent += 'SUCCESS:\n' + res.message;
+                nuUpdGetStatus(); // refresh branch listings
+            } else {
+                alert('Connection Test Failed:\n\n' + res.error);
+                consoleOutput.textContent += 'FAILED:\n' + res.error;
+            }
+        })
+        .catch(err => {
+            alert('Error during test: ' + err.message);
+            consoleOutput.textContent += 'ERROR:\n' + err.message;
         });
     };
 
