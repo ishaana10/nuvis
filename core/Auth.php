@@ -279,40 +279,48 @@ class NuAuth {
     }
 
     /**
-     * Load all 'global' meta values for a user from nu_user_meta.
+     * Load all 'global' meta values for a user.
+     * Supports system fields and dynamic fields saved in usr_custom_fields JSON.
      * Accepts string or int $userId to support both UUID and auto_increment modes.
-     * Returns an associative array: ['station' => 'North', ...]
+     * Returns an associative array of global hashes.
      *
      * @param mixed $userId  string (UUID) or int
      */
     private function loadGlobalMeta($userId): array {
-        $configFile = NU_ROOT . '/config.user_fields.php';
-        if (!file_exists($configFile)) return [];
-
-        $fieldDefs = include $configFile;
-        if (!is_array($fieldDefs)) return [];
-
-        // Collect the keys that are flagged as global
-        $globalKeys = [];
-        foreach ($fieldDefs as $def) {
-            if (!empty($def['global']) && !empty($def['key'])) {
-                $globalKeys[] = $def['key'];
-            }
-        }
-        if (empty($globalKeys)) return [];
-
-        // Fetch from DB — $userId is passed directly to PDO, no cast needed
-        $rows = $this->db->fetchAll(
-            "SELECT umeta_key, umeta_value FROM nu_user_meta WHERE umeta_user_id = :id",
+        $user = $this->db->fetchOne(
+            "SELECT * FROM nu_users WHERE usr_id = :id",
             [':id' => $userId]
         );
+        if (!$user) return [];
+
+        $fieldsDef = nu_get_user_fields_def($this->db);
+        if (empty($fieldsDef)) return [];
 
         $meta = [];
-        foreach ($rows as $row) {
-            if (in_array($row['umeta_key'], $globalKeys, true)) {
-                $meta[$row['umeta_key']] = $row['umeta_value'];
+        $customValues = json_decode($user['usr_custom_fields'] ?? '{}', true);
+
+        foreach ($fieldsDef as $f) {
+            if (!empty($f['global'])) {
+                $key = $f['key'];
+                if (!empty($f['is_system'])) {
+                    $val = $user[$key] ?? '';
+                    $meta[$key] = $val;
+                    $shortKey = str_replace('usr_', '', $key);
+                    $meta[$shortKey] = $val;
+                } else {
+                    $val = $customValues[$key] ?? null;
+                    if ($val === null) {
+                        $metaVal = $this->db->fetchOne(
+                            "SELECT umeta_value FROM nu_user_meta WHERE umeta_user_id = :id AND umeta_key = :k",
+                            [':id' => $userId, ':k' => $key]
+                        );
+                        $val = $metaVal ? $metaVal['umeta_value'] : '';
+                    }
+                    $meta[$key] = $val;
+                }
             }
         }
+
         return $meta;
     }
 
@@ -397,4 +405,60 @@ function base32_decode($input) {
         }
     }
     return $output;
+}
+
+function nu_ensure_custom_user_columns(NuDatabase $db) {
+    static $ensured = false;
+    if ($ensured) return;
+    try {
+        $db->query("SELECT usr_custom_fields FROM nu_users LIMIT 1");
+    } catch (Exception $e) {
+        try {
+            $db->exec("ALTER TABLE nu_users ADD COLUMN usr_custom_fields LONGTEXT DEFAULT NULL");
+        } catch (Exception $ex) {}
+    }
+    try {
+        $db->query("SELECT usr_custom_fields_def FROM nu_users LIMIT 1");
+    } catch (Exception $e) {
+        try {
+            $db->exec("ALTER TABLE nu_users ADD COLUMN usr_custom_fields_def LONGTEXT DEFAULT NULL");
+        } catch (Exception $ex) {}
+    }
+    $ensured = true;
+}
+
+function nu_get_user_fields_def(NuDatabase $db): array {
+    nu_ensure_custom_user_columns($db);
+    $row = $db->fetchOne("SELECT usr_custom_fields_def FROM nu_users WHERE usr_username = 'globeadmin'");
+    if ($row && !empty($row['usr_custom_fields_def'])) {
+        return json_decode($row['usr_custom_fields_def'], true);
+    }
+
+    // Default system fields
+    $defs = [
+        ['key' => 'usr_username', 'label' => 'Username', 'type' => 'text', 'is_system' => true, 'global' => false],
+        ['key' => 'usr_email', 'label' => 'Email', 'type' => 'email', 'is_system' => true, 'global' => false],
+        ['key' => 'usr_role', 'label' => 'Role', 'type' => 'select', 'is_system' => true, 'global' => false],
+        ['key' => 'usr_active', 'label' => 'Active', 'type' => 'checkbox', 'is_system' => true, 'global' => false],
+    ];
+
+    // Fallback to config.user_fields.php if exists
+    $metaConfigFile = NU_ROOT . '/config.user_fields.php';
+    if (file_exists($metaConfigFile)) {
+        $metaFields = include $metaConfigFile;
+        if (is_array($metaFields)) {
+            foreach ($metaFields as $mf) {
+                if (($mf['key'] ?? '') === 'user_id') continue;
+                $defs[] = [
+                    'key' => $mf['key'],
+                    'label' => $mf['label'],
+                    'type' => $mf['type'] ?? 'text',
+                    'options' => isset($mf['options']) ? implode(',', $mf['options']) : '',
+                    'is_system' => false,
+                    'global' => !empty($mf['global']),
+                ];
+            }
+        }
+    }
+    return $defs;
 }
