@@ -170,6 +170,8 @@ try {
                 if (isset($f['options'])) {
                     $f['options'] = trim((string)$f['options']);
                 }
+                $f['lookup_table'] = trim((string)($f['lookup_table'] ?? ''));
+                $f['lookup_field'] = trim((string)($f['lookup_field'] ?? ''));
             }
 
             nu_ensure_custom_user_columns($db);
@@ -179,6 +181,28 @@ try {
             );
 
             echo json_encode(['success' => true]);
+            break;
+        }
+
+        case 'get_tables': {
+            $currentUser = $auth->getCurrentUser();
+            if (!$currentUser || $currentUser['usr_username'] !== 'globeadmin') {
+                throw new Exception('Access denied.');
+            }
+            $tables = array_map('current', $db->fetchAll("SHOW TABLES"));
+            echo json_encode(['success' => true, 'tables' => $tables]);
+            break;
+        }
+
+        case 'get_columns': {
+            $currentUser = $auth->getCurrentUser();
+            if (!$currentUser || $currentUser['usr_username'] !== 'globeadmin') {
+                throw new Exception('Access denied.');
+            }
+            $table = preg_replace('/[^a-zA-Z0-9_]/', '', $_GET['table'] ?? '');
+            if (!$table) throw new Exception('Table name is required');
+            $cols = array_column($db->fetchAll("SHOW COLUMNS FROM `{$table}`"), 'Field');
+            echo json_encode(['success' => true, 'columns' => $cols]);
             break;
         }
 
