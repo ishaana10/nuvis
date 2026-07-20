@@ -271,6 +271,23 @@ function checkRequirement($name, $check, $required = true) {
                         }
                     }
 
+                    // Ensure all new columns on nu_menus exist, in case the table already existed
+                    try {
+                        $pdo->exec("ALTER TABLE nu_menus ADD COLUMN menu_role_access VARCHAR(512) DEFAULT NULL");
+                    } catch (PDOException $ignored) {}
+                    try {
+                        $pdo->exec("ALTER TABLE nu_menus ADD COLUMN menu_open_mode VARCHAR(30) NOT NULL DEFAULT 'inline|browse'");
+                    } catch (PDOException $ignored) {}
+                    try {
+                        $pdo->exec("ALTER TABLE nu_menus ADD COLUMN menu_browse_mode VARCHAR(10) NOT NULL DEFAULT 'inline'");
+                    } catch (PDOException $ignored) {}
+                    try {
+                        $pdo->exec("ALTER TABLE nu_menus ADD COLUMN menu_preview_mode VARCHAR(10) NOT NULL DEFAULT 'inline'");
+                    } catch (PDOException $ignored) {}
+                    try {
+                        $pdo->exec("ALTER TABLE nu_menus ADD COLUMN menu_default_view VARCHAR(10) NOT NULL DEFAULT 'browse'");
+                    } catch (PDOException $ignored) {}
+
                     $idLabel = $userIdType === 'uuid' ? 'UUID — VARCHAR(36) with DEFAULT (UUID())' : 'Auto Increment — INT';
                     echo '<div class="setup-success">Database installed successfully!<br>User ID type: <strong>' . htmlspecialchars($idLabel) . '</strong></div>';
                     echo '<div class="setup-actions">';
