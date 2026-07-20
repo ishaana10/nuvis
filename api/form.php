@@ -1053,6 +1053,19 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
         foreach (($node['children'] ?? []) as $child) {
             $html .= nu_render_layout_node($child, $record, $gi++);
         }
+
+        // Render rows if present (from canvas-level Group container)
+        $ROW_STYLE = 'display:grid;grid-template-columns:repeat(12,1fr);gap:8px;margin-bottom:4px;align-items:start;';
+        foreach (($node['rows'] ?? []) as $row) {
+            $fields = $row['fields'] ?? [];
+            if (empty($fields)) continue;
+            $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
+            foreach ($fields as $field) {
+                $html .= nu_render_field($field, nu_field_value($record, $field), $record);
+            }
+            $html .= '</div>';
+        }
+
         $html .= '</div></div>';
         return $html;
     }
@@ -1331,6 +1344,29 @@ function nu_inject_parent_context(array $layout, string $parentTable, string $pa
             $node['_parent_id']    = $parentId;
         } elseif (in_array($t, ['section', 'group', 'row'], true) && isset($node['children'])) {
             $node['children'] = nu_inject_parent_context($node['children'], $parentTable, $parentId);
+        }
+
+        // Also handle group/tab rows if present
+        if ($t === 'group' && isset($node['rows'])) {
+            foreach ($node['rows'] as &$row) {
+                if (isset($row['fields'])) {
+                    $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId);
+                }
+            }
+            unset($row);
+        }
+        if ($t === 'tab' && isset($node['tabs'])) {
+            foreach ($node['tabs'] as &$tab) {
+                if (isset($tab['rows'])) {
+                    foreach ($tab['rows'] as &$row) {
+                        if (isset($row['fields'])) {
+                            $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId);
+                        }
+                    }
+                    unset($row);
+                }
+            }
+            unset($tab);
         }
     }
     unset($node);
