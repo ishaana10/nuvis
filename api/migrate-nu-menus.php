@@ -36,6 +36,7 @@ try {
             `menu_order`     INT          NOT NULL DEFAULT 0,
             `menu_roles`     VARCHAR(1000) NOT NULL DEFAULT ''
                                 COMMENT 'Comma-separated role codes; empty = all roles',
+            `menu_role_access` VARCHAR(512) DEFAULT NULL,
             `menu_active`    TINYINT(1)   NOT NULL DEFAULT 1,
             `menu_icon`      VARCHAR(100) NOT NULL DEFAULT '☰',
             `menu_created_at` TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -62,6 +63,7 @@ try {
         'menu_parent_id'  => 'INT           NOT NULL DEFAULT 0',
         'menu_order'      => 'INT           NOT NULL DEFAULT 0',
         'menu_roles'      => "VARCHAR(1000) NOT NULL DEFAULT ''",
+        'menu_role_access' => "VARCHAR(512)  DEFAULT NULL",
         'menu_active'     => 'TINYINT(1)    NOT NULL DEFAULT 1',
         'menu_icon'       => "VARCHAR(100)  NOT NULL DEFAULT '☰'",
         'menu_created_at' => 'TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP',

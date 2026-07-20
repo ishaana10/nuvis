@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS `nu_menus` (
     `menu_parent_id` INT UNSIGNED NOT NULL DEFAULT 0,
     `menu_order` SMALLINT NOT NULL DEFAULT 0,
     `menu_roles` VARCHAR(500) NOT NULL DEFAULT '',
+    `menu_role_access` VARCHAR(512) DEFAULT NULL,
     `menu_active` TINYINT(1) NOT NULL DEFAULT 1,
     `menu_icon` VARCHAR(60) NOT NULL DEFAULT 'default',
     `menu_open_mode` VARCHAR(30) NOT NULL DEFAULT 'inline|browse',

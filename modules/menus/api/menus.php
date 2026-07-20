@@ -85,6 +85,7 @@ function mu_roles_to_array($stored): array {
 
 // ── AUTO-MIGRATE: ensure all columns exist ───────────────────────────────────
 $autoMigrations = [
+    "ALTER TABLE nu_menus ADD COLUMN menu_role_access  VARCHAR(512) DEFAULT NULL",
     "ALTER TABLE nu_menus ADD COLUMN menu_open_mode    VARCHAR(30)  NOT NULL DEFAULT 'inline|browse'",
     "ALTER TABLE nu_menus ADD COLUMN menu_browse_mode  VARCHAR(10)  NOT NULL DEFAULT 'inline'",
     "ALTER TABLE nu_menus ADD COLUMN menu_preview_mode VARCHAR(10)  NOT NULL DEFAULT 'inline'",
@@ -164,12 +165,12 @@ if ($action === 'create') {
         $db->query(
             "INSERT INTO nu_menus
              (menu_code, menu_label, menu_type, menu_target, menu_icon, menu_order,
-              menu_parent_id, menu_role_access, menu_active,
+              menu_parent_id, menu_role_access, menu_roles, menu_active,
               menu_open_mode, menu_browse_mode, menu_preview_mode, menu_default_view)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $code, $label, $type, $target, $icon, $order,
-                $parent ?: null, $rolesJson, $active,
+                $parent ?: null, $rolesJson, $rolesJson ?? '', $active,
                 $openMode, $browseMode, $previewMode, $defaultView
             ]
         );
@@ -208,6 +209,7 @@ if ($action === 'update') {
                menu_order        = ?,
                menu_parent_id    = ?,
                menu_role_access  = ?,
+               menu_roles        = ?,
                menu_active       = ?,
                menu_open_mode    = ?,
                menu_browse_mode  = ?,
@@ -216,7 +218,7 @@ if ($action === 'update') {
              WHERE menu_id = ?",
             [
                 $label, $type, $target, $icon, $order,
-                $parent ?: null, $rolesJson, $active,
+                $parent ?: null, $rolesJson, $rolesJson ?? '', $active,
                 $openMode, $browseMode, $previewMode, $defaultView,
                 $id
             ]
