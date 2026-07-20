@@ -77,13 +77,13 @@ try {
             // Construct git prefix command using -C and safe.directory
             $gitCmdPrefix = escapeshellarg($git_path) . " -C " . escapeshellarg($git_repo_dir) . " -c safe.directory=* ";
 
-            $status = shell_exec($gitCmdPrefix . 'status 2>&1');
-            $branch = shell_exec($gitCmdPrefix . 'rev-parse --abbrev-ref HEAD 2>&1');
+            $status = (string)shell_exec($gitCmdPrefix . 'status 2>&1');
+            $branch = (string)shell_exec($gitCmdPrefix . 'rev-parse --abbrev-ref HEAD 2>&1');
 
             // Dynamically query remote/local branches using branch -a
-            $branchesOutput = shell_exec($gitCmdPrefix . "branch -a 2>&1");
+            $branchesOutput = (string)shell_exec($gitCmdPrefix . "branch -a 2>&1");
             $remoteBranches = [];
-            if ($branchesOutput && strpos($branchesOutput, 'fatal:') === false) {
+            if ($branchesOutput && strpos($branchesOutput, 'fatal:') === false && strpos($branchesOutput, 'sh:') === false && strpos($branchesOutput, 'not found') === false) {
                 $lines = explode("\n", $branchesOutput);
                 foreach ($lines as $line) {
                     $line = trim($line, "* \t\r\n");
@@ -97,7 +97,8 @@ try {
                     } else {
                         $b = $line;
                     }
-                    if ($b && !in_array($b, $remoteBranches)) {
+                    // Validate branch name doesn't contain spaces, colons or error messages
+                    if ($b && !preg_match('/[\s:]/', $b) && !in_array($b, $remoteBranches)) {
                         $remoteBranches[] = $b;
                     }
                 }
@@ -108,9 +109,9 @@ try {
             }
 
             $remoteUrl = '';
-            $remoteUrlCheck = shell_exec($gitCmdPrefix . "config --get remote.origin.url 2>&1");
-            if ($remoteUrlCheck && stripos($remoteUrlCheck, 'fatal:') === false) {
-                $remoteUrl = trim((string)$remoteUrlCheck);
+            $remoteUrlCheck = (string)shell_exec($gitCmdPrefix . "config --get remote.origin.url 2>&1");
+            if ($remoteUrlCheck && stripos($remoteUrlCheck, 'fatal:') === false && stripos($remoteUrlCheck, 'sh:') === false) {
+                $remoteUrl = trim($remoteUrlCheck);
             }
             if (empty($remoteUrl)) {
                 $remoteUrl = $settings['git_remote_url'];
@@ -212,11 +213,11 @@ try {
 
             // Verify the Git binary works
             $gitEscaped = escapeshellarg($gitPath);
-            $versionOutput = shell_exec("{$gitEscaped} --version 2>&1");
+            $versionOutput = (string)shell_exec("{$gitEscaped} --version 2>&1");
             if (!$versionOutput || stripos($versionOutput, 'version') === false) {
                 echo json_encode([
                     'success' => false,
-                    'error' => "Failed to run Git with path '{$gitPath}'. Error details: " . trim((string)$versionOutput)
+                    'error' => "Failed to run Git with path '{$gitPath}'. Error details: " . trim($versionOutput)
                 ]);
                 break;
             }
@@ -227,8 +228,8 @@ try {
 
             // If .git already exists, we do not need to call init, just remote/fetch
             if (!is_dir(rtrim($gitRepoDir, '/') . '/.git')) {
-                $res = shell_exec($gitCmdPrefix . "init 2>&1");
-                $output .= "git init:\n" . trim((string)$res) . "\n\n";
+                $res = (string)shell_exec($gitCmdPrefix . "init 2>&1");
+                $output .= "git init:\n" . trim($res) . "\n\n";
             }
 
             // Save settings immediately so the user doesn't lose them
@@ -244,35 +245,35 @@ try {
 
             // Add or set remote origin
             // Check if origin already exists
-            $remoteCheck = shell_exec($gitCmdPrefix . "remote 2>&1");
+            $remoteCheck = (string)shell_exec($gitCmdPrefix . "remote 2>&1");
             if (stripos($remoteCheck, 'origin') !== false) {
-                $res = shell_exec($gitCmdPrefix . "remote set-url origin " . escapeshellarg($repoUrl) . " 2>&1");
-                $output .= "git remote set-url origin:\n" . trim((string)$res) . "\n\n";
+                $res = (string)shell_exec($gitCmdPrefix . "remote set-url origin " . escapeshellarg($repoUrl) . " 2>&1");
+                $output .= "git remote set-url origin:\n" . trim($res) . "\n\n";
             } else {
-                $res = shell_exec($gitCmdPrefix . "remote add origin " . escapeshellarg($repoUrl) . " 2>&1");
-                $output .= "git remote add origin:\n" . trim((string)$res) . "\n\n";
+                $res = (string)shell_exec($gitCmdPrefix . "remote add origin " . escapeshellarg($repoUrl) . " 2>&1");
+                $output .= "git remote add origin:\n" . trim($res) . "\n\n";
             }
 
             // Fetch
             $output .= "Fetching branches from origin...\n";
-            $res = shell_exec($gitCmdPrefix . "fetch origin 2>&1");
-            $output .= "git fetch:\n" . trim((string)$res) . "\n\n";
+            $res = (string)shell_exec($gitCmdPrefix . "fetch origin 2>&1");
+            $output .= "git fetch:\n" . trim($res) . "\n\n";
 
             // Track remote branch, checkout
             $branchEscaped = escapeshellarg($branch);
             $output .= "Checking out branch '{$branch}'...\n";
-            $res = shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} --track origin/{$branchEscaped} 2>&1");
-            if (stripos((string)$res, 'fatal:') !== false) {
+            $res = (string)shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} --track origin/{$branchEscaped} 2>&1");
+            if (stripos($res, 'fatal:') !== false) {
                 // Try checkout without track if remote tracking branch doesn't exist yet or if already tracked
-                $res = shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} origin/{$branchEscaped} 2>&1");
+                $res = (string)shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} origin/{$branchEscaped} 2>&1");
             }
-            $output .= "git checkout:\n" . trim((string)$res) . "\n\n";
+            $output .= "git checkout:\n" . trim($res) . "\n\n";
 
             // Because the files were uploaded manually, they might be marked as modified or git status might be messy.
             // Let's do a hard reset to match remote exactly to make sure update is clean.
             $output .= "Syncing with remote repository...\n";
-            $res = shell_exec($gitCmdPrefix . "reset --hard origin/{$branchEscaped} 2>&1");
-            $output .= "git reset --hard:\n" . trim((string)$res) . "\n\n";
+            $res = (string)shell_exec($gitCmdPrefix . "reset --hard origin/{$branchEscaped} 2>&1");
+            $output .= "git reset --hard:\n" . trim($res) . "\n\n";
 
             echo json_encode([
                 'success' => true,
@@ -321,22 +322,22 @@ try {
 
             // Verify the Git binary is executable and works by running --version
             $gitEscaped = escapeshellarg($gitPath);
-            $versionOutput = shell_exec("{$gitEscaped} --version 2>&1");
+            $versionOutput = (string)shell_exec("{$gitEscaped} --version 2>&1");
             if (!$versionOutput || stripos($versionOutput, 'version') === false) {
                 echo json_encode([
                     'success' => false,
-                    'error' => "Failed to run Git with path '{$gitPath}'. Error details: " . trim((string)$versionOutput)
+                    'error' => "Failed to run Git with path '{$gitPath}'. Error details: " . trim($versionOutput)
                 ]);
                 break;
             }
 
             // Run a quick status test using the custom prefix
             $gitCmdPrefix = $gitEscaped . " -C " . escapeshellarg($gitRepoDir) . " -c safe.directory=* ";
-            $statusOutput = shell_exec($gitCmdPrefix . 'status 2>&1');
+            $statusOutput = (string)shell_exec($gitCmdPrefix . 'status 2>&1');
             if (stripos($statusOutput, 'fatal:') !== false) {
                 echo json_encode([
                     'success' => false,
-                    'error' => "Git executable is working, but repository check failed. Git output: " . trim((string)$statusOutput)
+                    'error' => "Git executable is working, but repository check failed. Git output: " . trim($statusOutput)
                 ]);
                 break;
             }

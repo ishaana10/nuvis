@@ -325,7 +325,18 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
             return;
         }
 
-        if (!confirm('This will initialize a Git repository in ' + gitRepoDir + ', set the origin remote, and sync with ' + repoUrl + '. Any untracked local files of same names will be aligned with the remote. Do you want to proceed?')) {
+        // Ensure remote repository URL is sanitized (remove command prefixes like sh: git@... or git clone ...)
+        let cleanRepoUrl = repoUrl.trim();
+        if (cleanRepoUrl.startsWith('sh:')) {
+            cleanRepoUrl = cleanRepoUrl.substring(3).trim();
+        }
+        if (cleanRepoUrl.includes('git@github.com') && cleanRepoUrl.includes('sh:')) {
+            cleanRepoUrl = cleanRepoUrl.replace('sh:', '').trim();
+        }
+        // If they accidentally left a branch checkout or other command in there
+        cleanRepoUrl = cleanRepoUrl.split(' ')[0];
+
+        if (!confirm('This will initialize a Git repository in ' + gitRepoDir + ', set the origin remote, and sync with ' + cleanRepoUrl + '. Any untracked local files of same names will be aligned with the remote. Do you want to proceed?')) {
             return;
         }
 
@@ -338,7 +349,7 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
             body: JSON.stringify({
                 git_path: gitPath,
                 git_repo_dir: gitRepoDir,
-                repo_url: repoUrl,
+                repo_url: cleanRepoUrl,
                 branch: branch
             })
         })
