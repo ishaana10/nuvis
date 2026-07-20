@@ -600,6 +600,7 @@ VALUES
   ('Error Log',             'form', 'errorlog',          @admin_group,    60,  'globeadmin,admin',  1, 'alert', 'inline|browse', 'inline', 'inline', 'browse'),
   ('Password Policy',       'form', 'password_policy',   @admin_group,    70,  'globeadmin,admin',  1, 'shield', 'inline|browse', 'inline', 'inline', 'browse'),
   ('App Cloner',            'form', 'appcloner',         @admin_group,    80,  'globeadmin,admin',  1, 'copy', 'inline|browse', 'inline', 'inline', 'browse'),
+  ('Import / Export',       'form', 'import_export',     @admin_group,    85,  'globeadmin,admin',  1, 'clipboard', 'inline|browse', 'inline', 'inline', 'browse'),
   ('System Updater',        'form', 'updater',           @admin_group,    90,  'globeadmin,admin',  1, 'refresh', 'inline|browse', 'inline', 'inline', 'browse');
 
 INSERT IGNORE INTO `nu_menus`
