@@ -46,6 +46,39 @@ class NuDatabase {
             PDO::ATTR_EMULATE_PREPARES   => true,
         ];
         $this->pdo = new PDO($dsn, $user, $pass, $options);
+
+        // Ensure nu_menus columns exist in case of upgrade or existing database
+        $sessionActive = (session_status() === PHP_SESSION_ACTIVE);
+        if (!$sessionActive || empty($_SESSION['_nu_menu_columns_ensured'])) {
+            try {
+                $tableExists = $this->pdo->query("SHOW TABLES LIKE 'nu_menus'")->fetch();
+                if ($tableExists) {
+                    $columns = [];
+                    $stmt = $this->pdo->query("SHOW COLUMNS FROM `nu_menus`");
+                    while ($col = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        $columns[] = strtolower($col['Field']);
+                    }
+                    if (!in_array('menu_role_access', $columns, true)) {
+                        $this->pdo->exec("ALTER TABLE `nu_menus` ADD COLUMN `menu_role_access` VARCHAR(512) DEFAULT NULL");
+                    }
+                    if (!in_array('menu_open_mode', $columns, true)) {
+                        $this->pdo->exec("ALTER TABLE `nu_menus` ADD COLUMN `menu_open_mode` VARCHAR(30) NOT NULL DEFAULT 'inline|browse'");
+                    }
+                    if (!in_array('menu_browse_mode', $columns, true)) {
+                        $this->pdo->exec("ALTER TABLE `nu_menus` ADD COLUMN `menu_browse_mode` VARCHAR(10) NOT NULL DEFAULT 'inline'");
+                    }
+                    if (!in_array('menu_preview_mode', $columns, true)) {
+                        $this->pdo->exec("ALTER TABLE `nu_menus` ADD COLUMN `menu_preview_mode` VARCHAR(10) NOT NULL DEFAULT 'inline'");
+                    }
+                    if (!in_array('menu_default_view', $columns, true)) {
+                        $this->pdo->exec("ALTER TABLE `nu_menus` ADD COLUMN `menu_default_view` VARCHAR(10) NOT NULL DEFAULT 'browse'");
+                    }
+                    if ($sessionActive) {
+                        $_SESSION['_nu_menu_columns_ensured'] = true;
+                    }
+                }
+            } catch (Exception $ignored) {}
+        }
     }
 
     public function getPdo() {
