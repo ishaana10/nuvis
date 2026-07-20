@@ -213,6 +213,25 @@ class NuFormRenderer {
         return [];
     }
 
+    private function collectGroupFields(array $group): array
+    {
+        if (!empty($group['fields']) && is_array($group['fields'])) {
+            return $group['fields'];
+        }
+        if (!empty($group['rows']) && is_array($group['rows'])) {
+            $fields = [];
+            foreach ($group['rows'] as $row) {
+                if (!empty($row['fields']) && is_array($row['fields'])) {
+                    foreach ($row['fields'] as $f) {
+                        $fields[] = $f;
+                    }
+                }
+            }
+            return $fields;
+        }
+        return [];
+    }
+
     // =========================================================================
     // PRIVATE: renderGroup()
     // Layout JSON shape:
@@ -228,7 +247,7 @@ class NuFormRenderer {
     private function renderGroup(array $item, $record, bool $readonly): string
     {
         $label       = htmlspecialchars($item['label']    ?? 'Section');
-        $fields      = $item['fields']      ?? [];
+        $fields      = $this->collectGroupFields($item);
         $collapsible = $item['collapsible'] ?? true;
         $collapsed   = $item['collapsed']   ?? false;
         $columns     = max(1, min(4, (int)($item['columns'] ?? 2)));
@@ -550,7 +569,8 @@ class NuFormRenderer {
                     $names = array_merge($names, $this->collectFieldNames($tabFields));
                 }
             } elseif ($type === 'group') {
-                $names = array_merge($names, $this->collectFieldNames($item['fields'] ?? []));
+                $groupFields = $this->collectGroupFields($item);
+                $names = array_merge($names, $this->collectFieldNames($groupFields));
             } elseif (!in_array($type, ['divider','html','subform','repeater'], true)) {
                 if (!empty($item['name'])) $names[] = $item['name'];
             }
