@@ -17,6 +17,24 @@ if (!$auth->checkAuth()) {
 }
 
 $db     = NuDatabase::getInstance();
+
+// ── AUTO-MIGRATE: ensure all columns exist ───────────────────────────────────
+try {
+    $db->query("ALTER TABLE nu_menus ADD COLUMN menu_role_access VARCHAR(512) DEFAULT NULL");
+} catch (Throwable $ignored) {}
+try {
+    $db->query("ALTER TABLE nu_menus ADD COLUMN menu_open_mode VARCHAR(30) NOT NULL DEFAULT 'inline|browse'");
+} catch (Throwable $ignored) {}
+try {
+    $db->query("ALTER TABLE nu_menus ADD COLUMN menu_browse_mode VARCHAR(10) NOT NULL DEFAULT 'inline'");
+} catch (Throwable $ignored) {}
+try {
+    $db->query("ALTER TABLE nu_menus ADD COLUMN menu_preview_mode VARCHAR(10) NOT NULL DEFAULT 'inline'");
+} catch (Throwable $ignored) {}
+try {
+    $db->query("ALTER TABLE nu_menus ADD COLUMN menu_default_view VARCHAR(10) NOT NULL DEFAULT 'browse'");
+} catch (Throwable $ignored) {}
+
 $action = $_GET['action'] ?? '';
 
 switch ($action) {
