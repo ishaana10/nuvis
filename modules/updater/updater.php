@@ -124,6 +124,41 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
         </div>
     </div>
 
+    <!-- Initialize Repository -->
+    <div class="nu-card nu-upd-panel" id="upd-init" style="margin-top: 20px; border: 2px dashed var(--primary,#0ea5e9); background: rgba(14,165,233,0.02);">
+        <div class="nu-card-header">
+            <h3 class="nu-card-title" style="color: var(--primary,#0ea5e9);">Initialize & Link Git Repository</h3>
+        </div>
+        <div class="nu-card-body">
+            <p style="margin-bottom:16px;font-size:14px;line-height:1.5;">
+                This directory was manually uploaded and is not currently tracked by Git. <br>
+                You can initialize and link it to your remote repository in-place using this tool.
+                This will download the Git configuration, link the directory, and ensure updates can be performed seamlessly going forward.
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="nu-field">
+                    <label style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px;">Git Remote Repository URL</label>
+                    <input type="text" id="init_repo_url" class="nu-input" placeholder="e.g. git@github.com:username/repository.git" style="font-family: monospace;">
+                    <span style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 6px;">
+                        Specify the Git URL (SSH or HTTPS) of your remote repository.
+                    </span>
+                </div>
+                <div class="nu-field">
+                    <label style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px;">Target Update Branch</label>
+                    <input type="text" id="init_branch" class="nu-input" value="main" style="font-family: monospace;">
+                    <span style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 6px;">
+                        The default branch to sync and pull updates from (e.g., <code>main</code> or <code>master</code>).
+                    </span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <button class="nu-btn nu-btn-primary" onclick="nuUpdInitializeGit()">🚀 Initialize & Sync Repository</button>
+            </div>
+        </div>
+    </div>
+
     <!-- History -->
     <div class="nu-upd-panel" id="upd-history">
         <div class="nu-card">
@@ -180,6 +215,9 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
                 }
                 if (document.getElementById('git_repo_dir')) {
                     document.getElementById('git_repo_dir').value = d.git_repo_dir || '';
+                }
+                if (document.getElementById('init_repo_url') && d.git_remote_url) {
+                    document.getElementById('init_repo_url').value = d.git_remote_url;
                 }
 
                 const sel = document.getElementById('updaterBranchSelect');
@@ -257,14 +295,67 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
             if (res.success) {
                 alert('Success!\n\n' + res.message);
                 consoleOutput.textContent += 'SUCCESS:\n' + res.message;
+                document.getElementById('upd-init').classList.remove('active');
                 nuUpdGetStatus(); // refresh branch listings
             } else {
-                alert('Connection Test Failed:\n\n' + res.error);
+                if (res.git_missing) {
+                    alert('Connection Test Failed:\n\n' + res.error + '\n\nWe have revealed the "Initialize & Link Git Repository" section below to help you set it up.');
+                    document.getElementById('upd-init').classList.add('active');
+                    document.getElementById('upd-init').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    alert('Connection Test Failed:\n\n' + res.error);
+                }
                 consoleOutput.textContent += 'FAILED:\n' + res.error;
             }
         })
         .catch(err => {
             alert('Error during test: ' + err.message);
+            consoleOutput.textContent += 'ERROR:\n' + err.message;
+        });
+    };
+
+    window.nuUpdInitializeGit = function() {
+        const gitPath = document.getElementById('git_path').value;
+        const gitRepoDir = document.getElementById('git_repo_dir').value;
+        const repoUrl = document.getElementById('init_repo_url').value;
+        const branch = document.getElementById('init_branch').value;
+
+        if (!repoUrl) {
+            alert('Please enter your Git Remote Repository URL.');
+            return;
+        }
+
+        if (!confirm('This will initialize a Git repository in ' + gitRepoDir + ', set the origin remote, and sync with ' + repoUrl + '. Any untracked local files of same names will be aligned with the remote. Do you want to proceed?')) {
+            return;
+        }
+
+        var consoleOutput = document.getElementById('upd-git-console');
+        consoleOutput.textContent = 'Initializing Git Repository...\n';
+
+        fetch(_api + '?action=git_init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                git_path: gitPath,
+                git_repo_dir: gitRepoDir,
+                repo_url: repoUrl,
+                branch: branch
+            })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                alert('Git Repository initialized and synchronized successfully!');
+                consoleOutput.textContent += 'SUCCESS:\n' + res.output;
+                document.getElementById('upd-init').classList.remove('active');
+                nuUpdGetStatus();
+            } else {
+                alert('Git Initialization Failed:\n\n' + res.error);
+                consoleOutput.textContent += 'FAILED:\n' + res.error;
+            }
+        })
+        .catch(err => {
+            alert('Error during initialization: ' + err.message);
             consoleOutput.textContent += 'ERROR:\n' + err.message;
         });
     };
