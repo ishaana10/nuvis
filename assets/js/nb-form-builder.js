@@ -1413,16 +1413,34 @@ entry.fields.forEach(function (f) {
   ═══════════════════════════════════════════════════════════════════ */
   function _collectRowFields(rowEl, ri) {
     var fields = [];
-    rowEl.querySelectorAll(':scope > .nb-row-body > .nb-cfield').forEach(function (card) { var f = _readFieldCard(card, ri); if (f) fields.push(f); });
+    var body = rowEl.querySelector('.nb-row-body');
+    if (body) {
+      Array.prototype.forEach.call(body.children, function (card) {
+        if (card.classList.contains('nb-cfield')) {
+          var f = _readFieldCard(card, ri);
+          if (f) fields.push(f);
+        }
+      });
+    }
     return fields;
   }
   function _collectContainerRows(bodyEl) {
     if (!bodyEl) return [];
     var rows = [];
-    bodyEl.querySelectorAll(':scope > .nb-inner-row').forEach(function (rowEl, ri) {
-      var rowFields = [];
-      rowEl.querySelectorAll(':scope > .nb-row-body > .nb-cfield').forEach(function (card) { var f = _readFieldCard(card, ri); if (f) rowFields.push(f); });
-      rows.push({ fields: rowFields });
+    Array.prototype.forEach.call(bodyEl.children, function (rowEl, ri) {
+      if (rowEl.classList.contains('nb-inner-row') || rowEl.classList.contains('nb-row')) {
+        var rowFields = [];
+        var body = rowEl.querySelector('.nb-row-body');
+        if (body) {
+          Array.prototype.forEach.call(body.children, function (card) {
+            if (card.classList.contains('nb-cfield')) {
+              var f = _readFieldCard(card, ri);
+              if (f) rowFields.push(f);
+            }
+          });
+        }
+        rows.push({ fields: rowFields });
+      }
     });
     return rows;
   }
@@ -1430,12 +1448,22 @@ entry.fields.forEach(function (f) {
     if (!bodyEl) return [];
     var result = [];
     Array.prototype.forEach.call(bodyEl.children, function (child, ri) {
-      if (child.classList.contains('nb-inner-row')) {
-        var rf = []; child.querySelectorAll(':scope > .nb-row-body > .nb-cfield').forEach(function (card) { var f = _readFieldCard(card, ri); if (f) rf.push(f); });
+      if (child.classList.contains('nb-inner-row') || child.classList.contains('nb-row')) {
+        var rf = [];
+        var body = child.querySelector('.nb-row-body');
+        if (body) {
+          Array.prototype.forEach.call(body.children, function (card) {
+            if (card.classList.contains('nb-cfield')) {
+              var f = _readFieldCard(card, ri);
+              if (f) rf.push(f);
+            }
+          });
+        }
         result.push({ fields: rf });
-      } else if (child.classList.contains('nb-container-group')) {
+      } else if (child.classList.contains('nb-container-group') || (child.classList.contains('nb-container') && child.dataset.containerType === 'group')) {
         var li = child.querySelector('.nb-container-label-input');
-        result.push({ type:'group', label: li ? li.value : '', name:'group_'+Date.now(), rows:_collectContainerRows(child.querySelector('.nb-container-group-body')), col:12 });
+        var groupBody = child.querySelector('.nb-container-group-body');
+        result.push({ type:'group', label: li ? li.value : '', name:'group_'+Date.now(), rows:_collectContainerRows(groupBody), col:12 });
       }
     });
     return result;
