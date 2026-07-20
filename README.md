@@ -2,7 +2,7 @@
 
 A modern, responsive rebuild of the nuvis low-code platform — PHP/MySQL, fully self-hosted.
 
-> **Live:** [ict-fj.com/nuvis/](http://ict-fj.com/nuvis/) · **Host:** A2Hosting (cPanel) · **Stack:** PHP 7.4, MySQL 5.7+, Apache
+>  **Host:** A2Hosting (cPanel) · **Stack:** PHP8.1+, MySQL 5.7+, Apache
 
 ---
 
@@ -118,23 +118,6 @@ nuvis/
 ```bash
 # Import base schema
 mysql -u root -p < install.sql
-
-# Import module schemas as needed
-mysql -u root -p < install_appcloner.sql
-mysql -u root -p < install_dashboard_widgets.sql
-mysql -u root -p < install_email.sql
-mysql -u root -p < install_errorlog.sql
-mysql -u root -p < install_menus_seed.sql
-
-# Apply migrations in order
-mysql -u root -p < install_phase3.sql
-mysql -u root -p < install_phase4.sql
-mysql -u root -p < install_phase5.sql
-mysql -u root -p < install_phase6.sql
-mysql -u root -p < migrate_phase6_patch1.sql
-mysql -u root -p < install_phase7.sql
-mysql -u root -p < migrate_phase8.sql
-mysql -u root -p < migrate_widget_icon.sql
 
 # Set directory permissions
 chmod 755 uploads/ logs/
