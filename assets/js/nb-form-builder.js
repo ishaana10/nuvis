@@ -1563,6 +1563,54 @@ entry.fields.forEach(function (f) {
     field.subform = _readCardConfig(card);
   }
 
+  if (t === 'group') {
+    var childFields = [];
+    var groupBody = card.querySelector('.nb-cfield-group-body');
+    if (groupBody) {
+      groupBody.querySelectorAll(':scope > .nb-cfield').forEach(function(subCard) {
+        var subField = _readFieldCard(subCard, rowIndex);
+        if (subField) childFields.push(subField);
+      });
+    }
+    field.children = childFields;
+  }
+
+  if (t === 'tab') {
+    var tabsData = [];
+    var panes = card.querySelectorAll('.nb-cfield-tab-panes > .nb-cfield-tab-panel');
+    var navs = card.querySelectorAll('.nb-cfield-tab-nav > .nb-cfield-tab-nav-item');
+    panes.forEach(function(panel, idx) {
+      var navBtn = navs[idx];
+      var tabLabel = navBtn ? navBtn.textContent.trim() : ('Tab ' + (idx + 1));
+      var tabFields = [];
+      panel.querySelectorAll(':scope > .nb-cfield').forEach(function(subCard) {
+        var subField = _readFieldCard(subCard, rowIndex);
+        if (subField) tabFields.push(subField);
+      });
+      tabsData.push({
+        name: tabLabel,
+        label: tabLabel,
+        rows: [{ fields: tabFields }]
+      });
+    });
+    field.tabs = tabsData;
+  }
+
+  // Read any custom advanced properties dynamically from the DOM
+  card.querySelectorAll('.nb-adv-prop').forEach(function (el) {
+    var prop = el.getAttribute('data-prop');
+    if (!prop) return;
+    var val;
+    if (el.type === 'checkbox') {
+      val = !!el.checked;
+    } else if (el.type === 'number') {
+      val = el.value === '' ? '' : Number(el.value);
+    } else {
+      val = el.value;
+    }
+    field[prop] = val;
+  });
+
   return field;
 }
 

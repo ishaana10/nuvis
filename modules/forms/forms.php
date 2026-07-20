@@ -1540,7 +1540,7 @@ if (!nbFormBuilder._groupTabPatched) {
 
     if (field.type === 'uploadbutton') {
       blockHtml += `
-        <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);">
+        <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);grid-column:1/-1;">
           <div class="nb-fp nb-fp-full" style="font-size:10px;font-weight:700;color:var(--text-tertiary);letter-spacing:.05em;text-transform:uppercase;">Upload Options</div>
 
           <div class="nb-fp">
@@ -1596,7 +1596,7 @@ if (!nbFormBuilder._groupTabPatched) {
 
     if (field.type === 'signaturepad' || field.type === 'picturecanvas') {
       blockHtml += `
-        <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);">
+        <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);grid-column:1/-1;">
           <div class="nb-fp nb-fp-full" style="font-size:10px;font-weight:700;color:var(--text-tertiary);letter-spacing:.05em;text-transform:uppercase;">Canvas Options</div>
 
           <div class="nb-fp">
@@ -1649,7 +1649,7 @@ if (!nbFormBuilder._groupTabPatched) {
 
     if (field.type === 'customnumber') {
       blockHtml += `
-        <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);">
+        <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);grid-column:1/-1;">
           <div class="nb-fp nb-fp-full" style="font-size:10px;font-weight:700;color:var(--text-tertiary);letter-spacing:.05em;text-transform:uppercase;">Number Format</div>
 
           <div class="nb-fp">
@@ -1712,9 +1712,12 @@ if (!nbFormBuilder._groupTabPatched) {
 
     if (!blockHtml) return;
 
+    var grid = body.querySelector('.nb-fp-grid');
+    if (!grid) return;
+
     var wrap = document.createElement('div');
     wrap.innerHTML = blockHtml;
-    while (wrap.firstChild) body.appendChild(wrap.firstChild);
+    while (wrap.firstChild) grid.appendChild(wrap.firstChild);
 
     body.querySelectorAll('.nb-adv-prop').forEach(function(el) {
       var prop = el.getAttribute('data-prop');
