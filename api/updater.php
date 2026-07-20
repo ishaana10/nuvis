@@ -38,7 +38,8 @@ function get_git_config(NuDatabase $db): array {
     $settings = [
         'git_path' => 'git',
         'git_repo_dir' => realpath(__DIR__ . '/..') ?: '/app',
-        'update_branch' => 'main'
+        'update_branch' => 'main',
+        'git_remote_url' => ''
     ];
 
     foreach ($settings as $key => $default) {
@@ -106,6 +107,15 @@ try {
                 $remoteBranches = [$selectedBranch];
             }
 
+            $remoteUrl = '';
+            $remoteUrlCheck = shell_exec($gitCmdPrefix . "config --get remote.origin.url 2>&1");
+            if ($remoteUrlCheck && stripos($remoteUrlCheck, 'fatal:') === false) {
+                $remoteUrl = trim((string)$remoteUrlCheck);
+            }
+            if (empty($remoteUrl)) {
+                $remoteUrl = $settings['git_remote_url'];
+            }
+
             echo json_encode([
                 'success' => true,
                 'status'  => trim((string)$status),
@@ -114,7 +124,8 @@ try {
                 'selected_branch' => $selectedBranch,
                 'remote_branches' => $remoteBranches,
                 'git_path' => $git_path,
-                'git_repo_dir' => $git_repo_dir
+                'git_repo_dir' => $git_repo_dir,
+                'git_remote_url' => $remoteUrl
             ]);
             break;
 
@@ -147,10 +158,10 @@ try {
             }
 
             // Check for spaces/clone commands to prevent misconfiguration errors
-            if (preg_match('/\s+/', $gitPath) || stripos($gitPath, 'clone') !== false || stripos($gitPath, 'gh ') !== false) {
+            if (preg_match('/\s+/', $gitPath) || stripos($gitPath, 'clone') !== false || stripos($gitPath, 'gh ') !== false || stripos($gitPath, '.git') !== false || stripos($gitPath, '@') !== false || stripos($gitPath, 'http') !== false) {
                 echo json_encode([
                     'success' => false,
-                    'error' => "Invalid Git Executable Path: Please enter only 'git' or the absolute path to the git binary (e.g. '/usr/bin/git'). Do NOT enter clone or checkout commands."
+                    'error' => "Invalid Git Executable Path: It looks like you entered a Git Repository URL or command. Please enter ONLY 'git' or the absolute path to the git binary on your server (e.g. '/usr/bin/git')."
                 ]);
                 break;
             }
@@ -175,6 +186,100 @@ try {
             echo json_encode(['success' => true]);
             break;
 
+        case 'git_init':
+            $raw  = file_get_contents('php://input');
+            $body = json_decode($raw ?: '{}', true);
+            $gitPath = trim((string)($body['git_path'] ?? 'git'));
+            $gitRepoDir = trim((string)($body['git_repo_dir'] ?? ''));
+            $repoUrl = trim((string)($body['repo_url'] ?? ''));
+            $branch = trim((string)($body['branch'] ?? 'main'));
+
+            if (!$gitPath) {
+                $gitPath = 'git';
+            }
+            if (!$gitRepoDir) {
+                $gitRepoDir = realpath(__DIR__ . '/..') ?: '/app';
+            }
+            if (!$repoUrl) {
+                echo json_encode(['success' => false, 'error' => 'Repository URL cannot be empty.']);
+                break;
+            }
+
+            if (!is_dir($gitRepoDir)) {
+                echo json_encode(['success' => false, 'error' => "The directory '{$gitRepoDir}' does not exist or is not accessible."]);
+                break;
+            }
+
+            // Verify the Git binary works
+            $gitEscaped = escapeshellarg($gitPath);
+            $versionOutput = shell_exec("{$gitEscaped} --version 2>&1");
+            if (!$versionOutput || stripos($versionOutput, 'version') === false) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => "Failed to run Git with path '{$gitPath}'. Error details: " . trim((string)$versionOutput)
+                ]);
+                break;
+            }
+
+            $gitCmdPrefix = $gitEscaped . " -C " . escapeshellarg($gitRepoDir) . " -c safe.directory=* ";
+
+            $output = "Starting Git repository initialization...\n";
+
+            // If .git already exists, we do not need to call init, just remote/fetch
+            if (!is_dir(rtrim($gitRepoDir, '/') . '/.git')) {
+                $res = shell_exec($gitCmdPrefix . "init 2>&1");
+                $output .= "git init:\n" . trim((string)$res) . "\n\n";
+            }
+
+            // Save settings immediately so the user doesn't lose them
+            $db = NuDatabase::getInstance();
+            $db->query("CREATE TABLE IF NOT EXISTS `nu_settings` (
+                `setting_key` VARCHAR(100) NOT NULL PRIMARY KEY,
+                `setting_value` TEXT NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            $db->query("INSERT INTO nu_settings (setting_key, setting_value) VALUES ('git_path', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$gitPath, $gitPath]);
+            $db->query("INSERT INTO nu_settings (setting_key, setting_value) VALUES ('git_repo_dir', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$gitRepoDir, $gitRepoDir]);
+            $db->query("INSERT INTO nu_settings (setting_key, setting_value) VALUES ('update_branch', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$branch, $branch]);
+            $db->query("INSERT INTO nu_settings (setting_key, setting_value) VALUES ('git_remote_url', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$repoUrl, $repoUrl]);
+
+            // Add or set remote origin
+            // Check if origin already exists
+            $remoteCheck = shell_exec($gitCmdPrefix . "remote 2>&1");
+            if (stripos($remoteCheck, 'origin') !== false) {
+                $res = shell_exec($gitCmdPrefix . "remote set-url origin " . escapeshellarg($repoUrl) . " 2>&1");
+                $output .= "git remote set-url origin:\n" . trim((string)$res) . "\n\n";
+            } else {
+                $res = shell_exec($gitCmdPrefix . "remote add origin " . escapeshellarg($repoUrl) . " 2>&1");
+                $output .= "git remote add origin:\n" . trim((string)$res) . "\n\n";
+            }
+
+            // Fetch
+            $output .= "Fetching branches from origin...\n";
+            $res = shell_exec($gitCmdPrefix . "fetch origin 2>&1");
+            $output .= "git fetch:\n" . trim((string)$res) . "\n\n";
+
+            // Track remote branch, checkout
+            $branchEscaped = escapeshellarg($branch);
+            $output .= "Checking out branch '{$branch}'...\n";
+            $res = shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} --track origin/{$branchEscaped} 2>&1");
+            if (stripos((string)$res, 'fatal:') !== false) {
+                // Try checkout without track if remote tracking branch doesn't exist yet or if already tracked
+                $res = shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} origin/{$branchEscaped} 2>&1");
+            }
+            $output .= "git checkout:\n" . trim((string)$res) . "\n\n";
+
+            // Because the files were uploaded manually, they might be marked as modified or git status might be messy.
+            // Let's do a hard reset to match remote exactly to make sure update is clean.
+            $output .= "Syncing with remote repository...\n";
+            $res = shell_exec($gitCmdPrefix . "reset --hard origin/{$branchEscaped} 2>&1");
+            $output .= "git reset --hard:\n" . trim((string)$res) . "\n\n";
+
+            echo json_encode([
+                'success' => true,
+                'output' => $output
+            ]);
+            break;
+
         case 'test_git_settings':
             $raw  = file_get_contents('php://input');
             $body = json_decode($raw ?: '{}', true);
@@ -187,10 +292,10 @@ try {
             }
 
             // Reject commands containing multiple words or clone arguments to prevent common configuration mistakes
-            if (preg_match('/\s+/', $gitPath) || stripos($gitPath, 'clone') !== false || stripos($gitPath, 'gh ') !== false) {
+            if (preg_match('/\s+/', $gitPath) || stripos($gitPath, 'clone') !== false || stripos($gitPath, 'gh ') !== false || stripos($gitPath, '.git') !== false || stripos($gitPath, '@') !== false || stripos($gitPath, 'http') !== false) {
                 echo json_encode([
                     'success' => false,
-                    'error' => "Invalid Git Executable Path: Please enter only 'git' or the absolute path to the git binary (e.g. '/usr/bin/git'). Do NOT enter clone or checkout commands here."
+                    'error' => "Invalid Git Executable Path: It looks like you entered a Git Repository URL or command. Please enter ONLY 'git' or the absolute path to the git binary on your server (e.g. '/usr/bin/git')."
                 ]);
                 break;
             }
@@ -208,6 +313,7 @@ try {
             if (!is_dir(rtrim($gitRepoDir, '/') . '/.git')) {
                 echo json_encode([
                     'success' => false,
+                    'git_missing' => true,
                     'error' => "The directory '{$gitRepoDir}' exists, but it does not appear to be a git repository (no '.git' directory found)."
                 ]);
                 break;
