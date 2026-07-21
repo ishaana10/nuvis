@@ -2044,6 +2044,28 @@ window.NuCalendarApp = (function() {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
+    function getEventById(id) {
+        const numId = parseInt(id);
+        const match = expandedEvents.find(e => (e.masterId || e.id) === numId || e.id === id);
+        if (match) return match;
+        const rawMatch = rawEvents.find(e => e.event_id === numId);
+        if (rawMatch) {
+            return {
+                id: rawMatch.event_id,
+                title: rawMatch.event_title,
+                description: rawMatch.event_description,
+                start: new Date(rawMatch.event_start.replace(' ', 'T')),
+                end: rawMatch.event_end ? new Date(rawMatch.event_end.replace(' ', 'T')) : new Date(new Date(rawMatch.event_start.replace(' ', 'T')).getTime() + 3600000),
+                type: rawMatch.event_type,
+                color: rawMatch.event_color,
+                category: rawMatch.event_category,
+                is_recurring: !!rawMatch.event_rrule,
+                master: rawMatch
+            };
+        }
+        return null;
+    }
+
     function _cleanup() {
         window.NuCalendarApp = null;
     }
@@ -2051,6 +2073,8 @@ window.NuCalendarApp = (function() {
     return {
         init: init,
         openNewEvent: openNewEvent,
+        openEditEvent: openEditEvent,
+        getEventById: getEventById,
         closeModal: closeModal,
         switchModalTab: switchModalTab,
         toggleAllDay: toggleAllDay,
@@ -2078,4 +2102,36 @@ window.NuCalendarApp = (function() {
 
 // Boot calendar application
 NuCalendarApp.init();
+
+// ── Backwards-compatibility aliases for legacy calendar scaffold click actions ──
+window.openEventModal = function() {
+    if (window.NuCalendarApp) window.NuCalendarApp.openNewEvent();
+};
+window.closeEventModal = function() {
+    if (window.NuCalendarApp) window.NuCalendarApp.closeModal();
+};
+window.saveEvent = function() {
+    if (window.NuCalendarApp) window.NuCalendarApp.onSaveClick();
+};
+window.viewEvent = function(id) {
+    if (window.NuCalendarApp) {
+        const ev = window.NuCalendarApp.getEventById(id);
+        if (ev) window.NuCalendarApp.openEditEvent(ev);
+    }
+};
+window.editEvent = function(id) {
+    if (window.NuCalendarApp) {
+        const ev = window.NuCalendarApp.getEventById(id);
+        if (ev) window.NuCalendarApp.openEditEvent(ev);
+    }
+};
+window.deleteEvent = function(id) {
+    if (window.NuCalendarApp) {
+        const ev = window.NuCalendarApp.getEventById(id);
+        if (ev) {
+            window.NuCalendarApp.openEditEvent(ev);
+            window.NuCalendarApp.onDeleteClick();
+        }
+    }
+};
 </script>

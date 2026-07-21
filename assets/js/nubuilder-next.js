@@ -289,7 +289,7 @@ window.NuApp = {
     if (this._systemModules.has(module)) {
       container.innerHTML = '<div class="nu-spinner" style="margin:40px auto;"></div>';
       try {
-        const res  = await fetch('modules/' + module + '/' + module + '.php', { credentials: 'same-origin' });
+        const res  = await fetch('modules/' + module + '/' + module + '.php?_t=' + Date.now(), { credentials: 'same-origin' });
         const html = await res.text();
         if (!res.ok) {
           container.innerHTML = '<div style="padding:24px;border:2px solid red;background:#fee;"><h3>Module load failed</h3><p>Status: ' + res.status + '</p><pre style="font-size:12px;overflow:auto;">' + html.substring(0, 2000) + '</pre></div>';
