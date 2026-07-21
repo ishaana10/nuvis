@@ -80,6 +80,33 @@ class NuMenuRenderer
         $rows = array();
         try {
             $db  = NuDatabase::getInstance();
+
+            // Self-healing: Ensure Import / Export menu item exists in nu_menus table
+            try {
+                $exists = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'import_export'");
+                if (!$exists) {
+                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
+                    $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : 0;
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'Import / Export',
+                        'menu_type'         => 'form',
+                        'menu_target'       => 'import_export',
+                        'menu_parent_id'    => $parentId,
+                        'menu_order'        => 85,
+                        'menu_roles'        => 'globeadmin,admin',
+                        'menu_role_access'  => '["globeadmin","admin"]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'clipboard',
+                        'menu_open_mode'    => 'inline|browse',
+                        'menu_browse_mode'  => 'inline',
+                        'menu_preview_mode' => 'inline',
+                        'menu_default_view' => 'browse'
+                    ]);
+                }
+            } catch (Exception $e) {
+                // Fail silently if nu_menus table doesn't exist yet
+            }
+
             $raw = $db->fetchAll(
                 "SELECT * FROM nu_menus
                  WHERE  menu_active = 1
