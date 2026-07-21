@@ -436,9 +436,9 @@ function _renderPropsInPanel(card, body) {
           if (origEl.type === 'checkbox' || origEl.type === 'radio') {
             cloneEl.checked = origEl.checked;
           } else {
-            var attrVal = origEl.getAttribute('value') || '';
-            cloneEl.setAttribute('value', attrVal);
-            cloneEl.value = attrVal;
+            var val = (origEl.value !== undefined && origEl.value !== '') ? origEl.value : (origEl.getAttribute('value') || '');
+            cloneEl.setAttribute('value', val);
+            cloneEl.value = val;
           }
           (function (o, c) {
             c.addEventListener('input', function () {
