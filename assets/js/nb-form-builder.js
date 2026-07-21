@@ -60,6 +60,9 @@
       '.nb-cfield-label{flex:1;font-size:12px;font-weight:600;color:var(--text-primary,#333);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
       '.nb-cfield-actions button{background:none;border:none;cursor:pointer;color:var(--text-muted,#999);font-size:12px;padding:2px 4px;border-radius:3px;}',
       '.nb-cfield-actions button:hover{background:var(--bg-danger-soft,#fee2e2);color:#dc2626;}',
+      '.nb-cfield .move-tab-btn{display:none !important;}',
+      '.nb-container-tab .nb-cfield .move-tab-btn{display:inline-block !important;}',
+      '.nb-cfield-actions .move-tab-btn:hover{background:var(--bg-offset,#f5f7ff) !important;color:var(--color-primary,#4f6bed) !important;}',
       '#formCanvas.nb-canvas-tool-over{outline:2px dashed var(--color-primary,#4f6bed);outline-offset:3px;}',
       /* RIGHT SIDE PANEL */
       '#nb-props-panel{position:fixed;top:0;right:0;width:320px;height:100vh;background:var(--bg-card,#fff);border-left:2px solid var(--color-primary,#4f6bed);box-shadow:-4px 0 24px rgba(0,0,0,.12);z-index:9999;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s cubic-bezier(.4,0,.2,1);}',
@@ -643,7 +646,11 @@ function _openPropsPanel(card) {
           }
         }
       }
-      function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        window.nbFormBuilder._isDirty = true;
+      }
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     });
   }
@@ -715,7 +722,11 @@ function _openPropsPanel(card) {
     var addRowBtn = document.createElement('button'); addRowBtn.type = 'button'; addRowBtn.className = 'nb-row-btn'; addRowBtn.textContent = '+ Row';
     addRowBtn.addEventListener('click', function () { _addRowToContainer(wrap, [], false); });
     var delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.className = 'nb-row-btn del'; delBtn.textContent = '✕';
-    delBtn.addEventListener('click', function () { wrap.remove(); window.nbFormBuilder._updateEmptyState(); });
+    delBtn.addEventListener('click', function () {
+      wrap.remove();
+      window.nbFormBuilder._updateEmptyState();
+      window.nbFormBuilder._isDirty = true;
+    });
     header.appendChild(dh); header.appendChild(badge); header.appendChild(li); header.appendChild(addRowBtn); header.appendChild(delBtn);
     var body = document.createElement('div'); body.className = 'nb-container-body nb-container-group-body';
     var hint = document.createElement('div'); hint.className = 'nb-row-drop-hint'; hint.textContent = 'Click "+ Row" to add a row, then drop fields in';
@@ -743,7 +754,11 @@ function _openPropsPanel(card) {
     var badge = document.createElement('span'); badge.className = 'nb-container-type-badge nb-container-type-badge-tab'; badge.textContent = 'TAB';
     var title = document.createElement('span'); title.style.cssText = 'font-size:11px;color:rgba(255,255,255,.8);flex:1;'; title.textContent = 'Tab Container';
     var del = document.createElement('button'); del.type = 'button'; del.className = 'nb-row-btn del'; del.textContent = '✕';
-    del.addEventListener('click', function () { wrap.remove(); window.nbFormBuilder._updateEmptyState(); });
+    del.addEventListener('click', function () {
+      wrap.remove();
+      window.nbFormBuilder._updateEmptyState();
+      window.nbFormBuilder._isDirty = true;
+    });
     header.appendChild(dh); header.appendChild(badge); header.appendChild(title); header.appendChild(del);
     var nav    = document.createElement('div'); nav.className = 'nb-cfield-tab-nav'; nav.id = id + '-nav';
     var panels = document.createElement('div'); panels.className = 'nb-container-tab-panels'; panels.id = id + '-panels';
@@ -751,7 +766,13 @@ function _openPropsPanel(card) {
     document.body.appendChild(wrap);
     tabs.forEach(function (tab, i) { _addTabPanel(wrap, nav, panels, tab.name || ('Tab ' + (i+1)), i === 0, tab.rows || []); });
     var addTabBtn = document.createElement('button'); addTabBtn.type = 'button'; addTabBtn.className = 'nb-cfield-tab-add-btn'; addTabBtn.textContent = '+ Tab';
-    addTabBtn.addEventListener('click', function () { var idx = nav.querySelectorAll('.nb-cfield-tab-nav-item').length; _addTabPanel(wrap, nav, panels, 'Tab ' + (idx + 1), false, []); });
+    addTabBtn.addEventListener('click', function () {
+      var idx = nav.querySelectorAll('.nb-cfield-tab-nav-item').length;
+      nav.querySelectorAll('.nb-cfield-tab-nav-item').forEach(function (n) { n.classList.remove('active'); });
+      panels.querySelectorAll('.nb-cfield-tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      _addTabPanel(wrap, nav, panels, 'Tab ' + (idx + 1), true, []);
+      window.nbFormBuilder._isDirty = true;
+    });
     nav.appendChild(addTabBtn);
     document.body.removeChild(wrap);
     _wireRowDrag(wrap);
@@ -764,7 +785,10 @@ function _openPropsPanel(card) {
     navItem.className = 'nb-cfield-tab-nav-item' + (isActive ? ' active' : ''); navItem.dataset.panelTarget = panelId;
     var ni = document.createElement('input'); ni.type = 'text'; ni.className = 'nb-tab-name-input'; ni.value = tabName;
     ni.style.cssText = 'background:none;border:none;outline:none;font:inherit;cursor:pointer;width:' + Math.max(50, tabName.length * 8) + 'px;min-width:40px;';
-    ni.addEventListener('click', function (e) { e.stopPropagation(); });
+    ni.addEventListener('input', function () {
+      ni.style.width = Math.max(50, ni.value.length * 8) + 'px';
+      window.nbFormBuilder._isDirty = true;
+    });
     var ds = document.createElement('span'); ds.className = 'nb-tab-nav-del'; ds.style.cssText = 'font-size:10px;cursor:pointer;color:rgba(0,0,0,.4);margin-left:2px;'; ds.title = 'Remove tab'; ds.textContent = '×';
     navItem.appendChild(ni); navItem.appendChild(ds);
     navItem.addEventListener('click', function (e) {
@@ -772,6 +796,7 @@ function _openPropsPanel(card) {
         var p = document.getElementById(panelId); if (p) p.remove(); navItem.remove();
         var fn = nav.querySelector('.nb-cfield-tab-nav-item');
         if (fn) { fn.classList.add('active'); var fp = document.getElementById(fn.dataset.panelTarget); if (fp) fp.classList.add('active'); }
+        window.nbFormBuilder._isDirty = true;
         return;
       }
       nav.querySelectorAll('.nb-cfield-tab-nav-item').forEach(function (n) { n.classList.remove('active'); });
@@ -794,6 +819,7 @@ function _openPropsPanel(card) {
       var grp = _makeGroupContainer({});
       var h = rowsBody.querySelector(':scope > .nb-row-drop-hint'); if (h) h.remove();
       rowsBody.appendChild(grp);
+      window.nbFormBuilder._isDirty = true;
     });
     if (rows && rows.length) {
       rows.forEach(function (rowDef) {
@@ -829,12 +855,16 @@ function _openPropsPanel(card) {
       var parent = row.parentNode; row.remove();
       if (parent && !parent.querySelector('.nb-row')) { var h = document.createElement('div'); h.className = 'nb-row-drop-hint'; h.textContent = 'Click "+ Row" to add a row, then drop fields in'; parent.appendChild(h); }
       window.nbFormBuilder._updateEmptyState();
+      window.nbFormBuilder._isDirty = true;
     });
     ra.appendChild(db); rh.appendChild(rd); rh.appendChild(rl); rh.appendChild(ra);
     var rb = document.createElement('div'); rb.className = 'nb-row-body';
     var dh = document.createElement('div'); dh.className = 'nb-row-drop-hint'; dh.textContent = 'Drop fields here'; rb.appendChild(dh);
     row.appendChild(rh); row.appendChild(rb); rowsWrap.appendChild(row);
     _wireRowDrag(row); _attachRowBodyDrop(rb);
+    if (!isRestore) {
+      window.nbFormBuilder._isDirty = true;
+    }
     if (fields && fields.length) {
 fields.forEach(function (f) {
   var fType  = f.type  || 'text';
@@ -952,6 +982,7 @@ fields.forEach(function (f) {
      nbFormBuilder public API
   ═══════════════════════════════════════════════════════════════════ */
   window.nbFormBuilder = {
+    _isDirty: false,
 
     /* ── FIX-J: edit method (was missing) ── */
     edit: function (formId) {
@@ -966,6 +997,7 @@ fields.forEach(function (f) {
         .then(function (res) {
           if (!res || !res.success || !res.form) { NuApp.toast((res && res.error) || 'Could not load form', 'error'); return; }
           me.loadForm(res.form);
+          me._isDirty = false;
         })
         .catch(function (err) { NuApp.toast('Load error: ' + err.message, 'error'); });
     },
@@ -976,9 +1008,16 @@ fields.forEach(function (f) {
       var editId = document.getElementById('editFormId'); if (editId) editId.value = '';
       var title = document.getElementById('builderTitle'); if (title) title.textContent = 'New Form';
       _closePropsPanel(); this._clearForm();
+      this._isDirty = false;
     },
 
     close: function () {
+      if (this._isDirty) {
+        if (!confirm("You have unsaved changes. Are you sure you want to close without saving?")) {
+          return;
+        }
+      }
+      this._isDirty = false;
       _closePropsPanel();
       var card = document.getElementById('formBuilderCard'); var list = document.getElementById('formsListSection');
       if (card) card.style.display = 'none'; if (list) list.style.display = '';
@@ -1053,12 +1092,17 @@ fields.forEach(function (f) {
       var rl = document.createElement('span'); rl.className = 'nb-row-label'; rl.textContent = 'Row';
       var ra = document.createElement('span'); ra.className = 'nb-row-actions';
       var db = document.createElement('button'); db.className = 'nb-row-btn del'; db.type = 'button'; db.textContent = '✕';
-      db.addEventListener('click', function () { row.remove(); window.nbFormBuilder._updateEmptyState(); });
+      db.addEventListener('click', function () {
+        row.remove();
+        window.nbFormBuilder._updateEmptyState();
+        window.nbFormBuilder._isDirty = true;
+      });
       ra.appendChild(db); rh.appendChild(rd); rh.appendChild(rl); rh.appendChild(ra);
       var rb = document.createElement('div'); rb.className = 'nb-row-body';
       var dh = document.createElement('div'); dh.className = 'nb-row-drop-hint'; dh.textContent = 'Drop fields here'; rb.appendChild(dh);
       row.appendChild(rh); row.appendChild(rb); canvas.appendChild(row);
       _wireRowDrag(row); _attachRowBodyDrop(rb);
+      this._isDirty = true;
       return row;
     },
 
@@ -1068,8 +1112,8 @@ fields.forEach(function (f) {
       var canvas = document.getElementById('formCanvas'); if (!canvas) return null;
       var extra = extraData || {};
       _attachCanvasRowDrop(canvas);
-      if (type === 'group') { var grp = _makeGroupContainer(extra); canvas.appendChild(grp); var eg = document.getElementById('canvasEmpty'); if (eg) eg.style.display = 'none'; return grp; }
-      if (type === 'tab')   { var tab = _makeTabContainer(extra);   canvas.appendChild(tab);  var et = document.getElementById('canvasEmpty'); if (et) et.style.display = 'none'; return tab; }
+      if (type === 'group') { var grp = _makeGroupContainer(extra); canvas.appendChild(grp); var eg = document.getElementById('canvasEmpty'); if (eg) eg.style.display = 'none'; this._isDirty = true; return grp; }
+      if (type === 'tab')   { var tab = _makeTabContainer(extra);   canvas.appendChild(tab);  var et = document.getElementById('canvasEmpty'); if (et) et.style.display = 'none'; this._isDirty = true; return tab; }
       var label = extra.label || extra.fieldlabel || (type.charAt(0).toUpperCase() + type.slice(1) + ' Field');
       var name  = extra.name  || extra.fieldname  || (type + '_' + (++_fieldCounter));
       var col   = parseInt(extra.col || extra.colspan, 10) || 6;
@@ -1078,9 +1122,10 @@ fields.forEach(function (f) {
       var canvasRows = canvas.querySelectorAll(':scope > .nb-row');
       var targetBody = canvasRows.length ? canvasRows[canvasRows.length - 1].querySelector('.nb-row-body') : null;
       if (!targetBody) { var newRow = this.addRow(); targetBody = newRow ? newRow.querySelector('.nb-row-body') : null; }
-      if (!targetBody) { canvas.appendChild(card); return card; }
+      if (!targetBody) { canvas.appendChild(card); this._isDirty = true; return card; }
       var hint = targetBody.querySelector('.nb-row-drop-hint'); if (hint) hint.remove();
       _prepCard(card); targetBody.appendChild(card); this._applyColSpan(card, col);
+      this._isDirty = true;
       return card;
     },
 
@@ -1164,7 +1209,10 @@ if (canvasType === 'subform' && sfData) {
       + '<span class="nb-cfield-type-badge">' + _esc(canvasType) + '</span>'
       + '<span class="nb-cfield-label">' + _esc(label) + '</span>'
       + '<span class="nb-cfield-span-badge" style="font-size:10px;color:var(--text-muted,#aaa);margin-left:auto;">' + col + '/12</span>'
-      + '<span class="nb-cfield-actions"><button class="nb-cfield-btn del" type="button" title="Remove">✕</button></span>'
+      + '<span class="nb-cfield-actions">'
+        + '<button class="nb-cfield-btn move-tab-btn" type="button" title="Move to Tab">⇆</button>'
+        + '<button class="nb-cfield-btn del" type="button" title="Remove">✕</button>'
+      + '</span>'
     + '</div>'
     + '<div class="nb-cfield-body" style="display:none;">'
       + '<div class="nb-fp-grid">'
@@ -1189,6 +1237,111 @@ if (canvasType === 'subform' && sfData) {
       e.stopPropagation();
       if (_activeCard === card) _closePropsPanel();
       card.remove(); window.nbFormBuilder._updateEmptyState();
+      window.nbFormBuilder._isDirty = true;
+    });
+  }
+  var moveBtn = card.querySelector('.nb-cfield-btn.move-tab-btn');
+  if (moveBtn) {
+    moveBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var tabContainer = card.closest('.nb-container-tab');
+      if (!tabContainer) {
+        alert("This element is not inside a Tab Container.");
+        return;
+      }
+      var nav = tabContainer.querySelector('.nb-cfield-tab-nav');
+      if (!nav) return;
+      var navItems = nav.querySelectorAll('.nb-cfield-tab-nav-item');
+      if (navItems.length <= 1) {
+        alert("There are no other tabs to move this element to. Add another tab first.");
+        return;
+      }
+
+      var existingDropdown = document.getElementById('nb-move-dropdown');
+      if (existingDropdown) existingDropdown.remove();
+
+      var dropdown = document.createElement('div');
+      dropdown.id = 'nb-move-dropdown';
+      dropdown.style.cssText = 'position:fixed;background:var(--bg-elevated,#fff);border:1px solid var(--border,#ccc);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:99999;padding:6px 0;min-width:140px;';
+
+      var rect = moveBtn.getBoundingClientRect();
+      dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
+      dropdown.style.left = (rect.left + window.scrollX) + 'px';
+
+      navItems.forEach(function (item) {
+        var inputEl = item.querySelector('.nb-tab-name-input');
+        var tabName = inputEl ? inputEl.value : 'Tab';
+        var panelId = item.dataset.panelTarget;
+        var currentPanel = card.closest('.nb-cfield-tab-panel');
+        if (currentPanel && currentPanel.id === panelId) {
+          return;
+        }
+
+        var option = document.createElement('div');
+        option.style.cssText = 'padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-main,#333);transition:background 0.2s;';
+        option.textContent = tabName;
+        option.addEventListener('mouseover', function () { option.style.background = 'var(--bg-offset,#f5f7ff)'; });
+        option.addEventListener('mouseout', function () { option.style.background = 'none'; });
+
+        option.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          dropdown.remove();
+
+          var targetPanel = document.getElementById(panelId);
+          if (!targetPanel) return;
+          var rowsBody = targetPanel.querySelector('.nb-tab-panel-rows');
+          if (!rowsBody) return;
+
+          var targetRowBody = null;
+          var lastRow = rowsBody.querySelector(':scope > .nb-row');
+          if (lastRow) {
+            targetRowBody = lastRow.querySelector('.nb-row-body');
+          } else {
+            var newRow = _addRowToContainer(rowsBody, [], false);
+            if (newRow) {
+              targetRowBody = newRow.querySelector('.nb-row-body');
+            }
+          }
+
+          if (targetRowBody) {
+            var oldRow = card.closest('.nb-row');
+            var hint = targetRowBody.querySelector('.nb-row-drop-hint');
+            if (hint) hint.remove();
+
+            targetRowBody.appendChild(card);
+
+            window.nbFormBuilder._applyColSpan(card, card.dataset.col || 6);
+
+            if (oldRow && !oldRow.querySelector('.nb-cfield')) {
+              oldRow.remove();
+            }
+
+            window.nbFormBuilder._updateEmptyState();
+            window.nbFormBuilder._isDirty = true;
+
+            navItems.forEach(function (n) { n.classList.remove('active'); });
+            var panels = tabContainer.querySelector('.nb-container-tab-panels');
+            if (panels) {
+              panels.querySelectorAll('.nb-cfield-tab-panel').forEach(function (p) { p.classList.remove('active'); });
+            }
+            item.classList.add('active');
+            targetPanel.classList.add('active');
+
+            NuApp.toast('Element moved successfully!', 'success');
+          }
+        });
+        dropdown.appendChild(option);
+      });
+
+      document.body.appendChild(dropdown);
+
+      var closeDropdown = function () {
+        dropdown.remove();
+        document.removeEventListener('click', closeDropdown);
+      };
+      setTimeout(function () {
+        document.addEventListener('click', closeDropdown);
+      }, 0);
     });
   }
   if (['select','select2','radio','checkbox_group'].indexOf(canvasType) !== -1) _attachSelectOptionsToggle(card);
@@ -1316,7 +1469,12 @@ if (canvasType === 'subform' && sfData) {
       console.log('[saveForm] payload:', JSON.stringify(payload, null, 2));
       try {
         var res = await NuApp.apiJson('api/forms.php?action=save', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-        if (res && res.success) { NuApp.toast(editId ? 'Form updated!' : 'Form created!', 'success'); this.close(); NuApp.loadModule('forms'); }
+        if (res && res.success) {
+          NuApp.toast(editId ? 'Form updated!' : 'Form created!', 'success');
+          this._isDirty = false;
+          this.close();
+          NuApp.loadModule('forms');
+        }
         else { NuApp.toast((res && res.error) || 'Save failed', 'error'); }
       } catch (err) { NuApp.toast('Save error: ' + err.message, 'error'); }
     },
@@ -1886,6 +2044,15 @@ entry.fields.forEach(function (f) {
       canvas.querySelectorAll('.nb-cfield').forEach(function (card) { _prepCard(card); });
     }
     _ensurePropsPanel();
+
+    var builderCard = document.getElementById('formBuilderCard');
+    if (builderCard) {
+      ['input', 'change'].forEach(function (evtType) {
+        builderCard.addEventListener(evtType, function () {
+          window.nbFormBuilder._isDirty = true;
+        });
+      });
+    }
   });
 
 

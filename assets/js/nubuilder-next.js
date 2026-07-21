@@ -991,7 +991,8 @@ window.viewRecord      = function (code, id, label, mode)          { return NuAp
 window.browseForm      = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
 window.browseFormPage  = function (code, page, query, label, mode) { return NuApp.browseForm(code, page, query, label, mode); };
 window.deleteForm      = function (id, name) {
-  if (!confirm('Delete form ' + (name || '') + '?')) return;
+  var msg = name ? 'Are you sure you want to delete ' + name + ' permanently?' : 'Are you sure you want to delete this permanently?';
+  if (!confirm(msg)) return;
   NuApp.apiJson('api/crud.php?table=nu_forms&id=' + encodeURIComponent(id), {
     method: 'DELETE', credentials: 'same-origin'
   }).then(function (json) {
