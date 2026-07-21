@@ -269,14 +269,20 @@ CREATE TABLE IF NOT EXISTS `nu_calendar_events` (
     `event_description` TEXT,
     `event_start` DATETIME NOT NULL,
     `event_end` DATETIME,
-    `event_type` ENUM('meeting','task','reminder','deadline') DEFAULT 'meeting',
+    `event_type` VARCHAR(32) DEFAULT 'meeting',
     `event_color` VARCHAR(7) DEFAULT '#0ea5e9',
     `event_user_id` INT,
     `event_active` TINYINT(1) DEFAULT 1,
     `event_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `event_rrule` TEXT DEFAULT NULL,
+    `event_exdate` TEXT DEFAULT NULL,
+    `event_recurrence_id` INT DEFAULT NULL,
+    `event_original_start` DATETIME DEFAULT NULL,
+    `event_category` VARCHAR(50) DEFAULT 'personal',
     FOREIGN KEY (`event_user_id`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL,
     INDEX `idx_start` (`event_start`),
-    INDEX `idx_user` (`event_user_id`)
+    INDEX `idx_user` (`event_user_id`),
+    INDEX `idx_recurrence` (`event_recurrence_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ─── 18. WEBHOOKS ─────────────────────────────────────────────────────────────
