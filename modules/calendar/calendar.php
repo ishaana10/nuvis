@@ -40,7 +40,7 @@ foreach ($autoMigrations as $sql) {
     display: flex;
     flex-direction: column;
     gap: 20px;
-    background: var(--bg-elevated, #111a2e);
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 20px;
@@ -96,7 +96,7 @@ foreach ($autoMigrations as $sql) {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    background: var(--bg-elevated, #111a2e);
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     overflow: hidden;
@@ -109,7 +109,7 @@ foreach ($autoMigrations as $sql) {
     align-items: center;
     padding: 16px 20px;
     border-bottom: 1px solid var(--border-color);
-    background: var(--bg-subtle, #1e293b);
+    background: var(--bg-subtle);
     flex-wrap: wrap;
     gap: 12px;
 }
@@ -125,7 +125,7 @@ foreach ($autoMigrations as $sql) {
 }
 .nu-cal-view-selector {
     display: flex;
-    background: var(--bg-secondary);
+    background: var(--bg-subtle);
     border-radius: var(--radius-md);
     padding: 2px;
     border: 1px solid var(--border-color);
@@ -183,7 +183,7 @@ foreach ($autoMigrations as $sql) {
     height: 100%;
 }
 .nu-month-cell {
-    background: var(--bg-elevated);
+    background: var(--bg-card);
     padding: 8px;
     display: flex;
     flex-direction: column;
@@ -267,7 +267,7 @@ foreach ($autoMigrations as $sql) {
 .nu-time-slot-cell {
     border-left: 1px solid var(--border-color);
     position: relative;
-    background: var(--bg-elevated);
+    background: var(--bg-card);
     transition: background 0.15s;
 }
 .nu-time-slot-cell:hover {
