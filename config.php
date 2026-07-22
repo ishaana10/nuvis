@@ -45,6 +45,7 @@ $nuConfig['theme']     = 'auto';
 // ─── API ──────────────────────────────────────────────────────────────────────
 $nuConfig['apiRateLimit'] = 1000;
 $nuConfig['apiKeyHeader'] = 'X-API-Key';
+$nuConfig['enableWebhookDemo'] = true;
 
 // ─── PHP Error Handling ───────────────────────────────────────────────────────
 ini_set('display_errors', '0');
