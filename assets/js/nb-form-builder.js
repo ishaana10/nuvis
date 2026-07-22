@@ -60,8 +60,7 @@
       '.nb-cfield-label{flex:1;font-size:12px;font-weight:600;color:var(--text-primary,#333);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
       '.nb-cfield-actions button{background:none;border:none;cursor:pointer;color:var(--text-muted,#999);font-size:12px;padding:2px 4px;border-radius:3px;}',
       '.nb-cfield-actions button:hover{background:var(--bg-danger-soft,#fee2e2);color:#dc2626;}',
-      '.nb-cfield .move-tab-btn{display:none !important;}',
-      '.nb-container-tab .nb-cfield .move-tab-btn{display:inline-block !important;}',
+      '.nb-cfield-actions .move-tab-btn{display:inline-block;margin-right:4px;}',
       '.nb-cfield-actions .move-tab-btn:hover{background:var(--bg-offset,#f5f7ff) !important;color:var(--color-primary,#4f6bed) !important;}',
       '#formCanvas.nb-canvas-tool-over{outline:2px dashed var(--color-primary,#4f6bed);outline-offset:3px;}',
       /* RIGHT SIDE PANEL */
@@ -723,6 +722,7 @@ function _openPropsPanel(card) {
     addRowBtn.addEventListener('click', function () { _addRowToContainer(wrap, [], false); });
     var delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.className = 'nb-row-btn del'; delBtn.textContent = '✕';
     delBtn.addEventListener('click', function () {
+      if (!confirm("Are you sure you want to delete this group and all its rows?")) return;
       wrap.remove();
       window.nbFormBuilder._updateEmptyState();
       window.nbFormBuilder._isDirty = true;
@@ -755,6 +755,7 @@ function _openPropsPanel(card) {
     var title = document.createElement('span'); title.style.cssText = 'font-size:11px;color:rgba(255,255,255,.8);flex:1;'; title.textContent = 'Tab Container';
     var del = document.createElement('button'); del.type = 'button'; del.className = 'nb-row-btn del'; del.textContent = '✕';
     del.addEventListener('click', function () {
+      if (!confirm("Are you sure you want to delete this tab container and all its tabs?")) return;
       wrap.remove();
       window.nbFormBuilder._updateEmptyState();
       window.nbFormBuilder._isDirty = true;
@@ -793,6 +794,7 @@ function _openPropsPanel(card) {
     navItem.appendChild(ni); navItem.appendChild(ds);
     navItem.addEventListener('click', function (e) {
       if (e.target === ds) {
+        if (!confirm("Are you sure you want to delete this tab and all its rows?")) return;
         var p = document.getElementById(panelId); if (p) p.remove(); navItem.remove();
         var fn = nav.querySelector('.nb-cfield-tab-nav-item');
         if (fn) { fn.classList.add('active'); var fp = document.getElementById(fn.dataset.panelTarget); if (fp) fp.classList.add('active'); }
@@ -852,6 +854,7 @@ function _openPropsPanel(card) {
     var ra = document.createElement('span'); ra.className = 'nb-row-actions';
     var db = document.createElement('button'); db.className = 'nb-row-btn del'; db.type = 'button'; db.textContent = '✕';
     db.addEventListener('click', function () {
+      if (!confirm("Are you sure you want to delete this row and all its fields?")) return;
       var parent = row.parentNode; row.remove();
       if (parent && !parent.querySelector('.nb-row')) { var h = document.createElement('div'); h.className = 'nb-row-drop-hint'; h.textContent = 'Click "+ Row" to add a row, then drop fields in'; parent.appendChild(h); }
       window.nbFormBuilder._updateEmptyState();
@@ -1093,6 +1096,7 @@ fields.forEach(function (f) {
       var ra = document.createElement('span'); ra.className = 'nb-row-actions';
       var db = document.createElement('button'); db.className = 'nb-row-btn del'; db.type = 'button'; db.textContent = '✕';
       db.addEventListener('click', function () {
+        if (!confirm("Are you sure you want to delete this row and all its fields?")) return;
         row.remove();
         window.nbFormBuilder._updateEmptyState();
         window.nbFormBuilder._isDirty = true;
@@ -1235,6 +1239,7 @@ if (canvasType === 'subform' && sfData) {
   if (delBtn) {
     delBtn.addEventListener('click', function (e) {
       e.stopPropagation();
+      if (!confirm("Are you sure you want to delete this field?")) return;
       if (_activeCard === card) _closePropsPanel();
       card.remove(); window.nbFormBuilder._updateEmptyState();
       window.nbFormBuilder._isDirty = true;
@@ -1244,16 +1249,12 @@ if (canvasType === 'subform' && sfData) {
   if (moveBtn) {
     moveBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      var tabContainer = card.closest('.nb-container-tab');
-      if (!tabContainer) {
-        alert("This element is not inside a Tab Container.");
-        return;
-      }
-      var nav = tabContainer.querySelector('.nb-cfield-tab-nav');
-      if (!nav) return;
-      var navItems = nav.querySelectorAll('.nb-cfield-tab-nav-item');
-      if (navItems.length <= 1) {
-        alert("There are no other tabs to move this element to. Add another tab first.");
+
+      var tabContainers = document.querySelectorAll('.nb-container-tab');
+      var isCurrentlyInTab = !!card.closest('.nb-container-tab');
+
+      if (tabContainers.length === 0) {
+        alert("No Tab Containers found. Add a Tab Container to the canvas first.");
         return;
       }
 
@@ -1262,42 +1263,34 @@ if (canvasType === 'subform' && sfData) {
 
       var dropdown = document.createElement('div');
       dropdown.id = 'nb-move-dropdown';
-      dropdown.style.cssText = 'position:fixed;background:var(--bg-elevated,#fff);border:1px solid var(--border,#ccc);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:99999;padding:6px 0;min-width:140px;';
+      dropdown.style.cssText = 'position:fixed;background:var(--bg-elevated,#fff);border:1px solid var(--border,#ccc);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:99999;padding:6px 0;min-width:160px;';
 
       var rect = moveBtn.getBoundingClientRect();
       dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
       dropdown.style.left = (rect.left + window.scrollX) + 'px';
 
-      navItems.forEach(function (item) {
-        var inputEl = item.querySelector('.nb-tab-name-input');
-        var tabName = inputEl ? inputEl.value : 'Tab';
-        var panelId = item.dataset.panelTarget;
-        var currentPanel = card.closest('.nb-cfield-tab-panel');
-        if (currentPanel && currentPanel.id === panelId) {
-          return;
-        }
+      var currentPanel = card.closest('.nb-cfield-tab-panel');
 
-        var option = document.createElement('div');
-        option.style.cssText = 'padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-main,#333);transition:background 0.2s;';
-        option.textContent = tabName;
-        option.addEventListener('mouseover', function () { option.style.background = 'var(--bg-offset,#f5f7ff)'; });
-        option.addEventListener('mouseout', function () { option.style.background = 'none'; });
+      if (isCurrentlyInTab) {
+        var mainCanvasOpt = document.createElement('div');
+        mainCanvasOpt.style.cssText = 'padding:6px 12px;font-size:12px;cursor:pointer;color:var(--color-primary,#4f6bed);font-weight:600;border-bottom:1px solid var(--border,#eee);transition:background 0.2s;';
+        mainCanvasOpt.textContent = "Move to Main Canvas";
+        mainCanvasOpt.addEventListener('mouseover', function () { mainCanvasOpt.style.background = 'var(--bg-offset,#f5f7ff)'; });
+        mainCanvasOpt.addEventListener('mouseout', function () { mainCanvasOpt.style.background = 'none'; });
 
-        option.addEventListener('click', function (ev) {
+        mainCanvasOpt.addEventListener('click', function (ev) {
           ev.stopPropagation();
           dropdown.remove();
 
-          var targetPanel = document.getElementById(panelId);
-          if (!targetPanel) return;
-          var rowsBody = targetPanel.querySelector('.nb-tab-panel-rows');
-          if (!rowsBody) return;
+          var canvas = document.getElementById('formCanvas');
+          if (!canvas) return;
 
           var targetRowBody = null;
-          var lastRow = rowsBody.querySelector(':scope > .nb-row');
-          if (lastRow) {
-            targetRowBody = lastRow.querySelector('.nb-row-body');
+          var canvasRows = canvas.querySelectorAll(':scope > .nb-row');
+          if (canvasRows.length > 0) {
+            targetRowBody = canvasRows[canvasRows.length - 1].querySelector('.nb-row-body');
           } else {
-            var newRow = _addRowToContainer(rowsBody, [], false);
+            var newRow = window.nbFormBuilder.addRow();
             if (newRow) {
               targetRowBody = newRow.querySelector('.nb-row-body');
             }
@@ -1309,7 +1302,6 @@ if (canvasType === 'subform' && sfData) {
             if (hint) hint.remove();
 
             targetRowBody.appendChild(card);
-
             window.nbFormBuilder._applyColSpan(card, card.dataset.col || 6);
 
             if (oldRow && !oldRow.querySelector('.nb-cfield')) {
@@ -1318,19 +1310,81 @@ if (canvasType === 'subform' && sfData) {
 
             window.nbFormBuilder._updateEmptyState();
             window.nbFormBuilder._isDirty = true;
-
-            navItems.forEach(function (n) { n.classList.remove('active'); });
-            var panels = tabContainer.querySelector('.nb-container-tab-panels');
-            if (panels) {
-              panels.querySelectorAll('.nb-cfield-tab-panel').forEach(function (p) { p.classList.remove('active'); });
-            }
-            item.classList.add('active');
-            targetPanel.classList.add('active');
-
-            NuApp.toast('Element moved successfully!', 'success');
+            NuApp.toast('Element moved to Main Canvas successfully!', 'success');
           }
         });
-        dropdown.appendChild(option);
+        dropdown.appendChild(mainCanvasOpt);
+      }
+
+      tabContainers.forEach(function (container, cIdx) {
+        var containerPrefix = tabContainers.length > 1 ? "Container " + (cIdx + 1) + " - " : "";
+        var nav = container.querySelector('.nb-cfield-tab-nav');
+        if (!nav) return;
+        var navItems = nav.querySelectorAll('.nb-cfield-tab-nav-item');
+        var panels = container.querySelector('.nb-container-tab-panels');
+
+        navItems.forEach(function (item) {
+          var inputEl = item.querySelector('.nb-tab-name-input');
+          var tabName = inputEl ? inputEl.value : 'Tab';
+          var panelId = item.dataset.panelTarget;
+
+          if (currentPanel && currentPanel.id === panelId) {
+            return;
+          }
+
+          var option = document.createElement('div');
+          option.style.cssText = 'padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-main,#333);transition:background 0.2s;';
+          option.textContent = containerPrefix + tabName;
+          option.addEventListener('mouseover', function () { option.style.background = 'var(--bg-offset,#f5f7ff)'; });
+          option.addEventListener('mouseout', function () { option.style.background = 'none'; });
+
+          option.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            dropdown.remove();
+
+            var targetPanel = document.getElementById(panelId);
+            if (!targetPanel) return;
+            var rowsBody = targetPanel.querySelector('.nb-tab-panel-rows');
+            if (!rowsBody) return;
+
+            var targetRowBody = null;
+            var lastRow = rowsBody.querySelector(':scope > .nb-row');
+            if (lastRow) {
+              targetRowBody = lastRow.querySelector('.nb-row-body');
+            } else {
+              var newRow = _addRowToContainer(rowsBody, [], false);
+              if (newRow) {
+                targetRowBody = newRow.querySelector('.nb-row-body');
+              }
+            }
+
+            if (targetRowBody) {
+              var oldRow = card.closest('.nb-row');
+              var hint = targetRowBody.querySelector('.nb-row-drop-hint');
+              if (hint) hint.remove();
+
+              targetRowBody.appendChild(card);
+              window.nbFormBuilder._applyColSpan(card, card.dataset.col || 6);
+
+              if (oldRow && !oldRow.querySelector('.nb-cfield')) {
+                oldRow.remove();
+              }
+
+              window.nbFormBuilder._updateEmptyState();
+              window.nbFormBuilder._isDirty = true;
+
+              navItems.forEach(function (n) { n.classList.remove('active'); });
+              if (panels) {
+                panels.querySelectorAll('.nb-cfield-tab-panel').forEach(function (p) { p.classList.remove('active'); });
+              }
+              item.classList.add('active');
+              targetPanel.classList.add('active');
+
+              NuApp.toast('Element moved successfully!', 'success');
+            }
+          });
+          dropdown.appendChild(option);
+        });
       });
 
       document.body.appendChild(dropdown);
