@@ -188,15 +188,16 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
     }
 
     $needed = [
-        'form_panel_mode'     => "VARCHAR(20) NOT NULL DEFAULT 'fixed'",
-        'form_panel_width'    => "INT NOT NULL DEFAULT 0",
-        'form_custom_js'      => "MEDIUMTEXT NULL DEFAULT NULL",
-        'form_js_before_save' => "MEDIUMTEXT NULL DEFAULT NULL",
-        'form_js_after_save'  => "MEDIUMTEXT NULL DEFAULT NULL",
-        'form_custom_php'     => "MEDIUMTEXT NULL DEFAULT NULL",
-        'form_custom_css'     => "MEDIUMTEXT NULL DEFAULT NULL",
-        'browse_conditions'   => "JSON NULL DEFAULT NULL",
-        'browse_layout'       => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_panel_mode'       => "VARCHAR(20) NOT NULL DEFAULT 'fixed'",
+        'form_panel_width'      => "INT NOT NULL DEFAULT 0",
+        'form_custom_js'        => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_js_before_save'   => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_js_after_save'    => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_custom_php'       => "MEDIUMTEXT NULL DEFAULT NULL",
+        'form_custom_css'       => "MEDIUMTEXT NULL DEFAULT NULL",
+        'browse_conditions'     => "JSON NULL DEFAULT NULL",
+        'browse_layout'         => "MEDIUMTEXT NULL DEFAULT NULL",
+        'browse_delete_enabled' => "TINYINT(1) NOT NULL DEFAULT 1",
     ];
 
     foreach ($needed as $col => $def) {
@@ -463,6 +464,7 @@ function actionSave($db) {
             'browse_display_mode'       => (string)($data['browse_display_mode'] ?? 'inline'),
             'browse_conditions'         => isset($data['browse_conditions']) && is_array($data['browse_conditions']) ? json_encode($data['browse_conditions'], JSON_UNESCAPED_UNICODE) : null,
             'browse_layout'             => (string)($data['browse_layout'] ?? ''),
+            'browse_delete_enabled'     => isset($data['browse_delete_enabled']) ? (int)$data['browse_delete_enabled'] : 1,
             'form_custom_js'            => (string)($data['form_custom_js'] ?? ''),
             'form_js_before_save'       => (string)($data['form_js_before_save'] ?? ''),
             'form_js_after_save'        => (string)($data['form_js_after_save'] ?? ''),
@@ -504,6 +506,7 @@ function actionSave($db) {
                 'browse_default_sort'       => $row['browse_default_sort'] ?? '',
                 'browse_display_mode'       => $row['browse_display_mode'] ?? 'inline',
                 'browse_conditions'         => $row['browse_conditions'] ?? null,
+                'browse_delete_enabled'     => $row['browse_delete_enabled'] ?? 1,
                 'form_custom_js'            => $row['form_custom_js'] ?? '',
                 'form_js_before_save'       => $row['form_js_before_save'] ?? '',
                 'form_js_after_save'        => $row['form_js_after_save'] ?? '',

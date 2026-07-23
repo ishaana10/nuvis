@@ -1525,6 +1525,7 @@ if (canvasType === 'subform' && sfData) {
         browse_page_size: _v('formBrowsePageSize'), browse_default_sort: _v('formBrowseDefaultSort'),
         browse_search_enabled: _c('formBrowseSearchEnabled') ? 1 : 0, browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
         browse_search_fields: _v('formBrowseSearchFields'), browse_conditions: this._collectBrowseConditions(),
+        browse_delete_enabled: _c('formBrowseDeleteEnabled') ? 1 : 0,
         form_custom_js: _v('formCustomJs'),
         form_js_before_save: _v('formJsBeforeSave'), form_js_after_save: _v('formJsAfterSave'),
         form_custom_php: _v('formCustomPhp'), form_custom_css: _v('formCustomCss')
@@ -1558,6 +1559,7 @@ if (canvasType === 'subform' && sfData) {
       _set('formCustomJs', formData.form_custom_js || ''); _set('formJsBeforeSave', formData.form_js_before_save || '');
       _set('formJsAfterSave', formData.form_js_after_save || ''); _set('formCustomPhp', formData.form_custom_php || '');
       _set('formCustomCss', formData.form_custom_css || ''); _chk('formBrowseSearchEnabled', formData.browse_search_enabled);
+      _chk('formBrowseDeleteEnabled', formData.browse_delete_enabled !== undefined ? formData.browse_delete_enabled : 1);
       me.selectDisplayMode(formData.browse_display_mode || 'inline');
       var _sel = function (n, v) { var e = document.querySelector('input[name="'+n+'"][value="'+v+'"]'); return e ? e.closest('[class*="-card"]') : null; };
       me.selectFormType(formData.form_type || 'main', _sel('formType', formData.form_type || 'main'));
@@ -2239,29 +2241,37 @@ entry.fields.forEach(function (f) {
         list.push({ name: sf, label: sf.charAt(0).toUpperCase() + sf.slice(1).replace('_', ' ') });
       }
     });
+
+    // Dynamically populate colFieldDatalist so the editable inputs have autocomplete options!
+    var dl = document.getElementById('colFieldDatalist');
+    if (dl) {
+      dl.innerHTML = '';
+      list.forEach(function (f) {
+        var opt = document.createElement('option');
+        opt.value = f.name;
+        opt.textContent = f.label;
+        dl.appendChild(opt);
+      });
+    }
     return list;
   }
 
   // Extend nbFormBuilder object with the new designer and revisions methods
   window.nbFormBuilder.addBrowseColumnDesignerRow = function (data) {
-    var d = data || { fieldname: '', fieldlabel: '', width: '', align: 'left', formatter: 'text', sortable: true, frozen: false, cond_bg: '', cond_fg: '', cond_op: '', cond_val: '' };
+    var d = data || { fieldname: '', fieldlabel: '', width: '', align: 'left', formatter: 'text', sortable: true, frozen: false, rules: [] };
     var list = document.getElementById('browseColumnsList');
     if (!list) return;
+
+    // Convert old single cond block to multi rules list
+    if (!d.rules && d.cond_op) {
+      d.rules = [{ op: d.cond_op, val: d.cond_val, fg: d.cond_fg, bg: d.cond_bg }];
+    }
+    if (!d.rules) d.rules = [];
 
     var row = document.createElement('div');
     row.className = 'nb-browse-column-row';
     row.setAttribute('draggable', 'true');
     row.style.cssText = 'display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr auto;gap:8px;align-items:center;background:var(--bg-surface);padding:10px;border-radius:6px;border:1px solid var(--border-color);margin-bottom:6px;';
-
-    var fields = _getAvailableFieldsList();
-    var fieldOpts = '<option value="">— select field —</option>';
-    fields.forEach(function (f) {
-      var sel = (d.fieldname === f.name) ? ' selected' : '';
-      fieldOpts += '<option value="' + f.name + '"' + sel + '>' + f.label + ' (' + f.name + ')</option>';
-    });
-    if (d.fieldname && !fields.some(function (f) { return f.name === d.fieldname; })) {
-      fieldOpts += '<option value="' + d.fieldname + '" selected>' + d.fieldname + '</option>';
-    }
 
     var alignLeft = d.align === 'left' ? 'selected' : '';
     var alignCenter = d.align === 'center' ? 'selected' : '';
@@ -2281,7 +2291,7 @@ entry.fields.forEach(function (f) {
     row.innerHTML = `
       <div style="display:flex;align-items:center;gap:4px;">
         <span class="nb-column-drag-handle" style="cursor:grab;color:var(--text-tertiary);font-size:16px;">☰</span>
-        <select class="nu-input nb-col-field" style="width:100%;font-size:12px;padding:4px 6px;">${fieldOpts}</select>
+        <input type="text" class="nu-input nb-col-field" list="colFieldDatalist" style="width:100%;font-size:12px;padding:4px 6px;" placeholder="FieldName / JoinedColumn" value="${(d.fieldname || '').replace(/"/g, '&quot;')}">
       </div>
       <div>
         <input type="text" class="nu-input nb-col-label" placeholder="Display Label" value="${(d.fieldlabel || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:4px 6px;">
@@ -2306,37 +2316,27 @@ entry.fields.forEach(function (f) {
         <label style="font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer;" title="Pin column to left side">
           <input type="checkbox" class="nb-col-frozen" ${isFrozen}> Pin
         </label>
-        <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" style="padding:2px 4px;font-size:11px;" onclick="nbFormBuilder.toggleColumnConditionalRule(this)" title="Conditional Formatting">🎨 Rule</button>
+        <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" style="padding:2px 4px;font-size:11px;" onclick="window.nbFormBuilder.toggleColumnConditionalRule(this)" title="Conditional Formatting">🎨 Rule</button>
         <button type="button" class="nu-btn nu-btn-danger nu-btn-sm" style="padding:2px 6px;" onclick="this.closest('.nb-browse-column-row').remove()">✕</button>
       </div>
 
-      <div class="nb-col-cond-section" style="display:${d.cond_op ? 'grid' : 'none'};grid-column:1/-1;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:var(--bg-offset);padding:8px;border-radius:4px;border:1px solid var(--border-color);margin-top:6px;">
-        <div>
-          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Operator</label>
-          <select class="nu-input nb-col-cond-op" style="font-size:11px;padding:2px 4px;">
-            <option value="">— select op —</option>
-            <option value="=" ${d.cond_op === '=' ? 'selected' : ''}>Equals</option>
-            <option value="!=" ${d.cond_op === '!=' ? 'selected' : ''}>Not Equals</option>
-            <option value=">" ${d.cond_op === '>' ? 'selected' : ''}>Greater Than</option>
-            <option value="<" ${d.cond_op === '<' ? 'selected' : ''}>Less Than</option>
-            <option value="contains" ${d.cond_op === 'contains' ? 'selected' : ''}>Contains</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Value</label>
-          <input type="text" class="nu-input nb-col-cond-val" value="${(d.cond_val || '').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Text Color</label>
-          <input type="color" class="nu-input nb-col-cond-fg" value="${d.cond_fg || '#ff0000'}" style="font-size:11px;padding:0 2px;height:22px;cursor:pointer;">
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Bg Color</label>
-          <input type="color" class="nu-input nb-col-cond-bg" value="${d.cond_bg || '#ffeeee'}" style="font-size:11px;padding:0 2px;height:22px;cursor:pointer;">
-        </div>
+      <div class="nb-col-cond-section" style="display:${d.rules.length > 0 ? 'block' : 'none'};grid-column:1/-1;background:var(--bg-offset);padding:10px;border-radius:6px;border:1px solid var(--border-color);margin-top:6px;">
+        <div style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Conditional formatting rules:</div>
+        <div class="nb-col-rules-list"></div>
+        <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" style="font-size:10px;padding:2px 6px;margin-top:4px;" onclick="window.nbFormBuilder.addColumnConditionalRuleRow(this)">+ Add Rule</button>
       </div>
     `;
     list.appendChild(row);
+
+    // Render rules list
+    var condSection = row.querySelector('.nb-col-cond-section');
+    d.rules.forEach(function (r) {
+      window.nbFormBuilder.addColumnConditionalRuleRow(condSection, r.op, r.val, r.fg, r.bg);
+    });
+
+    // Fire datalist populate check
+    _getAvailableFieldsList();
+
     var select = row.querySelector('.nb-col-field');
     if (select && !d.fieldname) select.focus();
   };
@@ -2346,20 +2346,58 @@ entry.fields.forEach(function (f) {
     var section = row.querySelector('.nb-col-cond-section');
     if (section) {
       if (section.style.display === 'none') {
-        section.style.display = 'grid';
-        var op = section.querySelector('.nb-col-cond-op');
-        if (op && !op.value) op.value = '=';
+        section.style.display = 'block';
+        window.nbFormBuilder.addColumnConditionalRuleRow(section);
       } else {
         section.style.display = 'none';
-        section.querySelector('.nb-col-cond-op').value = '';
+        section.querySelector('.nb-col-rules-list').innerHTML = '';
       }
     }
+  };
+
+  window.nbFormBuilder.addColumnConditionalRuleRow = function (btn, op, val, fg, bg) {
+    var section = btn.closest ? btn.closest('.nb-col-cond-section') : btn;
+    var list = section.querySelector('.nb-col-rules-list');
+    if (!list) return;
+
+    var o = op || '';
+    var v = val || '';
+    var f = fg || '#15803d'; // Default beautiful green
+    var b = bg || '#dcfce7'; // Default beautiful light green
+
+    var row = document.createElement('div');
+    row.className = 'nb-col-rule-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:6px;align-items:center;background:var(--bg-card);padding:6px;border-radius:4px;border:1px solid var(--border-color);margin-bottom:4px;';
+
+    row.innerHTML = `
+      <div>
+        <select class="nu-input nb-col-cond-op" style="font-size:11px;padding:2px 4px;">
+          <option value="">— select op —</option>
+          <option value="=" ${o === '=' ? 'selected' : ''}>Equals</option>
+          <option value="!=" ${o === '!=' ? 'selected' : ''}>Not Equals</option>
+          <option value=">" ${o === '>' ? 'selected' : ''}>Greater Than</option>
+          <option value="<" ${o === '<' ? 'selected' : ''}>Less Than</option>
+          <option value="contains" ${o === 'contains' ? 'selected' : ''}>Contains</option>
+        </select>
+      </div>
+      <div>
+        <input type="text" class="nu-input nb-col-cond-val" value="${v.replace(/"/g, '&quot;')}" placeholder="Value" style="font-size:11px;padding:2px 4px;">
+      </div>
+      <div>
+        <input type="color" class="nu-input nb-col-cond-fg" value="${f}" style="font-size:11px;padding:0 2px;height:22px;cursor:pointer;" title="Text Color">
+      </div>
+      <div>
+        <input type="color" class="nu-input nb-col-cond-bg" value="${b}" style="font-size:11px;padding:0 2px;height:22px;cursor:pointer;" title="Bg Color">
+      </div>
+      <button type="button" class="nu-btn nu-btn-danger nu-btn-sm" style="padding:2px 6px;" onclick="this.closest('.nb-col-rule-row').remove()" title="Delete Rule">✕</button>
+    `;
+    list.appendChild(row);
   };
 
   window.nbFormBuilder._collectBrowseLayout = function () {
     var rows = [];
     document.querySelectorAll('.nb-browse-column-row').forEach(function (row) {
-      var fld = row.querySelector('.nb-col-field').value;
+      var fld = row.querySelector('.nb-col-field').value.trim();
       if (!fld) return;
       var label = row.querySelector('.nb-col-label').value.trim();
       var width = row.querySelector('.nb-col-width').value.trim();
@@ -2367,10 +2405,17 @@ entry.fields.forEach(function (f) {
       var formatter = row.querySelector('.nb-col-format').value;
       var sortable = row.querySelector('.nb-col-sortable').checked;
       var frozen = row.querySelector('.nb-col-frozen').checked;
-      var cond_op = row.querySelector('.nb-col-cond-op').value;
-      var cond_val = row.querySelector('.nb-col-cond-val').value.trim();
-      var cond_fg = row.querySelector('.nb-col-cond-fg').value;
-      var cond_bg = row.querySelector('.nb-col-cond-bg').value;
+
+      var rules = [];
+      row.querySelectorAll('.nb-col-rule-row').forEach(function (rRow) {
+        var op = rRow.querySelector('.nb-col-cond-op').value;
+        var val = rRow.querySelector('.nb-col-cond-val').value.trim();
+        var fg = rRow.querySelector('.nb-col-cond-fg').value;
+        var bg = rRow.querySelector('.nb-col-cond-bg').value;
+        if (op) {
+          rules.push({ op: op, val: val, fg: fg, bg: bg });
+        }
+      });
 
       rows.push({
         fieldname: fld,
@@ -2380,10 +2425,7 @@ entry.fields.forEach(function (f) {
         formatter: formatter,
         sortable: sortable,
         frozen: frozen,
-        cond_op: cond_op,
-        cond_val: cond_val,
-        cond_fg: cond_fg,
-        cond_bg: cond_bg
+        rules: rules
       });
     });
     return JSON.stringify(rows);

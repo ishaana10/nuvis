@@ -934,6 +934,7 @@ foreach ($forms as $f) {
           <div id="visualBrowseDesigner" style="background:var(--bg-elevated);padding:14px;border:1px dashed var(--border-color);border-radius:10px;margin-bottom:12px;">
             <div id="browseColumnsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
             <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nbFormBuilder.addBrowseColumnDesignerRow()">+ Add Column</button>
+            <datalist id="colFieldDatalist"></datalist>
           </div>
           <!-- Hidden fallbacks/proxies to preserve legacy backend actions -->
           <input type="hidden" id="formBrowseColumns">
@@ -947,9 +948,12 @@ foreach ($forms as $f) {
           <label class="nu-label">Default Sort <span style="font-weight:400;color:var(--text-tertiary);">(field ASC/DESC)</span></label>
           <input type="text" id="formBrowseDefaultSort" class="nu-input" placeholder="created_at DESC">
         </div>
-        <div style="grid-column:1/-1;">
-          <label class="nb-fp-check" style="margin-bottom:8px;">
+        <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px;">
+          <label class="nb-fp-check">
             <input type="checkbox" id="formBrowseSearchEnabled"> Enable search bar
+          </label>
+          <label class="nb-fp-check">
+            <input type="checkbox" id="formBrowseDeleteEnabled" checked> Enable record deletion from browse grid (Show row checkboxes & delete action buttons)
           </label>
         </div>
         <div>

@@ -585,6 +585,7 @@ window.NuApp = {
     const searchEnabled     = String(data.browsesearchenabled || 0) === '1';
     const searchPlaceholder = data.browsesearchplaceholder || 'Search...';
     const formTable         = data.form_table || '';
+    const deleteEnabled     = data.browse_delete_enabled !== undefined ? (parseInt(data.browse_delete_enabled, 10) === 1) : true;
 
     // Parse browse columns custom layout configuration
     let browseLayout = [];
@@ -622,39 +623,48 @@ window.NuApp = {
       };
     }
 
-    // ── Conditional Formatting style runner ──
-    function _applyConditionalStyle(f, val, cell) {
-      if (!f.cond_op) return;
-      let matched = false;
-      const ruleVal = f.cond_val;
-      const vStr = String(val).toLowerCase().trim();
-      const rStr = String(ruleVal).toLowerCase().trim();
-
-      const vNum = parseFloat(val);
-      const rNum = parseFloat(ruleVal);
-
-      switch (f.cond_op) {
-        case '=':
-          matched = (vStr === rStr);
-          break;
-        case '!=':
-          matched = (vStr !== rStr);
-          break;
-        case '>':
-          if (!isNaN(vNum) && !isNaN(rNum)) matched = (vNum > rNum);
-          break;
-        case '<':
-          if (!isNaN(vNum) && !isNaN(rNum)) matched = (vNum < rNum);
-          break;
-        case 'contains':
-          matched = (vStr.indexOf(rStr) !== -1);
-          break;
+    // ── Conditional Formatting style runner (multi-rule support, badge style) ──
+    function _evaluateConditionalRules(col, val, cell) {
+      let rules = col.rules || [];
+      if (rules.length === 0 && col.cond_op) {
+        rules = [{ op: col.cond_op, val: col.cond_val, fg: col.cond_fg, bg: col.cond_bg }];
       }
+      if (rules.length === 0) return;
 
-      if (matched) {
-        cell.style.color = f.cond_fg || '#ff0000';
-        cell.style.background = f.cond_bg || '#ffeeee';
-        cell.style.fontWeight = '600';
+      const vStr = String(val).toLowerCase().trim();
+      const vNum = parseFloat(val);
+
+      for (const rule of rules) {
+        let matched = false;
+        const ruleVal = rule.val;
+        const rStr = String(ruleVal).toLowerCase().trim();
+        const rNum = parseFloat(ruleVal);
+
+        switch (rule.op) {
+          case '=':
+            matched = (vStr === rStr);
+            break;
+          case '!=':
+            matched = (vStr !== rStr);
+            break;
+          case '>':
+            if (!isNaN(vNum) && !isNaN(rNum)) matched = (vNum > rNum);
+            break;
+          case '<':
+            if (!isNaN(vNum) && !isNaN(rNum)) matched = (vNum < rNum);
+            break;
+          case 'contains':
+            matched = (vStr.indexOf(rStr) !== -1);
+            break;
+        }
+
+        if (matched) {
+          // Render value inside a beautiful badge/pill with custom rule colors
+          const fg = rule.fg || '#15803d';
+          const bg = rule.bg || '#dcfce7';
+          cell.innerHTML = `<span class="nu-badge-pill" style="padding:4px 10px;border-radius:12px;font-size:11.5px;font-weight:600;display:inline-block;color:${fg};background:${bg};border:1px solid ${fg}33;">${escapeHTML(String(val))}</span>`;
+          break; // apply only the first matching rule
+        }
       }
     }
 
@@ -926,23 +936,25 @@ window.NuApp = {
     const headRow = document.createElement('tr');
     headRow.style.cssText = 'border-bottom:2px solid var(--border-color,#ddd);background:var(--bg-subtle,#f8f9fa);';
 
-    // Bulk action select all checkbox column
-    const bulkTh = document.createElement('th');
-    bulkTh.style.cssText = 'width:40px;padding:12px;text-align:center;position:sticky;left:0;z-index:15;background:inherit;';
-    const bulkSelectAll = document.createElement('input');
-    bulkSelectAll.type = 'checkbox';
-    bulkSelectAll.className = 'nu-select-all-checkbox';
-    bulkSelectAll.style.cursor = 'pointer';
-    bulkSelectAll.onchange = () => {
-      const c = bulkSelectAll.checked;
-      tbody.querySelectorAll('.nu-row-checkbox').forEach(cb => cb.checked = c);
-      _updateBulkSelectionCount();
-    };
-    bulkTh.appendChild(bulkSelectAll);
-    headRow.appendChild(bulkTh);
-
-    // Compute frozen offsets
-    stickyOffset = 40; // width of bulkTh is 40
+    // Bulk action select all checkbox column (conditional)
+    if (deleteEnabled) {
+      const bulkTh = document.createElement('th');
+      bulkTh.style.cssText = 'width:40px;padding:12px;text-align:center;position:sticky;left:0;z-index:15;background:inherit;';
+      const bulkSelectAll = document.createElement('input');
+      bulkSelectAll.type = 'checkbox';
+      bulkSelectAll.className = 'nu-select-all-checkbox';
+      bulkSelectAll.style.cursor = 'pointer';
+      bulkSelectAll.onchange = () => {
+        const c = bulkSelectAll.checked;
+        tbody.querySelectorAll('.nu-row-checkbox').forEach(cb => cb.checked = c);
+        _updateBulkSelectionCount();
+      };
+      bulkTh.appendChild(bulkSelectAll);
+      headRow.appendChild(bulkTh);
+      stickyOffset = 40; // width of bulkTh is 40
+    } else {
+      stickyOffset = 0;
+    }
 
     browseLayout.forEach((col, idx) => {
       const th = document.createElement('th');
@@ -1048,19 +1060,21 @@ window.NuApp = {
         tr.addEventListener('mouseenter', () => tr.style.background = 'var(--bg-hover, #f1f5f9)');
         tr.addEventListener('mouseleave', () => tr.style.background = '');
 
-        // Row checkbox cell
-        const bulkTd = document.createElement('td');
-        bulkTd.style.cssText = 'width:40px;padding:12px;text-align:center;position:sticky;left:0;z-index:10;background:inherit;';
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'nu-row-checkbox';
-        checkbox.style.cursor = 'pointer';
-        checkbox.dataset.recordId = row.id;
-        checkbox.onchange = () => _updateBulkSelectionCount();
-        bulkTd.appendChild(checkbox);
-        tr.appendChild(bulkTd);
+        // Row checkbox cell (conditional)
+        if (deleteEnabled) {
+          const bulkTd = document.createElement('td');
+          bulkTd.style.cssText = 'width:40px;padding:12px;text-align:center;position:sticky;left:0;z-index:10;background:inherit;';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'nu-row-checkbox';
+          checkbox.style.cursor = 'pointer';
+          checkbox.dataset.recordId = row.id;
+          checkbox.onchange = () => _updateBulkSelectionCount();
+          bulkTd.appendChild(checkbox);
+          tr.appendChild(bulkTd);
+        }
 
-        let cellStickyOffset = 40;
+        let cellStickyOffset = deleteEnabled ? 40 : 0;
 
         browseLayout.forEach((col) => {
           const td = document.createElement('td');
@@ -1136,8 +1150,8 @@ window.NuApp = {
             td.textContent = cellHtml;
           }
 
-          // Apply Conditional Formatting Rule
-          _applyConditionalStyle(col, value, td);
+          // Apply Conditional Formatting Rules (multi-rule, badge-style)
+          _evaluateConditionalRules(col, value, td);
 
           tr.appendChild(td);
         });
@@ -1165,6 +1179,31 @@ window.NuApp = {
           actionTd.appendChild(viewBtn);
         }
 
+        // Single row delete button (conditional on deleteEnabled)
+        if (deleteEnabled && NuPerms.canDelete()) {
+          const delBtn = document.createElement('button');
+          delBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+          delBtn.style.color = '#ef4444';
+          delBtn.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete
+          `;
+          delBtn.onclick = () => {
+            if (confirm('Are you sure you want to delete this record permanently?')) {
+              NuApp.apiJson(`api/crud.php?table=${encodeURIComponent(formTable)}&id=${encodeURIComponent(row.id)}`, {
+                method: 'DELETE', credentials: 'same-origin'
+              }).then(res => {
+                if (res && res.success) {
+                  NuApp.toast('Record deleted!', 'success');
+                  NuApp.browseForm(code, page, currentQuery, label, displayMode);
+                } else {
+                  NuApp.toast(res.error || 'Delete failed', 'error');
+                }
+              });
+            }
+          };
+          actionTd.appendChild(delBtn);
+        }
+
         tr.appendChild(actionTd); tbody.appendChild(tr);
       });
     }
@@ -1177,12 +1216,14 @@ window.NuApp = {
       const footRow = document.createElement('tr');
       footRow.style.cssText = 'border-top:2px solid var(--border-color);background:var(--bg-subtle,#f1f5f9);font-weight:bold;';
 
-      const bulkFoot = document.createElement('td');
-      bulkFoot.style.cssText = 'padding:12px;text-align:center;position:sticky;left:0;z-index:10;background:inherit;';
-      bulkFoot.textContent = 'Σ';
-      footRow.appendChild(bulkFoot);
+      if (deleteEnabled) {
+        const bulkFoot = document.createElement('td');
+        bulkFoot.style.cssText = 'padding:12px;text-align:center;position:sticky;left:0;z-index:10;background:inherit;';
+        bulkFoot.textContent = 'Σ';
+        footRow.appendChild(bulkFoot);
+      }
 
-      let footerStickyOffset = 40;
+      let footerStickyOffset = deleteEnabled ? 40 : 0;
 
       browseLayout.forEach((col) => {
         const td = document.createElement('td');
