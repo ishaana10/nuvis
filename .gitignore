@@ -30,3 +30,10 @@ npm-debug.log
 # Test artifacts
 core/test
 api/test.php
+
+# Composer Dependencies
+vendor/
+composer.lock
+
+# TCPDF downloaded library
+lib/tcpdf/

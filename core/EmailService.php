@@ -86,17 +86,10 @@ class EmailService {
         $headers  = $this->buildHeaders($options);
         $textBody = $options['text_body'] ?? strip_tags($body);
 
-        // Multipart MIME
-        $boundary = md5(uniqid((string)time()));
-        $headers .= "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n";
-
-        $fullBody  = "--$boundary\r\n";
-        $fullBody .= "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
-        $fullBody .= chunk_split(base64_encode($textBody)) . "\r\n";
-        $fullBody .= "--$boundary\r\n";
-        $fullBody .= "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
-        $fullBody .= chunk_split(base64_encode($body)) . "\r\n";
-        $fullBody .= "--{$boundary}--";
+        // MIME construction
+        $mimeParts = $this->buildMultipartBody($body, $textBody, $options);
+        $headers .= "Content-Type: " . $mimeParts['contentType'] . "\r\n";
+        $fullBody = $mimeParts['body'];
 
         $extraParams = $useSendmail ? '-f' . $this->config['from_email'] : '';
         $result = @mail($toStr, $subject, $fullBody, $headers, $extraParams);
@@ -154,11 +147,12 @@ class EmailService {
 
         $this->smtpSend($sock, 'DATA', '354');
 
-        $boundary = md5(uniqid((string)time()));
         $textBody = $options['text_body'] ?? strip_tags($body);
         $toStr    = $this->formatRecipients($to);
         $fromStr  = $this->config['from_name'] ? "{$this->config['from_name']} <{$fromEmail}>" : $fromEmail;
         $replyTo  = $options['reply_to'] ?? $this->config['reply_to'];
+
+        $mimeParts = $this->buildMultipartBody($body, $textBody, $options);
 
         $msg  = "From: {$fromStr}\r\n";
         $msg .= "To: {$toStr}\r\n";
@@ -166,15 +160,9 @@ class EmailService {
         if ($replyTo)                $msg .= "Reply-To: {$replyTo}\r\n";
         $msg .= "Subject: =?UTF-8?B?" . base64_encode($subject) . "?=\r\n";
         $msg .= "MIME-Version: 1.0\r\n";
-        $msg .= "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n";
+        $msg .= "Content-Type: " . $mimeParts['contentType'] . "\r\n";
         $msg .= "Date: " . date('r') . "\r\n\r\n";
-        $msg .= "--$boundary\r\n";
-        $msg .= "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
-        $msg .= chunk_split(base64_encode($textBody)) . "\r\n";
-        $msg .= "--$boundary\r\n";
-        $msg .= "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
-        $msg .= chunk_split(base64_encode($body)) . "\r\n";
-        $msg .= "--{$boundary}--\r\n";
+        $msg .= $mimeParts['body'] . "\r\n";
         $msg .= ".";
 
         $this->smtpSend($sock, $msg);
@@ -298,6 +286,60 @@ class EmailService {
             }
         }
         return implode(', ', $formatted);
+    }
+
+    /**
+     * Builds the MIME multipart body and returns an array:
+     * ['contentType' => string, 'body' => string]
+     */
+    private function buildMultipartBody(string $body, string $textBody, array $options): array {
+        $attachments = $options['attachments'] ?? [];
+        if (empty($attachments)) {
+            $boundary = md5(uniqid((string)time()));
+            $contentType = "multipart/alternative; boundary=\"$boundary\"";
+            $fullBody  = "--$boundary\r\n";
+            $fullBody .= "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
+            $fullBody .= chunk_split(base64_encode($textBody)) . "\r\n";
+            $fullBody .= "--$boundary\r\n";
+            $fullBody .= "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
+            $fullBody .= chunk_split(base64_encode($body)) . "\r\n";
+            $fullBody .= "--{$boundary}--";
+            return ['contentType' => $contentType, 'body' => $fullBody];
+        }
+
+        $mixedBoundary = 'mixed_' . md5(uniqid((string)time()));
+        $altBoundary   = 'alt_' . md5(uniqid((string)time()));
+
+        $contentType = "multipart/mixed; boundary=\"$mixedBoundary\"";
+
+        $fullBody  = "--{$mixedBoundary}\r\n";
+        $fullBody .= "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n\r\n";
+
+        $fullBody .= "--{$altBoundary}\r\n";
+        $fullBody .= "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
+        $fullBody .= chunk_split(base64_encode($textBody)) . "\r\n";
+
+        $fullBody .= "--{$altBoundary}\r\n";
+        $fullBody .= "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
+        $fullBody .= chunk_split(base64_encode($body)) . "\r\n";
+
+        $fullBody .= "--{$altBoundary}--\r\n";
+
+        foreach ($attachments as $attach) {
+            $filename = $attach['filename'] ?? 'attachment.dat';
+            $mimetype = $attach['mimetype'] ?? 'application/octet-stream';
+            $data     = $attach['data'] ?? '';
+
+            $fullBody .= "--{$mixedBoundary}\r\n";
+            $fullBody .= "Content-Type: {$mimetype}; name=\"{$filename}\"\r\n";
+            $fullBody .= "Content-Transfer-Encoding: base64\r\n";
+            $fullBody .= "Content-Disposition: attachment; filename=\"{$filename}\"\r\n\r\n";
+            $fullBody .= chunk_split(base64_encode($data)) . "\r\n";
+        }
+
+        $fullBody .= "--{$mixedBoundary}--";
+
+        return ['contentType' => $contentType, 'body' => $fullBody];
     }
 
     private function buildHeaders(array $options): string {
