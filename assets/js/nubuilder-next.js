@@ -585,7 +585,9 @@ window.NuApp = {
     const searchEnabled     = String(data.browsesearchenabled || 0) === '1';
     const searchPlaceholder = data.browsesearchplaceholder || 'Search...';
     const formTable         = data.form_table || '';
+    const isGlobeAdmin      = (window.nuUserRole || '').toLowerCase() === 'globeadmin';
     const deleteEnabled     = data.browse_delete_enabled !== undefined ? (parseInt(data.browse_delete_enabled, 10) === 1) : true;
+    const bulkEnabled       = deleteEnabled && isGlobeAdmin;
 
     // Parse browse columns custom layout configuration
     let browseLayout = [];
@@ -937,7 +939,7 @@ window.NuApp = {
     headRow.style.cssText = 'border-bottom:2px solid var(--border-color,#ddd);background:var(--bg-subtle,#f8f9fa);';
 
     // Bulk action select all checkbox column (conditional)
-    if (deleteEnabled) {
+    if (bulkEnabled) {
       const bulkTh = document.createElement('th');
       bulkTh.style.cssText = 'width:40px;padding:12px;text-align:center;position:sticky;left:0;z-index:15;background:inherit;';
       const bulkSelectAll = document.createElement('input');
@@ -1061,7 +1063,7 @@ window.NuApp = {
         tr.addEventListener('mouseleave', () => tr.style.background = '');
 
         // Row checkbox cell (conditional)
-        if (deleteEnabled) {
+        if (bulkEnabled) {
           const bulkTd = document.createElement('td');
           bulkTd.style.cssText = 'width:40px;padding:12px;text-align:center;position:sticky;left:0;z-index:10;background:inherit;';
           const checkbox = document.createElement('input');
@@ -1074,7 +1076,7 @@ window.NuApp = {
           tr.appendChild(bulkTd);
         }
 
-        let cellStickyOffset = deleteEnabled ? 40 : 0;
+        let cellStickyOffset = bulkEnabled ? 40 : 0;
 
         browseLayout.forEach((col) => {
           const td = document.createElement('td');
@@ -1142,10 +1144,31 @@ window.NuApp = {
             cellHtml = escapeHTML(String(dateVal));
           } else if (col.formatter === 'html') {
             cellHtml = String(value);
+          } else if (col.formatter === 'custom_button') {
+            cellHtml = '';
           }
 
           if (col.formatter === 'html' || col.formatter === 'progress_bar' || col.formatter === 'badge' || col.formatter === 'image' || col.formatter === 'checkbox_toggle') {
             td.innerHTML = cellHtml;
+          } else if (col.formatter === 'custom_button') {
+            const btn = document.createElement('button');
+            btn.className = col.btn_class || 'nu-btn nu-btn-primary nu-btn-sm';
+            btn.textContent = col.btn_label || 'Click';
+            btn.style.cursor = 'pointer';
+            btn.onclick = (e) => {
+              e.stopPropagation();
+              const onClickJs = col.btn_js || '';
+              if (onClickJs) {
+                try {
+                  const fn = new Function('row', 'nu', onClickJs);
+                  fn(row, NuApp);
+                } catch (err) {
+                  console.error('Custom button click error:', err);
+                  NuApp.toast('JS Error: ' + err.message, 'error');
+                }
+              }
+            };
+            td.appendChild(btn);
           } else {
             td.textContent = cellHtml;
           }
@@ -1216,14 +1239,14 @@ window.NuApp = {
       const footRow = document.createElement('tr');
       footRow.style.cssText = 'border-top:2px solid var(--border-color);background:var(--bg-subtle,#f1f5f9);font-weight:bold;';
 
-      if (deleteEnabled) {
+      if (bulkEnabled) {
         const bulkFoot = document.createElement('td');
         bulkFoot.style.cssText = 'padding:12px;text-align:center;position:sticky;left:0;z-index:10;background:inherit;';
         bulkFoot.textContent = 'Σ';
         footRow.appendChild(bulkFoot);
       }
 
-      let footerStickyOffset = deleteEnabled ? 40 : 0;
+      let footerStickyOffset = bulkEnabled ? 40 : 0;
 
       browseLayout.forEach((col) => {
         const td = document.createElement('td');

@@ -2277,7 +2277,7 @@ entry.fields.forEach(function (f) {
     var alignCenter = d.align === 'center' ? 'selected' : '';
     var alignRight = d.align === 'right' ? 'selected' : '';
 
-    var formatters = ['text', 'currency', 'badge', 'progress_bar', 'date', 'checkbox_toggle', 'image', 'html'];
+    var formatters = ['text', 'currency', 'badge', 'progress_bar', 'date', 'checkbox_toggle', 'image', 'html', 'custom_button'];
     var formatOpts = '';
     formatters.forEach(function (fmt) {
       var sel = (d.formatter === fmt) ? ' selected' : '';
@@ -2325,8 +2325,29 @@ entry.fields.forEach(function (f) {
         <div class="nb-col-rules-list"></div>
         <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" style="font-size:10px;padding:2px 6px;margin-top:4px;" onclick="window.nbFormBuilder.addColumnConditionalRuleRow(this)">+ Add Rule</button>
       </div>
+
+      <div class="nb-col-btn-section" style="display:${d.formatter === 'custom_button' ? 'grid' : 'none'};grid-column:1/-1;grid-template-columns:1fr 1fr 2fr;gap:8px;background:var(--bg-offset);padding:10px;border-radius:6px;border:1px solid var(--border-color);margin-top:6px;">
+        <div>
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Button Label</label>
+          <input type="text" class="nu-input nb-col-btn-label" value="${(d.btn_label || 'Click').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">CSS Class</label>
+          <input type="text" class="nu-input nb-col-btn-class" value="${(d.btn_class || 'nu-btn nu-btn-primary nu-btn-sm').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">OnClick JS (has access to <code>row</code>, <code>nu</code>)</label>
+          <input type="text" class="nu-input nb-col-btn-js" value="${(d.btn_js || "nu.toast('ID: ' + row.id)").replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;" placeholder="e.g. nu.toast('ID: ' + row.id)">
+        </div>
+      </div>
     `;
     list.appendChild(row);
+
+    // Toggle custom button config panel
+    row.querySelector('.nb-col-format').addEventListener('change', function (e) {
+      var btnSec = row.querySelector('.nb-col-btn-section');
+      if (btnSec) btnSec.style.display = (e.target.value === 'custom_button') ? 'grid' : 'none';
+    });
 
     // Render rules list
     var condSection = row.querySelector('.nb-col-cond-section');
@@ -2417,6 +2438,10 @@ entry.fields.forEach(function (f) {
         }
       });
 
+      var btnLabel = row.querySelector('.nb-col-btn-label') ? row.querySelector('.nb-col-btn-label').value.trim() : '';
+      var btnClass = row.querySelector('.nb-col-btn-class') ? row.querySelector('.nb-col-btn-class').value.trim() : '';
+      var btnJs    = row.querySelector('.nb-col-btn-js') ? row.querySelector('.nb-col-btn-js').value.trim() : '';
+
       rows.push({
         fieldname: fld,
         fieldlabel: label,
@@ -2425,7 +2450,10 @@ entry.fields.forEach(function (f) {
         formatter: formatter,
         sortable: sortable,
         frozen: frozen,
-        rules: rules
+        rules: rules,
+        btn_label: btnLabel,
+        btn_class: btnClass,
+        btn_js: btnJs
       });
     });
     return JSON.stringify(rows);

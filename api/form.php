@@ -1985,7 +1985,8 @@ function nu_handle_list() {
         'query'   => $q,      'browsesearchenabled'   => $searchEnabled,
         'browsesearchplaceholder' => $form[$c['browse_search_placeholder']] ?? 'Search...',
         'browse_layout' => $form[$c['browse_layout']] ?? null,
-        'browse_delete_enabled' => (int)($form[$c['browse_delete_enabled']] ?? 1)
+        'browse_delete_enabled' => (int)($form[$c['browse_delete_enabled']] ?? 1),
+        'form_table' => $form[$c['table']] ?? ''
     ]]);
 }
 
