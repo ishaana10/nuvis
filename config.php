@@ -62,6 +62,15 @@ if (is_file($_localOverride)) {
 }
 unset($_localOverride);
 
+// ─── Load Environment-Specific Config Overrides ───────────────────────────────
+// Automatically loads config.production.php, config.staging.php etc. depending on NU_ENV
+$_env = getenv('NU_ENV') ?: 'development';
+$_envFile = NU_ROOT . '/config.' . $_env . '.php';
+if (is_file($_envFile)) {
+    require $_envFile;
+}
+unset($_env, $_envFile);
+
 // ─── Session Hardening + Start ────────────────────────────────────────────────
 // DO NOT call session_save_path() with a custom directory on shared hosts.
 // cPanel/A2Hosting may not grant Apache write access to the app /sessions/ dir,
