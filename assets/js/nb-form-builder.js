@@ -2329,15 +2329,38 @@ entry.fields.forEach(function (f) {
       <div class="nb-col-btn-section" style="display:${d.formatter === 'custom_button' ? 'grid' : 'none'};grid-column:1/-1;grid-template-columns:1fr 1fr 2fr;gap:8px;background:var(--bg-offset);padding:10px;border-radius:6px;border:1px solid var(--border-color);margin-top:6px;">
         <div>
           <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Button Label</label>
-          <input type="text" class="nu-input nb-col-btn-label" value="${(d.btn_label || 'Click').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+          <input type="text" class="nu-input nb-col-btn-label" value="${(d.btn_label || 'Assign').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
         </div>
         <div>
           <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">CSS Class</label>
           <input type="text" class="nu-input nb-col-btn-class" value="${(d.btn_class || 'nu-btn nu-btn-primary nu-btn-sm').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
         </div>
         <div>
-          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">OnClick JS (has access to <code>row</code>, <code>nu</code>)</label>
-          <input type="text" class="nu-input nb-col-btn-js" value="${(d.btn_js || "nu.toast('ID: ' + row.id)").replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;" placeholder="e.g. nu.toast('ID: ' + row.id)">
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">OnClick JS (has access to <code>row</code>, <code>selection</code>, <code>nu</code>)</label>
+          <textarea class="nu-input nb-col-btn-js" style="font-size:11px;padding:4px;height:70px;font-family:monospace;width:100%;" placeholder="e.g. nu.toast('ID: ' + row.id)">${d.btn_js || ""}</textarea>
+        </div>
+        <div style="grid-column:1/-1;display:flex;align-items:center;gap:6px;margin-top:4px;">
+          <label style="font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" class="nb-col-btn-has-lookup" ${d.btn_has_lookup ? 'checked' : ''}> Open Selection Lookup Modal first (e.g. choose a user to assign)
+          </label>
+        </div>
+        <div class="nb-col-btn-lookup-config" style="display:${d.btn_has_lookup ? 'grid' : 'none'};grid-column:1/-1;grid-template-columns:1fr 1fr 1fr 2fr;gap:6px;margin-top:4px;border-top:1px dashed var(--border-color);padding-top:8px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Lookup Table</label>
+            <input type="text" class="nu-input nb-col-btn-table" value="${(d.btn_table || 'nu_users').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">ID Column</label>
+            <input type="text" class="nu-input nb-col-btn-id" value="${(d.btn_id || 'usr_id').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Display Column</label>
+            <input type="text" class="nu-input nb-col-btn-disp" value="${(d.btn_disp || 'usr_name').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Where Filter (e.g. <code>location = '##location##'</code>)</label>
+            <input type="text" class="nu-input nb-col-btn-where" value="${(d.btn_where || "location = '##location##'").replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+          </div>
         </div>
       </div>
     `;
@@ -2347,6 +2370,43 @@ entry.fields.forEach(function (f) {
     row.querySelector('.nb-col-format').addEventListener('change', function (e) {
       var btnSec = row.querySelector('.nb-col-btn-section');
       if (btnSec) btnSec.style.display = (e.target.value === 'custom_button') ? 'grid' : 'none';
+    });
+
+    // Toggle custom button lookup config panel
+    row.querySelector('.nb-col-btn-has-lookup').addEventListener('change', function (e) {
+      var configSec = row.querySelector('.nb-col-btn-lookup-config');
+      if (configSec) configSec.style.display = e.target.checked ? 'grid' : 'none';
+
+      // Auto-populate default template if OnClick JS is empty
+      var jsText = row.querySelector('.nb-col-btn-js');
+      if (jsText && !jsText.value.trim()) {
+        jsText.value = [
+          "// 1. Assign selected user to this record",
+          "nu.apiJson('api/crud.php?table=' + encodeURIComponent(row._form_table || 'tasks') + '&id=' + row.id, {",
+          "  method: 'POST',",
+          "  headers: { 'Content-Type': 'application/json' },",
+          "  body: JSON.stringify({ assigned_user_id: selection.id })",
+          "}).then(res => {",
+          "  if (res.success) {",
+          "    nu.toast('Successfully assigned to ' + selection.display + '!', 'success');",
+          "    ",
+          "    // 2. Send email notification via SMTP Templates",
+          "    nu.apiJson('api/email.php?action=send_template', {",
+          "      method: 'POST',",
+          "      headers: { 'Content-Type': 'application/json' },",
+          "      body: JSON.stringify({",
+          "        template: 'task_assigned',",
+          "        to: selection.usr_email || 'user@example.com',",
+          "        data: { task_id: row.id, user_name: selection.display }",
+          "      })",
+          "    });",
+          "    ",
+          "    // 3. Refresh browse list",
+          "    nu.browseForm(row._form_code, 1, '', row._form_label, 'inline');",
+          "  }",
+          "});"
+        ].join('\\n');
+      }
     });
 
     // Render rules list
@@ -2438,9 +2498,14 @@ entry.fields.forEach(function (f) {
         }
       });
 
-      var btnLabel = row.querySelector('.nb-col-btn-label') ? row.querySelector('.nb-col-btn-label').value.trim() : '';
-      var btnClass = row.querySelector('.nb-col-btn-class') ? row.querySelector('.nb-col-btn-class').value.trim() : '';
-      var btnJs    = row.querySelector('.nb-col-btn-js') ? row.querySelector('.nb-col-btn-js').value.trim() : '';
+      var btnLabel     = row.querySelector('.nb-col-btn-label') ? row.querySelector('.nb-col-btn-label').value.trim() : '';
+      var btnClass     = row.querySelector('.nb-col-btn-class') ? row.querySelector('.nb-col-btn-class').value.trim() : '';
+      var btnJs        = row.querySelector('.nb-col-btn-js') ? row.querySelector('.nb-col-btn-js').value.trim() : '';
+      var btnHasLookup = row.querySelector('.nb-col-btn-has-lookup') ? row.querySelector('.nb-col-btn-has-lookup').checked : false;
+      var btnTable     = row.querySelector('.nb-col-btn-table') ? row.querySelector('.nb-col-btn-table').value.trim() : '';
+      var btnId        = row.querySelector('.nb-col-btn-id') ? row.querySelector('.nb-col-btn-id').value.trim() : '';
+      var btnDisp      = row.querySelector('.nb-col-btn-disp') ? row.querySelector('.nb-col-btn-disp').value.trim() : '';
+      var btnWhere     = row.querySelector('.nb-col-btn-where') ? row.querySelector('.nb-col-btn-where').value.trim() : '';
 
       rows.push({
         fieldname: fld,
@@ -2453,7 +2518,12 @@ entry.fields.forEach(function (f) {
         rules: rules,
         btn_label: btnLabel,
         btn_class: btnClass,
-        btn_js: btnJs
+        btn_js: btnJs,
+        btn_has_lookup: btnHasLookup,
+        btn_table: btnTable,
+        btn_id: btnId,
+        btn_disp: btnDisp,
+        btn_where: btnWhere
       });
     });
     return JSON.stringify(rows);

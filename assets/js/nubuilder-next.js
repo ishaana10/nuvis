@@ -1157,15 +1157,32 @@ window.NuApp = {
             btn.style.cursor = 'pointer';
             btn.onclick = (e) => {
               e.stopPropagation();
-              const onClickJs = col.btn_js || '';
-              if (onClickJs) {
-                try {
-                  const fn = new Function('row', 'nu', onClickJs);
-                  fn(row, NuApp);
-                } catch (err) {
-                  console.error('Custom button click error:', err);
-                  NuApp.toast('JS Error: ' + err.message, 'error');
+              const executeJs = (selectionObj) => {
+                const onClickJs = col.btn_js || '';
+                if (onClickJs) {
+                  try {
+                    // Inject row meta context for easy referencing
+                    const rowContext = {
+                      _form_code: code,
+                      _form_label: label,
+                      _form_table: formTable,
+                      ...row
+                    };
+                    const fn = new Function('row', 'selection', 'nu', onClickJs);
+                    fn(rowContext, selectionObj, NuApp);
+                  } catch (err) {
+                    console.error('Custom button click error:', err);
+                    NuApp.toast('JS Error: ' + err.message, 'error');
+                  }
                 }
+              };
+
+              if (col.btn_has_lookup) {
+                this._openSelectionLookupModal(col, row, (selection) => {
+                  executeJs(selection);
+                });
+              } else {
+                executeJs(null);
               }
             };
             td.appendChild(btn);
@@ -1463,6 +1480,111 @@ window.NuApp = {
         if (formEl) window.nuForm.init(formEl.dataset.formCode || code, {}, isPreview);
       }
     } catch (err) { console.error('_openFormInline error', err); this.toast('Error: ' + err.message, 'error'); }
+  },
+
+  _openSelectionLookupModal(col, row, callback) {
+    const table = col.btn_table || 'nu_users';
+    const idField = col.btn_id || 'usr_id';
+    const dispField = col.btn_disp || 'usr_name';
+
+    // Resolve ## hashes in where clause
+    let filter = col.btn_where || '';
+    if (window.nuUserMeta) {
+      Object.keys(window.nuUserMeta).forEach(key => {
+        filter = filter.replace(new RegExp('##' + key + '##', 'g'), window.nuUserMeta[key]);
+      });
+    }
+    // Check global hashes fallback
+    if (window.nuUserLocation) {
+      filter = filter.replace(/##location##/g, window.nuUserLocation);
+    }
+
+    const url = 'api/crud.php?table=' + encodeURIComponent(table) + '&page=1&per_page=100' + (filter ? '&where=' + encodeURIComponent(filter) : '');
+
+    this.apiJson(url, { credentials: 'same-origin' }).then(res => {
+      if (!res || !res.success) {
+        this.toast('Failed to load lookup items: ' + ((res && res.error) || 'unknown error'), 'error');
+        return;
+      }
+      const records = Array.isArray(res.data) ? res.data : (res.records || []);
+
+      // Create Lookup Modal DOM
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:200000;display:flex;align-items:center;justify-content:center;';
+
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--card-bg,#fff);border-radius:12px;padding:24px;width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;gap:16px;box-shadow:0 8px 30px rgba(0,0,0,0.3);';
+
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color);padding-bottom:12px;';
+      const h3 = document.createElement('h3');
+      h3.style.cssText = 'margin:0;font-size:16px;font-weight:600;';
+      h3.textContent = 'Select ' + (col.fieldlabel || 'Item');
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button'; closeBtn.innerHTML = '&times;';
+      closeBtn.style.cssText = 'background:none;border:none;font-size:24px;cursor:pointer;line-height:1;color:var(--text-secondary);';
+      closeBtn.onclick = () => overlay.remove();
+      header.appendChild(h3); header.appendChild(closeBtn);
+      box.appendChild(header);
+
+      // Search Box
+      const searchInput = document.createElement('input');
+      searchInput.type = 'text'; searchInput.className = 'nu-input';
+      searchInput.placeholder = 'Search items...';
+      searchInput.style.fontSize = '13px'; searchInput.style.padding = '6px 10px';
+      box.appendChild(searchInput);
+
+      // Items List area
+      const listArea = document.createElement('div');
+      listArea.style.cssText = 'flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border-color);border-radius:6px;padding:6px;background:var(--bg-elevated);';
+
+      const renderList = (filterText) => {
+        listArea.innerHTML = '';
+        const q = (filterText || '').toLowerCase().trim();
+        const filtered = records.filter(r => {
+          const disp = String(r[dispField] || '').toLowerCase();
+          const idVal = String(r[idField] || '').toLowerCase();
+          return disp.indexOf(q) !== -1 || idVal.indexOf(q) !== -1;
+        });
+
+        if (!filtered.length) {
+          const empty = document.createElement('div');
+          empty.style.cssText = 'padding:20px;text-align:center;color:var(--text-muted);font-size:12px;';
+          empty.textContent = 'No matching items';
+          listArea.appendChild(empty);
+          return;
+        }
+
+        filtered.forEach(r => {
+          const item = document.createElement('div');
+          item.style.cssText = 'padding:8px 12px;font-size:13px;border-radius:4px;cursor:pointer;transition:all 0.15s;color:var(--text-primary);';
+          item.textContent = r[dispField] || r[idField] || 'Item';
+          item.addEventListener('mouseover', () => item.style.background = 'var(--bg-hover,#f5f7ff)');
+          item.addEventListener('mouseout', () => item.style.background = 'none');
+          item.onclick = () => {
+            overlay.remove();
+            callback({
+              id: r[idField],
+              display: r[dispField],
+              ...r
+            });
+          };
+          listArea.appendChild(item);
+        });
+      };
+
+      searchInput.oninput = () => renderList(searchInput.value);
+      renderList('');
+
+      box.appendChild(listArea);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      // Auto focus search
+      searchInput.focus();
+    }).catch(err => {
+      this.toast('Error opening lookup modal: ' + err.message, 'error');
+    });
   },
 
   async _openFormFullPage(code, formLabel, id, isPreview) {
