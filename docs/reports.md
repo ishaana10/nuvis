@@ -94,4 +94,44 @@ fetch('api/report.php?' + queryParams.toString(), {
       console.error("Query syntax error:", data.error);
   }
 });
+
+---
+
+## PDF Generation & Email Integration
+
+The Reports module supports server-side PDF generation using TCPDF. Reports can be designed with fully customized HTML and CSS layouts, standard template placeholders, and tabular loop support.
+
+### Template Placeholders
+The PDF templating engine parses both static system properties and repeated row structures:
+- **`{{report_name}}`**: The descriptive name of the report.
+- **`{{report_code}}`**: The unique identifier code for the report.
+- **`{{current_date}}`**: The ISO timestamp when the PDF is compiled.
+- **`{{total_records}}`**: Total number of rows returned by the query.
+- **`{{company_name}}`**: The configured company or branding name.
+
+### Dynamic Loops
+Tabular data is parsed using the loop syntax:
+```html
+<table>
+  <thead>
+    <tr><th>Station</th><th>Revenue</th></tr>
+  </thead>
+  <tbody>
+    {{loop}}
+    <tr>
+      <td>{{station}}</td>
+      <td>{{revenue}}</td>
+    </tr>
+    {{/loop}}
+  </tbody>
+</table>
+```
+
+### PDF REST API Reference
+
+| Endpoint | Method | Action | Description |
+|---|---|---|---|
+| `/api/report.php?action=export_pdf&id=X` | `GET` | `export_pdf` | Runs report `X` and streams the compiled PDF directly to the browser for download. |
+| `/api/report.php?action=email_pdf` | `POST` | `email_pdf` | Runs the report, compiles the PDF, and emails it as a secure attachment. |
+| `/api/report.php?action=starter_templates` | `GET` | `starter_templates` | Returns clean, professionally designed Invoice, Receipt, and Certificate templates. |
 ```

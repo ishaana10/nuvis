@@ -126,6 +126,52 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
           <div id="rptFiltersList" style="display:flex;flex-direction:column;gap:6px;"></div>
           <p class="rpt-hint">Filter fields must match column names in your query result.</p>
         </div>
+
+        <!-- PDF Export Settings Section -->
+        <div class="rpt-field-group" style="border-top:1px solid var(--color-border);padding-top:15px;margin-top:10px;">
+          <label style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">PDF Export Settings</label>
+
+          <div class="rpt-field-row" style="margin-top:8px;">
+            <div class="rpt-field-group">
+              <label>Orientation</label>
+              <select class="nu-input" id="rptPdfOrientation">
+                <option value="P">Portrait</option>
+                <option value="L">Landscape</option>
+              </select>
+            </div>
+            <div class="rpt-field-group">
+              <label>Page Format</label>
+              <select class="nu-input" id="rptPdfFormat">
+                <option value="A4">A4</option>
+                <option value="LETTER">Letter</option>
+                <option value="LEGAL">Legal</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="rpt-field-group" style="margin-top:8px;">
+            <label>Margins (mm - Top, Right, Bottom, Left)</label>
+            <div style="display:flex;gap:8px;">
+              <input type="number" class="nu-input" id="rptPdfMarginTop" placeholder="Top" value="15" style="width:25%;">
+              <input type="number" class="nu-input" id="rptPdfMarginRight" placeholder="Right" value="15" style="width:25%;">
+              <input type="number" class="nu-input" id="rptPdfMarginBottom" placeholder="Bottom" value="15" style="width:25%;">
+              <input type="number" class="nu-input" id="rptPdfMarginLeft" placeholder="Left" value="15" style="width:25%;">
+            </div>
+          </div>
+
+          <div class="rpt-field-group" style="margin-top:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <label>HTML Template</label>
+              <div style="display:flex;gap:4px;">
+                <button type="button" class="nu-btn nu-btn-ghost" style="font-size:10px;padding:2px 6px;" onclick="rptLoadStarterTemplate('invoice')">Invoice</button>
+                <button type="button" class="nu-btn nu-btn-ghost" style="font-size:10px;padding:2px 6px;" onclick="rptLoadStarterTemplate('receipt')">Receipt</button>
+                <button type="button" class="nu-btn nu-btn-ghost" style="font-size:10px;padding:2px 6px;" onclick="rptLoadStarterTemplate('certificate')">Cert</button>
+              </div>
+            </div>
+            <textarea class="nu-input" id="rptPdfTemplate" rows="12" placeholder="HTML and CSS template for the PDF..." style="font-family:monospace;font-size:13px;resize:vertical;"></textarea>
+            <p class="rpt-hint">Supports HTML/CSS, <code>{{report_name}}</code>, <code>{{current_date}}</code>, <code>{{total_records}}</code>, <code>{{company_name}}</code>, and <code>{{loop}} ... {{column_name}} ... {{/loop}}</code> loops.</p>
+          </div>
+        </div>
       </div>
 
       <!-- RIGHT: preview pane -->
@@ -155,11 +201,39 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
       <div style="display:flex;gap:8px;">
         <div id="rptViewSwitcher" style="display:flex;gap:4px;"></div>
         <button class="nu-btn nu-btn-ghost nu-btn-sm" id="rptExportCsvBtn" onclick="rptExportCsv()">&#11015; CSV</button>
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" id="rptExportPdfBtn" onclick="rptExportPdf()">&#11015; PDF</button>
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" id="rptEmailPdfBtn" onclick="rptOpenEmailModal()">&#9993; Email PDF</button>
         <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="window.print()">&#128424; Print</button>
       </div>
     </div>
     <div id="rptFilterBar" style="display:none;padding:10px 16px;border-bottom:1px solid var(--color-border);display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;"></div>
     <div id="rptRunOutput" style="flex:1;overflow:auto;padding:16px;min-height:300px;"></div>
+  </div>
+
+  <!-- EMAIL MODAL -->
+  <div id="rptEmailModal" class="nu-modal-backdrop" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="nu-modal-content" style="background: var(--color-surface); width: 450px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg); border: 1px solid var(--color-border); padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h4 style="margin: 0; font-size: 16px; font-weight: 600;">Email Report PDF</h4>
+        <button class="rpt-remove-btn" onclick="rptCloseEmailModal()" style="font-size: 16px; font-weight: bold; background: none; border: none; cursor: pointer;">✕</button>
+      </div>
+      <div class="rpt-field-group">
+        <label>Recipient Email <span style="color:var(--color-error)">*</span></label>
+        <input type="email" class="nu-input" id="rptEmailTo" placeholder="client@example.com">
+      </div>
+      <div class="rpt-field-group">
+        <label>Subject</label>
+        <input type="text" class="nu-input" id="rptEmailSubject" placeholder="Your Report PDF">
+      </div>
+      <div class="rpt-field-group">
+        <label>Optional Message</label>
+        <textarea class="nu-input" id="rptEmailMessage" rows="4" placeholder="Hello, please find attached the report PDF..."></textarea>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="rptCloseEmailModal()">Cancel</button>
+        <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="rptSendEmailPdf()">Send Email</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -442,6 +516,7 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
               '<td style="color:var(--color-text-muted);">' + fmtDate(r.report_created_at) + '</td>' +
               '<td><div class="rpt-row-actions">' +
                 '<button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="rptRun(' + r.report_id + ')">&#9654; Run</button>' +
+                '<button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="rptQuickPdf(' + r.report_id + ')">PDF</button>' +
                 '<button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="rptOpenBuilder(' + r.report_id + ')">Edit</button>' +
                 '<button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error);" onclick="rptDelete(' + r.report_id + ',\'' + esc(r.report_name) + '\')">Del</button>' +
               '</div></td>' +
@@ -484,6 +559,17 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
         rptSetViewMode(r.report_view_mode || 'table');
         (r.report_columns || []).forEach(function (c) { rptAddColRow(c.field, c.label); });
         (r.report_filters || []).forEach(function (f) { rptAddFilterRow(f.field, f.label, f.operator); });
+
+        // Populate PDF Export Settings
+        var pdfSettings = r.report_pdf_settings || {};
+        document.getElementById('rptPdfOrientation').value = pdfSettings.orientation || 'P';
+        document.getElementById('rptPdfFormat').value      = pdfSettings.format || 'A4';
+        document.getElementById('rptPdfMarginTop').value   = (pdfSettings.margins && pdfSettings.margins.top !== undefined) ? pdfSettings.margins.top : '15';
+        document.getElementById('rptPdfMarginRight').value = (pdfSettings.margins && pdfSettings.margins.right !== undefined) ? pdfSettings.margins.right : '15';
+        document.getElementById('rptPdfMarginBottom').value= (pdfSettings.margins && pdfSettings.margins.bottom !== undefined) ? pdfSettings.margins.bottom : '15';
+        document.getElementById('rptPdfMarginLeft').value  = (pdfSettings.margins && pdfSettings.margins.left !== undefined) ? pdfSettings.margins.left : '15';
+        document.getElementById('rptPdfTemplate').value    = r.report_pdf_template || '';
+
         document.getElementById('rptBuilderTitle').textContent = 'Edit: ' + r.report_name;
       } catch (e) {
         toast('Could not load report: ' + e.message, 'error');
@@ -503,6 +589,16 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
     document.getElementById('rptSql').value   = '';
     document.getElementById('rptColsList').innerHTML    = '';
     document.getElementById('rptFiltersList').innerHTML = '';
+
+    // Reset PDF fields
+    document.getElementById('rptPdfOrientation').value = 'P';
+    document.getElementById('rptPdfFormat').value      = 'A4';
+    document.getElementById('rptPdfMarginTop').value   = '15';
+    document.getElementById('rptPdfMarginRight').value = '15';
+    document.getElementById('rptPdfMarginBottom').value= '15';
+    document.getElementById('rptPdfMarginLeft').value  = '15';
+    document.getElementById('rptPdfTemplate').value    = '';
+
     document.getElementById('rptPreviewOutput').innerHTML =
       '<div class="rpt-empty-state"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--color-text-faint);"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg><p>Write a SQL query and click &#9654; Preview to see the data here</p></div>';
     document.getElementById('rptPreviewStatus').textContent = 'Click &#9654; Preview to run';
@@ -607,6 +703,17 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
       };
     }).filter(function (f) { return f.field; });
 
+    var pdfSettings = {
+      orientation: document.getElementById('rptPdfOrientation').value,
+      format:      document.getElementById('rptPdfFormat').value,
+      margins: {
+        top:    parseFloat(document.getElementById('rptPdfMarginTop').value) || 15,
+        right:  parseFloat(document.getElementById('rptPdfMarginRight').value) || 15,
+        bottom: parseFloat(document.getElementById('rptPdfMarginBottom').value) || 15,
+        left:   parseFloat(document.getElementById('rptPdfMarginLeft').value) || 15
+      }
+    };
+
     var payload = {
       report_id:        document.getElementById('rptId').value || 0,
       report_name:      document.getElementById('rptName').value.trim(),
@@ -616,6 +723,8 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
       report_sql:       document.getElementById('rptSql').value.trim(),
       report_columns:   columns,
       report_filters:   filters,
+      report_pdf_template: document.getElementById('rptPdfTemplate').value,
+      report_pdf_settings: pdfSettings
     };
 
     if (!payload.report_name) { toast('Report name is required', 'error'); return; }
@@ -855,6 +964,89 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
+  };
+
+  window.rptQuickPdf = function (id) {
+    window.open(API + '?action=export_pdf&id=' + id, '_blank');
+  };
+
+  window.rptExportPdf = function () {
+    if (!_currentReportId) { toast('No report loaded', 'error'); return; }
+    var filterBar = document.getElementById('rptFilterBar');
+    var params    = new URLSearchParams({ action: 'export_pdf', id: _currentReportId });
+    filterBar.querySelectorAll('input[id^="rptFilter_"]').forEach(function (inp) {
+      var field = inp.id.replace('rptFilter_', '');
+      if (inp.value.trim()) params.append(field, inp.value.trim());
+    });
+    window.open(API + '?' + params.toString(), '_blank');
+  };
+
+  window.rptLoadStarterTemplate = async function (type) {
+    if (!confirm('Load the starter template for ' + type + '? This will overwrite your current PDF template.')) return;
+    try {
+      var res = await fetch(API + '?action=starter_templates', { credentials: 'same-origin' });
+      var j   = await res.json();
+      if (j.success && j.data && j.data[type]) {
+        document.getElementById('rptPdfTemplate').value = j.data[type];
+        toast('Starter template loaded', 'success');
+      } else {
+        throw new Error(j.message || 'Template not found');
+      }
+    } catch (e) {
+      toast('Failed to load template: ' + e.message, 'error');
+    }
+  };
+
+  window.rptOpenEmailModal = function () {
+    document.getElementById('rptEmailTo').value = '';
+    document.getElementById('rptEmailSubject').value = 'Report PDF: ' + document.getElementById('rptRunTitle').textContent;
+    document.getElementById('rptEmailMessage').value = '';
+    document.getElementById('rptEmailModal').style.display = 'flex';
+  };
+
+  window.rptCloseEmailModal = function () {
+    document.getElementById('rptEmailModal').style.display = 'none';
+  };
+
+  window.rptSendEmailPdf = async function () {
+    var to = document.getElementById('rptEmailTo').value.trim();
+    var subject = document.getElementById('rptEmailSubject').value.trim();
+    var message = document.getElementById('rptEmailMessage').value.trim();
+
+    if (!to) { toast('Recipient email is required', 'error'); return; }
+
+    var filterBar = document.getElementById('rptFilterBar');
+    var filters = {};
+    filterBar.querySelectorAll('input[id^="rptFilter_"]').forEach(function (inp) {
+      var field = inp.id.replace('rptFilter_', '');
+      if (inp.value.trim()) filters[field] = inp.value.trim();
+    });
+
+    toast('Sending email...', 'info');
+    try {
+      var res = await fetch(API, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'email_pdf',
+          id: _currentReportId,
+          to: to,
+          subject: subject,
+          message: message,
+          filters: filters
+        })
+      });
+      var j = await res.json();
+      if (j.success) {
+        toast('Email sent successfully!', 'success');
+        rptCloseEmailModal();
+      } else {
+        throw new Error(j.message || 'Unknown error');
+      }
+    } catch (e) {
+      toast('Failed to send email: ' + e.message, 'error');
+    }
   };
 
   // ── utils ────────────────────────────────────────────────────────

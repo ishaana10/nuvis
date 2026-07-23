@@ -40,6 +40,15 @@ if ($method === 'POST') {
 }
 
 try {
+    // Try to ensure schema columns for PDFs exist dynamically
+    try {
+        $db->query("SELECT report_pdf_template FROM nu_reports LIMIT 1");
+    } catch (Throwable $t) {
+        try {
+            $db->query("ALTER TABLE nu_reports ADD COLUMN report_pdf_template LONGTEXT NULL, ADD COLUMN report_pdf_settings JSON NULL");
+        } catch (Throwable $t2) {}
+    }
+
     switch ($action) {
 
         // ── list all reports ────────────────────────────────────────────────────────────────
@@ -62,7 +71,7 @@ try {
                 "SELECT * FROM nu_reports WHERE report_id = ?", [$id]
             );
             if (!$row) throw new Exception('Report not found');
-            foreach (['report_columns','report_filters','report_settings'] as $col) {
+            foreach (['report_columns','report_filters','report_settings','report_pdf_settings'] as $col) {
                 if (isset($row[$col]) && is_string($row[$col])) {
                     $row[$col] = json_decode($row[$col], true) ?? [];
                 }
@@ -92,15 +101,17 @@ try {
 
         // ── save ────────────────────────────────────────────────────────────────────
         case 'save':
-            $id       = (int)($body['report_id'] ?? 0);
-            $name     = trim($body['report_name'] ?? '');
-            $code     = trim($body['report_code'] ?? '');
-            $type     = $body['report_type']      ?? 'table';
-            $viewMode = $body['report_view_mode'] ?? 'table';
-            $sql      = trim($body['report_sql']  ?? '');
-            $columns  = $body['report_columns']   ?? [];
-            $filters  = $body['report_filters']   ?? [];
-            $settings = $body['report_settings']  ?? [];
+            $id          = (int)($body['report_id'] ?? 0);
+            $name        = trim($body['report_name'] ?? '');
+            $code        = trim($body['report_code'] ?? '');
+            $type        = $body['report_type']      ?? 'table';
+            $viewMode    = $body['report_view_mode'] ?? 'table';
+            $sql         = trim($body['report_sql']  ?? '');
+            $columns     = $body['report_columns']   ?? [];
+            $filters     = $body['report_filters']   ?? [];
+            $settings    = $body['report_settings']  ?? [];
+            $pdfTemplate = $body['report_pdf_template'] ?? '';
+            $pdfSettings = $body['report_pdf_settings'] ?? [];
 
             if (!$name) throw new Exception('Report name is required');
             if (!$sql)  throw new Exception('SQL query is required');
@@ -116,6 +127,7 @@ try {
             $colsJson     = json_encode(array_values($columns));
             $filtersJson  = json_encode(array_values($filters));
             $settingsJson = json_encode((object)$settings);
+            $pdfSetJson   = json_encode((object)$pdfSettings);
             $userId       = $_SESSION['user_id'] ?? null;
 
             if ($id) {
@@ -124,9 +136,10 @@ try {
                     "UPDATE nu_reports SET
                         report_name=?, report_code=?, report_type=?, report_view_mode=?,
                         report_sql=?, report_columns=?, report_filters=?, report_settings=?,
+                        report_pdf_template=?, report_pdf_settings=?,
                         report_updated_at=NOW()
                      WHERE report_id=?",
-                    [$name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $id]
+                    [$name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $pdfTemplate, $pdfSetJson, $id]
                 );
                 echo json_encode(['success' => true, 'id' => $id, 'message' => 'Report updated']);
             } else {
@@ -135,9 +148,10 @@ try {
                     "INSERT INTO nu_reports
                         (report_name, report_code, report_type, report_view_mode,
                          report_sql, report_columns, report_filters, report_settings,
+                         report_pdf_template, report_pdf_settings,
                          report_created_by, report_active)
-                     VALUES (?,?,?,?,?,?,?,?,?,1)",
-                    [$name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $userId]
+                     VALUES (?,?,?,?,?,?,?,?,?,?,1)",
+                    [$name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $pdfTemplate, $pdfSetJson, $userId]
                 );
                 $newId = $db->lastInsertId();
                 echo json_encode(['success' => true, 'id' => $newId, 'message' => 'Report created']);
@@ -228,6 +242,161 @@ try {
             if (!$table) throw new Exception('table required');
             $cols = $db->fetchAll("SHOW COLUMNS FROM `{$table}`");
             echo json_encode(['success' => true, 'data' => $cols]);
+            break;
+
+        // ── export dynamic report as PDF ────────────────────────────────────────────────
+        case 'export_pdf':
+            require_once dirname(__DIR__) . '/core/PdfGenerator.php';
+            $id   = (int)($_GET['id'] ?? 0);
+            $code = trim($_GET['code'] ?? '');
+
+            $filterParams = [];
+            foreach ($_GET as $k => $v) {
+                if (!in_array($k, ['action','id','code'], true)) {
+                    $filterParams[$k] = $v;
+                }
+            }
+
+            if ($id) {
+                $report = $db->fetchOne("SELECT * FROM nu_reports WHERE report_id=?", [$id]);
+            } elseif ($code) {
+                $report = $db->fetchOne("SELECT * FROM nu_reports WHERE report_code=?", [$code]);
+            } else {
+                throw new Exception('id or code required');
+            }
+            if (!$report) throw new Exception('Report not found');
+
+            $sql     = $report['report_sql'];
+            $filters = json_decode($report['report_filters'] ?? '[]', true) ?: [];
+
+            $whereParts = [];
+            $bindings   = [];
+            foreach ($filters as $f) {
+                $field = $f['field'] ?? '';
+                if ($field && isset($filterParams[$field]) && $filterParams[$field] !== '') {
+                    $op = $f['operator'] ?? '=';
+                    if ($op === 'LIKE') {
+                        $whereParts[] = "`{$field}` LIKE ?";
+                        $bindings[]   = '%' . $filterParams[$field] . '%';
+                    } else {
+                        $whereParts[] = "`{$field}` {$op} ?";
+                        $bindings[]   = $filterParams[$field];
+                    }
+                }
+            }
+
+            if ($whereParts) {
+                $sql = "SELECT * FROM ({$sql}) AS _rpt WHERE " . implode(' AND ', $whereParts);
+            }
+
+            $rows = $db->fetchAll($sql, $bindings);
+
+            // Prepare settings for generator
+            $pdfSettings = json_decode($report['report_pdf_settings'] ?? '{}', true) ?: [];
+
+            $pdfContent = NuPdfGenerator::generate($report, $rows, $pdfSettings);
+
+            ob_clean();
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . ($report['report_code'] ?: 'report') . '.pdf"');
+            echo $pdfContent;
+            exit;
+
+        // ── email report as PDF attachment ──────────────────────────────────────────────
+        case 'email_pdf':
+            require_once dirname(__DIR__) . '/core/PdfGenerator.php';
+            require_once dirname(__DIR__) . '/core/EmailService.php';
+
+            // Accept from POST body or query string
+            $id       = (int)($body['id'] ?? $_GET['id'] ?? 0);
+            $to       = trim((string)($body['to'] ?? $_GET['to'] ?? ''));
+            $subject  = trim((string)($body['subject'] ?? $_GET['subject'] ?? ''));
+            $emailMsg = trim((string)($body['message'] ?? $_GET['message'] ?? ''));
+
+            if (!$id) throw new Exception('Report ID is required');
+            if (!$to) throw new Exception('Recipient email (to) is required');
+
+            $report = $db->fetchOne("SELECT * FROM nu_reports WHERE report_id=?", [$id]);
+            if (!$report) throw new Exception('Report not found');
+
+            // Apply filters from either GET or POST body (filters)
+            $filterParams = [];
+            foreach ($_GET as $k => $v) {
+                if (!in_array($k, ['action','id','code','to','subject','message'], true)) {
+                    $filterParams[$k] = $v;
+                }
+            }
+            if (isset($body['filters']) && is_array($body['filters'])) {
+                $filterParams = array_merge($filterParams, $body['filters']);
+            }
+
+            $sql     = $report['report_sql'];
+            $filters = json_decode($report['report_filters'] ?? '[]', true) ?: [];
+
+            $whereParts = [];
+            $bindings   = [];
+            foreach ($filters as $f) {
+                $field = $f['field'] ?? '';
+                if ($field && isset($filterParams[$field]) && $filterParams[$field] !== '') {
+                    $op = $f['operator'] ?? '=';
+                    if ($op === 'LIKE') {
+                        $whereParts[] = "`{$field}` LIKE ?";
+                        $bindings[]   = '%' . $filterParams[$field] . '%';
+                    } else {
+                        $whereParts[] = "`{$field}` {$op} ?";
+                        $bindings[]   = $filterParams[$field];
+                    }
+                }
+            }
+
+            if ($whereParts) {
+                $sql = "SELECT * FROM ({$sql}) AS _rpt WHERE " . implode(' AND ', $whereParts);
+            }
+
+            $rows = $db->fetchAll($sql, $bindings);
+
+            // Generate PDF
+            $pdfSettings = json_decode($report['report_pdf_settings'] ?? '{}', true) ?: [];
+            $pdfContent = NuPdfGenerator::generate($report, $rows, $pdfSettings);
+
+            // Use EmailService to send
+            if (empty($subject)) {
+                $subject = "Report PDF: " . $report['report_name'];
+            }
+            if (empty($emailMsg)) {
+                $emailMsg = "<p>Please find attached the PDF report for <b>" . htmlspecialchars($report['report_name']) . "</b>.</p>";
+            } else {
+                $emailMsg = "<p>" . nl2br(htmlspecialchars($emailMsg)) . "</p>";
+            }
+
+            $filename = ($report['report_code'] ?: 'report') . '.pdf';
+
+            $emailService = new EmailService();
+            $options = [
+                'attachments' => [
+                    [
+                        'data' => $pdfContent,
+                        'filename' => $filename,
+                        'mimetype' => 'application/pdf'
+                    ]
+                ]
+            ];
+
+            $res = $emailService->send($to, $subject, $emailMsg, $options);
+            echo json_encode($res);
+            break;
+
+        // ── fetch sample starter layouts ────────────────────────────────────────────────
+        case 'starter_templates':
+            require_once dirname(__DIR__) . '/core/PdfGenerator.php';
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'invoice'     => NuPdfGenerator::getInvoiceTemplate(),
+                    'receipt'     => NuPdfGenerator::getReceiptTemplate(),
+                    'certificate' => NuPdfGenerator::getCertificateTemplate()
+                ]
+            ]);
             break;
 
         default:
