@@ -79,6 +79,48 @@ class NuDatabase {
                 }
             } catch (Exception $ignored) {}
         }
+
+        // Self-healing: Ensure nu_system_settings table exists and is populated
+        if (!$sessionActive || empty($_SESSION['_nu_system_settings_ensured'])) {
+            try {
+                $tableExists = $this->pdo->query("SHOW TABLES LIKE 'nu_system_settings'")->fetch();
+                if (!$tableExists) {
+                    $this->pdo->exec("CREATE TABLE `nu_system_settings` (
+                        `setting_key` VARCHAR(50) NOT NULL,
+                        `setting_value` LONGTEXT DEFAULT NULL,
+                        PRIMARY KEY (`setting_key`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                }
+
+                // Seed default settings if they are missing
+                $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM `nu_system_settings` WHERE `setting_key` = ?");
+
+                // app_name
+                $stmt->execute(['app_name']);
+                if ((int)$stmt->fetchColumn() === 0) {
+                    $this->pdo->prepare("INSERT INTO `nu_system_settings` (`setting_key`, `setting_value`) VALUES (?, ?)")
+                              ->execute(['app_name', 'nuvis']);
+                }
+
+                // app_logo
+                $stmt->execute(['app_logo']);
+                if ((int)$stmt->fetchColumn() === 0) {
+                    $this->pdo->prepare("INSERT INTO `nu_system_settings` (`setting_key`, `setting_value`) VALUES (?, ?)")
+                              ->execute(['app_logo', '']);
+                }
+
+                // system_fields_def
+                $stmt->execute(['system_fields_def']);
+                if ((int)$stmt->fetchColumn() === 0) {
+                    $this->pdo->prepare("INSERT INTO `nu_system_settings` (`setting_key`, `setting_value`) VALUES (?, ?)")
+                              ->execute(['system_fields_def', '[]']);
+                }
+
+                if ($sessionActive) {
+                    $_SESSION['_nu_system_settings_ensured'] = true;
+                }
+            } catch (Exception $ignored) {}
+        }
     }
 
     public function getPdo() {
