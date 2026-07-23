@@ -27,6 +27,8 @@ switch ($action) {
     case 'get_by_code':  actionGetByCode($db);    break;
     case 'patch_layout': actionPatchLayout($db);  break;
     case 'get_fields':   actionGetFields($db);    break;
+    case 'get_versions': actionGetVersions($db);  break;
+    case 'rollback':     actionRollback($db);     break;
     default:
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
 }
@@ -194,6 +196,7 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
         'form_custom_php'     => "MEDIUMTEXT NULL DEFAULT NULL",
         'form_custom_css'     => "MEDIUMTEXT NULL DEFAULT NULL",
         'browse_conditions'   => "JSON NULL DEFAULT NULL",
+        'browse_layout'       => "MEDIUMTEXT NULL DEFAULT NULL",
     ];
 
     foreach ($needed as $col => $def) {
@@ -203,6 +206,22 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
         } catch (Throwable $e) {
             // logged inside nu_ddl
         }
+    }
+
+    // Ensure nu_form_versions table exists
+    try {
+        nu_ddl($db, "CREATE TABLE IF NOT EXISTS `nu_form_versions` (
+            `ver_id` INT AUTO_INCREMENT PRIMARY KEY,
+            `ver_form_id` INT NOT NULL,
+            `ver_form_code` VARCHAR(50) NOT NULL,
+            `ver_layout` LONGTEXT NULL,
+            `ver_settings` LONGTEXT NULL,
+            `ver_created_by` VARCHAR(100) NULL,
+            `ver_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            KEY `idx_ver_form_id` (`ver_form_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {
+        // logged inside nu_ddl
     }
 }
 
@@ -234,6 +253,63 @@ function actionGet($db) {
         echo json_encode(['success' => true, 'form' => $form]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+// ── GET versions for a form ───────────────────────────────────────────────
+function actionGetVersions($db) {
+    $formId = $_GET['form_id'] ?? '';
+    if (!$formId) { echo json_encode(['success' => false, 'error' => 'Missing form_id']); return; }
+    try {
+        $versions = $db->fetchAll('SELECT ver_id, ver_form_id, ver_created_by, ver_created_at FROM nu_form_versions WHERE ver_form_id = ? ORDER BY ver_id DESC LIMIT 50', [$formId]);
+        echo json_encode(['success' => true, 'versions' => $versions]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+// ── ROLLBACK form to a previous version ────────────────────────────────────
+function actionRollback($db) {
+    $verId = $_GET['ver_id'] ?? '';
+    if (!$verId) { echo json_encode(['success' => false, 'error' => 'Missing ver_id']); return; }
+    try {
+        $ver = $db->fetchOne('SELECT * FROM nu_form_versions WHERE ver_id = ?', [$verId]);
+        if (!$ver) { echo json_encode(['success' => false, 'error' => 'Version not found']); return; }
+
+        $formId = $ver['ver_form_id'];
+        $form = $db->fetchOne('SELECT * FROM nu_forms WHERE form_id = ?', [$formId]);
+        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found']); return; }
+
+        $settings = json_decode($ver['ver_settings'], true) ?: [];
+
+        $update = [
+            'form_layout'               => $ver['ver_layout'],
+            'form_updated_at'           => date('Y-m-d H:i:s'),
+            'browse_sql'                => (string)($settings['browse_sql'] ?? ''),
+            'browse_columns'            => (string)($settings['browse_columns'] ?? ''),
+            'browse_layout'             => (string)($settings['browse_layout'] ?? ''),
+            'browse_search_enabled'     => isset($settings['browse_search_enabled']) ? (int)$settings['browse_search_enabled'] : 0,
+            'browse_search_placeholder' => (string)($settings['browse_search_placeholder'] ?? ''),
+            'browse_search_fields'      => (string)($settings['browse_search_fields'] ?? ''),
+            'browse_page_size'          => isset($settings['browse_page_size']) ? (int)$settings['browse_page_size'] : 20,
+            'browse_default_sort'       => (string)($settings['browse_default_sort'] ?? ''),
+            'browse_display_mode'       => (string)($settings['browse_display_mode'] ?? 'inline'),
+            'browse_conditions'         => isset($settings['browse_conditions']) && is_array($settings['browse_conditions']) ? json_encode($settings['browse_conditions'], JSON_UNESCAPED_UNICODE) : (is_string($settings['browse_conditions']) ? $settings['browse_conditions'] : null),
+            'form_custom_js'            => (string)($settings['form_custom_js'] ?? ''),
+            'form_js_before_save'       => (string)($settings['form_js_before_save'] ?? ''),
+            'form_js_after_save'        => (string)($settings['form_js_after_save'] ?? ''),
+            'form_custom_php'           => (string)($settings['form_custom_php'] ?? ''),
+            'form_custom_css'           => (string)($settings['form_custom_css'] ?? ''),
+            'form_panel_mode'           => (string)($settings['form_panel_mode'] ?? 'fixed'),
+            'form_panel_width'          => isset($settings['form_panel_width']) ? (int)$settings['form_panel_width'] : 0,
+        ];
+
+        $db->update('nu_forms', $update, 'form_id = ?', [$formId]);
+
+        $updatedForm = $db->fetchOne('SELECT * FROM nu_forms WHERE form_id = ?', [$formId]);
+        echo json_encode(['success' => true, 'form' => $updatedForm]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getLine() . ': ' . $e->getMessage()]);
     }
 }
 
@@ -386,6 +462,7 @@ function actionSave($db) {
             'browse_default_sort'       => (string)($data['browse_default_sort'] ?? ''),
             'browse_display_mode'       => (string)($data['browse_display_mode'] ?? 'inline'),
             'browse_conditions'         => isset($data['browse_conditions']) && is_array($data['browse_conditions']) ? json_encode($data['browse_conditions'], JSON_UNESCAPED_UNICODE) : null,
+            'browse_layout'             => (string)($data['browse_layout'] ?? ''),
             'form_custom_js'            => (string)($data['form_custom_js'] ?? ''),
             'form_js_before_save'       => (string)($data['form_js_before_save'] ?? ''),
             'form_js_after_save'        => (string)($data['form_js_after_save'] ?? ''),
@@ -412,6 +489,42 @@ function actionSave($db) {
             $db->insert('nu_forms', $row);
             $savedId = $db->lastInsertId();
             error_log('[forms.php] actionSave: inserted form_id=' . $savedId);
+        }
+
+        // Save layout snapshot to nu_form_versions
+        try {
+            $verSettings = [
+                'browse_sql'                => $row['browse_sql'] ?? '',
+                'browse_columns'            => $row['browse_columns'] ?? '',
+                'browse_layout'             => $row['browse_layout'] ?? '',
+                'browse_search_enabled'     => $row['browse_search_enabled'] ?? 0,
+                'browse_search_placeholder' => $row['browse_search_placeholder'] ?? '',
+                'browse_search_fields'      => $row['browse_search_fields'] ?? '',
+                'browse_page_size'          => $row['browse_page_size'] ?? 20,
+                'browse_default_sort'       => $row['browse_default_sort'] ?? '',
+                'browse_display_mode'       => $row['browse_display_mode'] ?? 'inline',
+                'browse_conditions'         => $row['browse_conditions'] ?? null,
+                'form_custom_js'            => $row['form_custom_js'] ?? '',
+                'form_js_before_save'       => $row['form_js_before_save'] ?? '',
+                'form_js_after_save'        => $row['form_js_after_save'] ?? '',
+                'form_custom_php'           => $row['form_custom_php'] ?? '',
+                'form_custom_css'           => $row['form_custom_css'] ?? '',
+                'form_panel_mode'           => $row['form_panel_mode'] ?? 'fixed',
+                'form_panel_width'          => $row['form_panel_width'] ?? 0
+            ];
+            $auth = NuAuth::getInstance();
+            $currentUser = $auth->getCurrentUser();
+            $username = $currentUser['usr_name'] ?? $currentUser['usr_login'] ?? 'globeadmin';
+            $db->insert('nu_form_versions', [
+                'ver_form_id'    => $savedId,
+                'ver_form_code'  => $formCode,
+                'ver_layout'     => $formLayout,
+                'ver_settings'   => json_encode($verSettings, JSON_UNESCAPED_UNICODE),
+                'ver_created_by' => $username,
+                'ver_created_at' => date('Y-m-d H:i:s')
+            ]);
+        } catch (Throwable $e) {
+            error_log('[forms.php] actionSave: failed to insert version revision: ' . $e->getMessage());
         }
 
         if ($formTable !== '' && $tableMode !== 'existing_no_sync') {

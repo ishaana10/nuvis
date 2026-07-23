@@ -814,6 +814,7 @@ foreach ($forms as $f) {
       <button type="button" class="nb-tab"        data-panel="panelBrowse"  onclick="nbFormBuilder.switchTab(this)" id="browseTab">Browse</button>
       <button type="button" class="nb-tab"        data-panel="panelEvents"  onclick="nbFormBuilder.switchTab(this)">Events / JS</button>
       <button type="button" class="nb-tab"        data-panel="panelPhpCss"  onclick="nbFormBuilder.switchTab(this)">PHP / CSS</button>
+      <button type="button" class="nb-tab"        data-panel="panelVersions" onclick="nbFormBuilder.switchTab(this)" id="versionsTab">Version History</button>
     </div>
 
     <!-- ── TAB: Fields ── -->
@@ -868,6 +869,12 @@ foreach ($forms as $f) {
             <div class="nb-tool" data-type="group"   draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></svg>Group</div>
             <div class="nb-tool" data-type="tab"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M9 5v4M15 5v4"/></svg>Tab</div>
           </div>
+          <div class="nb-tools-group">
+            <div class="nb-tools-group-label">Reusable Blocks</div>
+            <div class="nb-tool" data-type="block_address" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);">Address Block</div>
+            <div class="nb-tool" data-type="block_contact" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);">Contact Info</div>
+            <div class="nb-tool" data-type="block_billing" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);">Billing Block</div>
+          </div>
         </div>
 
         <!-- Canvas -->
@@ -920,8 +927,17 @@ foreach ($forms as $f) {
           <textarea id="formBrowseSql" class="nu-input" rows="4" placeholder="SELECT id, name, email FROM customers WHERE active = 1"></textarea>
         </div>
         <div style="grid-column:1/-1;">
-          <label class="nu-label">Browse Columns <span style="font-weight:400;color:var(--text-tertiary);">(comma-sep field names to show as columns)</span></label>
-          <input type="text" id="formBrowseColumns" class="nu-input" placeholder="id, name, email, created_at">
+          <label class="nu-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span>Visual Browse Column Designer</span>
+            <span style="font-weight:400;color:var(--text-tertiary);font-size:11px;">Select fields, set widths, custom formats, pinning, and conditional highlights</span>
+          </label>
+          <div id="visualBrowseDesigner" style="background:var(--bg-elevated);padding:14px;border:1px dashed var(--border-color);border-radius:10px;margin-bottom:12px;">
+            <div id="browseColumnsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+            <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nbFormBuilder.addBrowseColumnDesignerRow()">+ Add Column</button>
+          </div>
+          <!-- Hidden fallbacks/proxies to preserve legacy backend actions -->
+          <input type="hidden" id="formBrowseColumns">
+          <textarea id="formBrowseLayout" style="display:none;"></textarea>
         </div>
         <div>
           <label class="nu-label">Page Size</label>
@@ -1071,6 +1087,33 @@ foreach ($forms as $f) {
           <textarea id="formCustomCss" class="nb-ace-hidden"></textarea>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ── TAB: Version History ── -->
+    <div class="nb-tab-panel" id="panelVersions">
+      <div style="background:var(--bg-elevated);padding:16px;border-radius:10px;border:1px solid var(--border-color);">
+        <h4 style="margin:0 0 12px 0;font-size:16px;font-weight:600;">Form Revision Log</h4>
+        <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px;">
+          View historical saves of this form layout and settings. Restoring a version will load its layout, code, and browse properties.
+        </p>
+        <div class="nu-table-wrap">
+          <table class="nu-table" style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border-color);background:var(--bg-subtle);">
+                <th style="padding:10px;text-align:left;font-size:12px;font-weight:600;">Version ID</th>
+                <th style="padding:10px;text-align:left;font-size:12px;font-weight:600;">Saved By</th>
+                <th style="padding:10px;text-align:left;font-size:12px;font-weight:600;">Saved At</th>
+                <th style="padding:10px;text-align:left;font-size:12px;font-weight:600;width:120px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="formVersionsTableBody">
+              <tr>
+                <td colspan="4" style="padding:20px;text-align:center;color:var(--text-tertiary);">No revisions logged yet. Save changes to create a version snapshot.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

@@ -857,3 +857,45 @@ body {
   border-radius: var(--radius-sm);
 }
 .nu-app.sidebar-collapsed .nu-nav-form-chevron { display: none; }
+
+/* ── Mobile Form Stacking and Modern Spacing Overrides ── */
+@media (max-width: 768px) {
+  .nu-form-row, .nu-form-grid, .nb-row-drop {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+  .nu-field, .nb-cfield {
+    grid-column: span 12 !important;
+  }
+  .nb-builder-wrap {
+    flex-direction: column !important;
+    height: auto !important;
+  }
+  .nb-toolbox {
+    width: 100% !important;
+    margin-bottom: 16px;
+  }
+}
+
+/* Glassmorphism styling details for datagrids and panels */
+.nu-table-wrap {
+  box-shadow: var(--shadow-sm);
+  background: var(--bg-card);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.nu-table-wrap:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary);
+}
+
+/* Th-resizer indicator visual aid */
+.nu-th-resizer:hover {
+  background: var(--primary) !important;
+  opacity: 0.7;
+}
+
+/* Interactive Pagination polish */
+.nu-btn-ghost:hover {
+  background: var(--bg-hover) !important;
+  transform: translateY(-1px);
+}

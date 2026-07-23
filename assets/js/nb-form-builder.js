@@ -1505,13 +1505,23 @@ if (canvasType === 'subform' && sfData) {
       var _r = function (n) { var e = document.querySelector('input[name="' + n + '"]:checked'); return e ? e.value : ''; };
       var _v = function (id) { var e = document.getElementById(id); return e ? e.value : ''; };
       var _c = function (id) { var e = document.getElementById(id); return !!(e && e.checked); };
+
+      // Auto-calculate legacy browse_columns text
+      var colNames = [];
+      document.querySelectorAll('.nb-browse-column-row').forEach(function (row) {
+        var fld = row.querySelector('.nb-col-field').value;
+        if (fld) colNames.push(fld);
+      });
+      var browseColumnsValue = colNames.join(',');
+
       var tableMode = _r('formTableMode') || 'new';
       var payload = {
         form_name: name, form_code: codeEl ? codeEl.value.trim() : '', form_table: tableEl ? tableEl.value.trim() : '',
         form_type: _r('formType') || 'main', form_table_mode: tableMode, form_pk_type: _r('formPkType') || 'autoincrement',
         form_layout: JSON.stringify(this.getLayout()),
         create_table: (tableMode === 'new' && !editId) ? 1 : 0,
-        browse_display_mode: _v('browseDisplayMode'), browse_sql: _v('formBrowseSql'), browse_columns: _v('formBrowseColumns'),
+        browse_display_mode: _v('browseDisplayMode'), browse_sql: _v('formBrowseSql'), browse_columns: browseColumnsValue,
+        browse_layout: this._collectBrowseLayout(),
         browse_page_size: _v('formBrowsePageSize'), browse_default_sort: _v('formBrowseDefaultSort'),
         browse_search_enabled: _c('formBrowseSearchEnabled') ? 1 : 0, browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
         browse_search_fields: _v('formBrowseSearchFields'), browse_conditions: this._collectBrowseConditions(),
@@ -1554,6 +1564,43 @@ if (canvasType === 'subform' && sfData) {
       me.selectTableMode(formData.form_table_mode || 'existing', _sel('formTableMode', formData.form_table_mode || 'existing'));
       me.selectPkType(formData.form_pk_type || 'autoincrement', _sel('formPkType', formData.form_pk_type || 'autoincrement'));
       var titleEl = document.getElementById('builderTitle'); if (titleEl) titleEl.textContent = 'Edit: ' + (formData.form_name || formData.name || '');
+
+      // Load Version History Revision list
+      me.loadFormVersions(formData.form_id || formData.id);
+
+      // Clear browse designer columns list & make reorderable
+      var browseColsList = document.getElementById('browseColumnsList');
+      if (browseColsList) {
+        browseColsList.innerHTML = '';
+        _makeBrowseColumnsReorderable();
+      }
+
+      var bLayout = [];
+      if (formData.browse_layout) {
+        try { bLayout = JSON.parse(formData.browse_layout); } catch (e) { bLayout = []; }
+      }
+      if (Array.isArray(bLayout) && bLayout.length > 0) {
+        bLayout.forEach(function (col) {
+          me.addBrowseColumnDesignerRow(col);
+        });
+      } else if (formData.browse_columns) {
+        // Fallback: populate from comma-separated list of column names
+        var cols = formData.browse_columns.split(',');
+        cols.forEach(function (colName) {
+          colName = colName.trim();
+          if (colName) {
+            me.addBrowseColumnDesignerRow({
+              fieldname: colName,
+              fieldlabel: colName.charAt(0).toUpperCase() + colName.slice(1).replace('_', ' '),
+              width: '',
+              align: 'left',
+              formatter: 'text',
+              sortable: true,
+              frozen: false
+            });
+          }
+        });
+      }
 
       if (formData.browse_conditions && Array.isArray(formData.browse_conditions)) {
         formData.browse_conditions.forEach(function(cond) { me.addBrowseCondition(cond); });
@@ -2087,6 +2134,328 @@ entry.fields.forEach(function (f) {
 
 
   /* ════════════════════════════════════════════════════════════════════
+     Reusable Component Blocks
+  ═══════════════════════════════════════════════════════════════════ */
+  function _insertReusableBlock(blockType, targetRowBody) {
+    var fields = [];
+    if (blockType === 'block_address') {
+      fields = [
+        { type: 'text', label: 'Street Address', name: 'street_address', col: 12 },
+        { type: 'text', label: 'City', name: 'city', col: 6 },
+        { type: 'text', label: 'State / Province', name: 'state_province', col: 3 },
+        { type: 'text', label: 'ZIP / Postal Code', name: 'zip_code', col: 3 },
+        { type: 'text', label: 'Country', name: 'country', col: 12 }
+      ];
+    } else if (blockType === 'block_contact') {
+      fields = [
+        { type: 'text', label: 'Primary Phone', name: 'primary_phone', col: 6 },
+        { type: 'text', label: 'Secondary Phone', name: 'secondary_phone', col: 6 },
+        { type: 'email', label: 'Work Email', name: 'work_email', col: 6 },
+        { type: 'select', label: 'Preferred Contact Method', name: 'contact_method', col: 6, select_options: 'Email\nPhone\nSMS' }
+      ];
+    } else if (blockType === 'block_billing') {
+      fields = [
+        { type: 'text', label: 'Billing Street Address', name: 'billing_address', col: 12 },
+        { type: 'text', label: 'Billing ZIP Code', name: 'billing_zip', col: 4 },
+        { type: 'text', label: 'Cardholder Name', name: 'cardholder_name', col: 8 }
+      ];
+    }
+    if (!fields.length) return;
+
+    var row = targetRowBody ? targetRowBody.closest('.nb-row') : window.nbFormBuilder.addRow();
+    var rb = row ? row.querySelector('.nb-row-body') : null;
+    if (!rb) return;
+
+    var hint = rb.querySelector('.nb-row-drop-hint'); if (hint) hint.remove();
+
+    fields.forEach(function (f) {
+      var nc = window.nbFormBuilder._makeFieldCard(f.type, f.label, f.name + '_' + Math.random().toString(36).slice(2, 6), false, { col: f.col });
+      if (nc) {
+        _prepCard(nc);
+        rb.appendChild(nc);
+        window.nbFormBuilder._applyColSpan(nc, f.col);
+        if (f.select_options) {
+          var optsArea = nc.querySelector('.nb-cfield-select-options');
+          if (optsArea) optsArea.value = f.select_options;
+        }
+      }
+    });
+    window.nbFormBuilder._updateEmptyState();
+    window.nbFormBuilder._isDirty = true;
+    NuApp.toast('Reusable block added!', 'success');
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     Visual Browse Designer Helper Behaviors
+  ═══════════════════════════════════════════════════════════════════ */
+  function _makeBrowseColumnsReorderable() {
+    var list = document.getElementById('browseColumnsList');
+    if (!list) return;
+
+    list.addEventListener('dragstart', function (e) {
+      var row = e.target.closest('.nb-browse-column-row');
+      if (row) {
+        window._draggedBrowseColumnRow = row;
+        e.dataTransfer.effectAllowed = 'move';
+      }
+    });
+
+    list.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      var row = e.target.closest('.nb-browse-column-row');
+      if (row && row !== window._draggedBrowseColumnRow) {
+        var rect = row.getBoundingClientRect();
+        var next = (e.clientY - rect.top) > (rect.height / 2);
+        list.insertBefore(window._draggedBrowseColumnRow, next ? row.nextSibling : row);
+      }
+    });
+
+    list.addEventListener('dragend', function (e) {
+      window._draggedBrowseColumnRow = null;
+      window.nbFormBuilder._isDirty = true;
+    });
+  }
+
+  function _getAvailableFieldsList() {
+    var canvas = document.getElementById('formCanvas');
+    if (!canvas) return [];
+    var list = [];
+    canvas.querySelectorAll('.nb-cfield').forEach(function (card) {
+      var type = card.dataset.type;
+      if (type === 'group' || type === 'tab') return;
+      var nameInput = card.querySelector('[data-prop="name"]') || card.querySelector('input[name]');
+      var name = nameInput ? nameInput.value : '';
+      if (!name) {
+        name = card.dataset.name || card.id;
+      }
+      var labelInput = card.querySelector('[data-prop="label"]') || card.querySelector('label');
+      var label = labelInput ? (labelInput.value || labelInput.textContent) : name;
+      if (name) {
+        list.push({ name: name, label: label });
+      }
+    });
+    ['id', 'created_at', 'updated_at', 'user_id', 'location'].forEach(function (sf) {
+      if (!list.some(function (f) { return f.name === sf; })) {
+        list.push({ name: sf, label: sf.charAt(0).toUpperCase() + sf.slice(1).replace('_', ' ') });
+      }
+    });
+    return list;
+  }
+
+  // Extend nbFormBuilder object with the new designer and revisions methods
+  window.nbFormBuilder.addBrowseColumnDesignerRow = function (data) {
+    var d = data || { fieldname: '', fieldlabel: '', width: '', align: 'left', formatter: 'text', sortable: true, frozen: false, cond_bg: '', cond_fg: '', cond_op: '', cond_val: '' };
+    var list = document.getElementById('browseColumnsList');
+    if (!list) return;
+
+    var row = document.createElement('div');
+    row.className = 'nb-browse-column-row';
+    row.setAttribute('draggable', 'true');
+    row.style.cssText = 'display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr auto;gap:8px;align-items:center;background:var(--bg-surface);padding:10px;border-radius:6px;border:1px solid var(--border-color);margin-bottom:6px;';
+
+    var fields = _getAvailableFieldsList();
+    var fieldOpts = '<option value="">— select field —</option>';
+    fields.forEach(function (f) {
+      var sel = (d.fieldname === f.name) ? ' selected' : '';
+      fieldOpts += '<option value="' + f.name + '"' + sel + '>' + f.label + ' (' + f.name + ')</option>';
+    });
+    if (d.fieldname && !fields.some(function (f) { return f.name === d.fieldname; })) {
+      fieldOpts += '<option value="' + d.fieldname + '" selected>' + d.fieldname + '</option>';
+    }
+
+    var alignLeft = d.align === 'left' ? 'selected' : '';
+    var alignCenter = d.align === 'center' ? 'selected' : '';
+    var alignRight = d.align === 'right' ? 'selected' : '';
+
+    var formatters = ['text', 'currency', 'badge', 'progress_bar', 'date', 'checkbox_toggle', 'image', 'html'];
+    var formatOpts = '';
+    formatters.forEach(function (fmt) {
+      var sel = (d.formatter === fmt) ? ' selected' : '';
+      var lbl = fmt.replace('_', ' ').toUpperCase();
+      formatOpts += '<option value="' + fmt + '"' + sel + '>' + lbl + '</option>';
+    });
+
+    var isSortable = d.sortable ? 'checked' : '';
+    var isFrozen = d.frozen ? 'checked' : '';
+
+    row.innerHTML = `
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span class="nb-column-drag-handle" style="cursor:grab;color:var(--text-tertiary);font-size:16px;">☰</span>
+        <select class="nu-input nb-col-field" style="width:100%;font-size:12px;padding:4px 6px;">${fieldOpts}</select>
+      </div>
+      <div>
+        <input type="text" class="nu-input nb-col-label" placeholder="Display Label" value="${(d.fieldlabel || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:4px 6px;">
+      </div>
+      <div>
+        <input type="text" class="nu-input nb-col-width" placeholder="Width (e.g. 150px)" value="${(d.width || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:4px 6px;">
+      </div>
+      <div>
+        <select class="nu-input nb-col-align" style="font-size:12px;padding:4px 6px;">
+          <option value="left" ${alignLeft}>LEFT</option>
+          <option value="center" ${alignCenter}>CENTER</option>
+          <option value="right" ${alignRight}>RIGHT</option>
+        </select>
+      </div>
+      <div>
+        <select class="nu-input nb-col-format" style="font-size:12px;padding:4px 6px;">${formatOpts}</select>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <label style="font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer;" title="Make column sortable">
+          <input type="checkbox" class="nb-col-sortable" ${isSortable}> Sort
+        </label>
+        <label style="font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer;" title="Pin column to left side">
+          <input type="checkbox" class="nb-col-frozen" ${isFrozen}> Pin
+        </label>
+        <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" style="padding:2px 4px;font-size:11px;" onclick="nbFormBuilder.toggleColumnConditionalRule(this)" title="Conditional Formatting">🎨 Rule</button>
+        <button type="button" class="nu-btn nu-btn-danger nu-btn-sm" style="padding:2px 6px;" onclick="this.closest('.nb-browse-column-row').remove()">✕</button>
+      </div>
+
+      <div class="nb-col-cond-section" style="display:${d.cond_op ? 'grid' : 'none'};grid-column:1/-1;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:var(--bg-offset);padding:8px;border-radius:4px;border:1px solid var(--border-color);margin-top:6px;">
+        <div>
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Operator</label>
+          <select class="nu-input nb-col-cond-op" style="font-size:11px;padding:2px 4px;">
+            <option value="">— select op —</option>
+            <option value="=" ${d.cond_op === '=' ? 'selected' : ''}>Equals</option>
+            <option value="!=" ${d.cond_op === '!=' ? 'selected' : ''}>Not Equals</option>
+            <option value=">" ${d.cond_op === '>' ? 'selected' : ''}>Greater Than</option>
+            <option value="<" ${d.cond_op === '<' ? 'selected' : ''}>Less Than</option>
+            <option value="contains" ${d.cond_op === 'contains' ? 'selected' : ''}>Contains</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Value</label>
+          <input type="text" class="nu-input nb-col-cond-val" value="${(d.cond_val || '').replace(/"/g, '&quot;')}" style="font-size:11px;padding:2px 4px;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Text Color</label>
+          <input type="color" class="nu-input nb-col-cond-fg" value="${d.cond_fg || '#ff0000'}" style="font-size:11px;padding:0 2px;height:22px;cursor:pointer;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:2px;">Bg Color</label>
+          <input type="color" class="nu-input nb-col-cond-bg" value="${d.cond_bg || '#ffeeee'}" style="font-size:11px;padding:0 2px;height:22px;cursor:pointer;">
+        </div>
+      </div>
+    `;
+    list.appendChild(row);
+    var select = row.querySelector('.nb-col-field');
+    if (select && !d.fieldname) select.focus();
+  };
+
+  window.nbFormBuilder.toggleColumnConditionalRule = function (btn) {
+    var row = btn.closest('.nb-browse-column-row');
+    var section = row.querySelector('.nb-col-cond-section');
+    if (section) {
+      if (section.style.display === 'none') {
+        section.style.display = 'grid';
+        var op = section.querySelector('.nb-col-cond-op');
+        if (op && !op.value) op.value = '=';
+      } else {
+        section.style.display = 'none';
+        section.querySelector('.nb-col-cond-op').value = '';
+      }
+    }
+  };
+
+  window.nbFormBuilder._collectBrowseLayout = function () {
+    var rows = [];
+    document.querySelectorAll('.nb-browse-column-row').forEach(function (row) {
+      var fld = row.querySelector('.nb-col-field').value;
+      if (!fld) return;
+      var label = row.querySelector('.nb-col-label').value.trim();
+      var width = row.querySelector('.nb-col-width').value.trim();
+      var align = row.querySelector('.nb-col-align').value;
+      var formatter = row.querySelector('.nb-col-format').value;
+      var sortable = row.querySelector('.nb-col-sortable').checked;
+      var frozen = row.querySelector('.nb-col-frozen').checked;
+      var cond_op = row.querySelector('.nb-col-cond-op').value;
+      var cond_val = row.querySelector('.nb-col-cond-val').value.trim();
+      var cond_fg = row.querySelector('.nb-col-cond-fg').value;
+      var cond_bg = row.querySelector('.nb-col-cond-bg').value;
+
+      rows.push({
+        fieldname: fld,
+        fieldlabel: label,
+        width: width,
+        align: align,
+        formatter: formatter,
+        sortable: sortable,
+        frozen: frozen,
+        cond_op: cond_op,
+        cond_val: cond_val,
+        cond_fg: cond_fg,
+        cond_bg: cond_bg
+      });
+    });
+    return JSON.stringify(rows);
+  };
+
+  window.nbFormBuilder.loadFormVersions = function (formId) {
+    var tbody = document.getElementById('formVersionsTableBody');
+    if (!tbody) return;
+    if (!formId) {
+      tbody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-tertiary);">No revisions logged yet. Save changes to create a version snapshot.</td></tr>';
+      return;
+    }
+    NuApp.apiJson('api/forms.php?action=get_versions&form_id=' + encodeURIComponent(formId), { credentials: 'same-origin' })
+      .then(function (res) {
+        if (!res || !res.success || !res.versions || res.versions.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-tertiary);">No revisions logged yet. Save changes to create a version snapshot.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = '';
+        res.versions.forEach(function (v) {
+          var tr = document.createElement('tr');
+          tr.style.cssText = 'border-bottom:1px solid var(--border-color);';
+
+          var tdId = document.createElement('td');
+          tdId.style.cssText = 'padding:10px;font-weight:600;';
+          tdId.textContent = '#' + v.ver_id;
+
+          var tdUser = document.createElement('td');
+          tdUser.style.cssText = 'padding:10px;';
+          tdUser.textContent = v.ver_created_by || 'Unknown';
+
+          var tdTime = document.createElement('td');
+          tdTime.style.cssText = 'padding:10px;';
+          tdTime.textContent = v.ver_created_at;
+
+          var tdActions = document.createElement('td');
+          tdActions.style.cssText = 'padding:10px;';
+
+          var btnRestore = document.createElement('button');
+          btnRestore.type = 'button';
+          btnRestore.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+          btnRestore.style.cssText = 'color:var(--color-primary);cursor:pointer;';
+          btnRestore.textContent = '↩ Restore';
+          btnRestore.addEventListener('click', function () {
+            if (confirm('Are you sure you want to restore Version #' + v.ver_id + '? This will overwrite your current draft.')) {
+              NuApp.apiJson('api/forms.php?action=rollback&ver_id=' + encodeURIComponent(v.ver_id), { credentials: 'same-origin' })
+                .then(function (rollbackRes) {
+                  if (rollbackRes && rollbackRes.success && rollbackRes.form) {
+                    NuApp.toast('Overwritten draft with Version #' + v.ver_id, 'success');
+                    window.nbFormBuilder.loadForm(rollbackRes.form);
+                    window.nbFormBuilder._isDirty = true;
+                  } else {
+                    NuApp.toast((rollbackRes && rollbackRes.error) || 'Rollback failed', 'error');
+                  }
+                });
+            }
+          });
+
+          tdActions.appendChild(btnRestore);
+          tr.appendChild(tdId);
+          tr.appendChild(tdUser);
+          tr.appendChild(tdTime);
+          tr.appendChild(tdActions);
+          tbody.appendChild(tr);
+        });
+      })
+      .catch(function (err) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:red;">Failed to load versions: ' + err.message + '</td></tr>';
+      });
+  };
+
+  /* ════════════════════════════════════════════════════════════════════
      Boot — wire up existing rows after page load
   ═══════════════════════════════════════════════════════════════════ */
   document.addEventListener('DOMContentLoaded', function () {
@@ -2107,6 +2476,32 @@ entry.fields.forEach(function (f) {
         });
       });
     }
+
+    // Single click handler to auto-add field types or reusable blocks on click
+    document.addEventListener('click', function (e) {
+      var tool = e.target.closest ? e.target.closest('.nb-tool[data-type]') : null;
+      if (tool) {
+        var dtype = tool.dataset.type;
+        if (dtype === 'group' || dtype === 'tab') {
+          window.nbFormBuilder.addField(dtype, {});
+        } else if (dtype.indexOf('block_') === 0) {
+          _insertReusableBlock(dtype, null);
+        } else {
+          var row = window.nbFormBuilder.addRow();
+          var rb = row ? row.querySelector('.nb-row-body') : null;
+          if (rb) {
+            var nc = window.nbFormBuilder._makeFieldCard(dtype, dtype + ' field', dtype + '_' + Date.now(), false, { col: 6 });
+            if (nc) {
+              _prepCard(nc);
+              var hint = rb.querySelector('.nb-row-drop-hint'); if (hint) hint.remove();
+              rb.appendChild(nc);
+              window.nbFormBuilder._applyColSpan(nc, 6);
+            }
+          }
+          window.nbFormBuilder._updateEmptyState();
+        }
+      }
+    });
   });
 
 
