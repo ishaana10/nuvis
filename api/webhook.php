@@ -192,6 +192,74 @@ switch ($action) {
         }
         break;
 
+    case 'save_and_test_playground':
+        try {
+            if (empty($GLOBALS['nuConfig']['enableWebhookDemo'])) {
+                echo json_encode(['success' => false, 'error' => 'Webhook Demo playground is disabled']);
+                exit;
+            }
+
+            $input = json_decode(file_get_contents('php://input'), true);
+            $url = trim((string)($input['url'] ?? ''));
+            $secret = trim((string)($input['secret'] ?? ''));
+            $eventType = trim((string)($input['event_type'] ?? ''));
+            $payloadData = $input['payload_data'] ?? [];
+            $template = $input['template'] ?? '';
+
+            if ($url === '') {
+                echo json_encode(['success' => false, 'error' => 'Target URL is required']);
+                exit;
+            }
+
+            require_once __DIR__ . '/../core/WebhookSender.php';
+
+            $webhook = [
+                'webhook_id'               => 9999,
+                'webhook_name'             => 'Playground Temp Route',
+                'webhook_url'              => $url,
+                'webhook_method'           => 'POST',
+                'webhook_headers'          => json_encode(['Content-Type' => 'application/json']),
+                'webhook_payload_template' => $template,
+                'webhook_secret'           => $secret,
+                'webhook_active'           => 1
+            ];
+
+            // Trigger the real core sender
+            $result = NuWebhookSender::send($webhook, $eventType, $payloadData);
+
+            $computedSignature = '';
+            if ($secret !== '') {
+                $computedSignature = hash_hmac('sha256', $result['payload'], $secret);
+            }
+
+            // Also log to the database log table as persistent backup
+            try {
+                $db->insert('nu_webhook_logs', [
+                    'delivery_id' => uniqid('dlv_', true),
+                    'webhook_id'  => 9999,
+                    'event_type'  => $eventType,
+                    'method'      => 'POST',
+                    'url'         => $url,
+                    'headers'     => json_encode(['X-Nuvis-Event' => $eventType, 'X-Nuvis-Signature' => $computedSignature]),
+                    'payload'     => $result['payload'],
+                    'response'    => $result['response'] ?: '',
+                    'http_code'   => $result['http_code'] ?? 0,
+                    'status'      => $result['success'] ? 'success' : 'failed'
+                ]);
+            } catch (Throwable $ignore) {}
+
+            echo json_encode([
+                'success'              => true,
+                'signature'            => $computedSignature,
+                'computed_signature'   => $computedSignature,
+                'raw_rendered_payload' => $result['payload'],
+                'dispatch_result'      => $result
+            ]);
+        } catch (Throwable $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+        break;
+
     default:
         echo json_encode(['success' => false, 'error' => 'Unknown API action']);
 }

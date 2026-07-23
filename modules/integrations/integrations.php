@@ -174,6 +174,20 @@ $apiKeys  = $db->fetchAll("SELECT * FROM nu_api_tokens ORDER BY token_created_at
 
     <!-- 3. Live Webhook Inspector / Demo Tab -->
     <div id="demoConsoleTab" class="nu-integrations-tab" style="display: none;">
+        <?php if (!empty($GLOBALS['nuConfig']['enableWebhookDemo'])): ?>
+        <div class="nu-card" style="background: linear-gradient(135deg, #eff6ff, #dbeafe); border: 1px solid #bfdbfe; border-radius: 12px; padding: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div style="flex: 1; min-width: 280px;">
+                <h4 style="margin: 0 0 6px 0; color: #1e40af; font-size: 16px; font-weight: 700;">🚀 Launch Interactive Webhook Playground</h4>
+                <p style="margin: 0; color: #1e3a8a; font-size: 13px; line-height: 1.5;">
+                    Step through our new developer demo playground to provision test routes, customize Slack/Discord payload templates, fire simulated event streams, and see real-time cryptographic HMAC signature verifications.
+                </p>
+            </div>
+            <a href="webhook_demo.php" class="nu-btn nu-btn-primary" style="background: #2563eb; color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 10px 18px; border-radius: 8px;">
+                Open Webhook Playground &rarr;
+            </a>
+        </div>
+        <?php endif; ?>
+
         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
 
             <div class="nu-card" style="flex: 1; min-width: 300px;">

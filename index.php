@@ -262,6 +262,14 @@ if ($isLoggedIn && $currentUser) {
                 </svg>
                 <span>Webhooks</span>
             </a>
+            <?php if (!empty($nuConfig['enableWebhookDemo'])): ?>
+            <a href="webhook_demo.php" target="_blank" class="nu-nav-item" style="color: var(--accent, #4f6bed);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span style="font-weight: 600;">Playground Demo</span>
+            </a>
+            <?php endif; ?>
 
             <!-- ── Admin Tools section ── -->
             <?php if ($isAdmin): ?>
