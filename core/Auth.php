@@ -222,11 +222,30 @@ class NuAuth {
      */
     public function resolveHashes(string $sql): string {
         $meta = $_SESSION['nu_user_meta'] ?? [];
+
+        // Load custom global developer settings from nu_system_settings
+        try {
+            $db = NuDatabase::getInstance();
+            $row = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'system_fields_def'");
+            if ($row && !empty($row['setting_value'])) {
+                $fields = json_decode($row['setting_value'], true);
+                if (is_array($fields)) {
+                    foreach ($fields as $f) {
+                        if (!empty($f['global']) && !empty($f['key'])) {
+                            $meta[$f['key']] = $f['value'] ?? '';
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[Auth.php resolveHashes] ' . $e->getMessage());
+        }
+
         if (empty($meta)) return $sql;
 
         foreach ($meta as $key => $value) {
             // Sanitise key to prevent regex injection
-            $safeKey = preg_quote($key, '/');
+            $safeKey = preg_quote((string)$key, '/');
             // Escape value for safe SQL embedding (PDO not available at this point)
             $safeVal = addslashes((string)$value);
             $sql = preg_replace('/##' . $safeKey . '##/', $safeVal, $sql);

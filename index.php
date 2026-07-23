@@ -119,6 +119,23 @@ if ($isLoggedIn && $currentUser) {
         error_log('[index.php menu] ' . $e->getMessage());
     }
 }
+
+// ─── Retrieve Custom System Settings ──────────────────────────────────────────
+$customAppName = $nuConfig['siteTitle'] ?? 'NuBuilder 5';
+$customAppLogo = '';
+try {
+    $db = NuDatabase::getInstance();
+    $appNameRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'app_name'");
+    if ($appNameRow && trim((string)$appNameRow['setting_value']) !== '') {
+        $customAppName = trim((string)$appNameRow['setting_value']);
+    }
+    $appLogoRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'app_logo'");
+    if ($appLogoRow && trim((string)$appLogoRow['setting_value']) !== '') {
+        $customAppLogo = trim((string)$appLogoRow['setting_value']);
+    }
+} catch (Throwable $e) {
+    error_log('[index.php settings load] ' . $e->getMessage());
+}
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?= h($nuConfig['theme'] ?? 'auto') ?>">
@@ -126,7 +143,7 @@ if ($isLoggedIn && $currentUser) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title><?= h($nuConfig['siteTitle'] ?? 'NuBuilder 5') ?></title>
+    <title><?= h($customAppName) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="<?= nu_asset('assets/css/nubuilder-next.css') ?>">
@@ -140,8 +157,12 @@ if ($isLoggedIn && $currentUser) {
 <div class="nu-login">
     <div class="nu-login-card">
         <div class="nu-login-brand">
-            <div class="nu-logo">nu</div>
-            <h1><?= h($nuConfig['siteTitle'] ?? 'NuBuilder 5') ?></h1>
+            <?php if ($customAppLogo !== ''): ?>
+                <img src="<?= h($customAppLogo) ?>" alt="Logo" class="nu-custom-logo" style="max-height: 56px; margin: 0 auto 16px; display: block; border-radius: var(--radius-lg);">
+            <?php else: ?>
+                <div class="nu-logo">nu</div>
+            <?php endif; ?>
+            <h1><?= h($customAppName) ?></h1>
             <p>Modern Low-Code Platform</p>
         </div>
 
@@ -185,8 +206,12 @@ if ($isLoggedIn && $currentUser) {
     <!-- Sidebar -->
     <aside class="nu-sidebar" id="sidebar">
         <div class="nu-sidebar-header">
-            <div class="nu-logo">nu</div>
-            <span class="nu-version">v<?= NU_VERSION ?></span>
+            <?php if ($customAppLogo !== ''): ?>
+                <img src="<?= h($customAppLogo) ?>" alt="Logo" class="nu-custom-logo" style="max-height: 32px; border-radius: 4px; margin-right: 8px;">
+            <?php else: ?>
+                <div class="nu-logo">nu</div>
+            <?php endif; ?>
+            <span class="nu-version" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="<?= h($customAppName) ?>"><?= h($customAppName) ?></span>
         </div>
 
         <?php if ($dynNav !== ''): ?>
@@ -391,6 +416,16 @@ if ($isLoggedIn && $currentUser) {
                 </svg>
                 <span>System Updater</span>
             </a>
+            <?php if ($_role === 'globeadmin'): ?>
+            <a href="#developer_settings" class="nu-nav-item" data-module="developer_settings"
+               onclick="NuApp.loadModule('developer_settings'); return false;"
+               style="color:var(--warning,#f59e0b);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+                <span>Developer Settings</span>
+            </a>
+            <?php endif; ?>
             <?php endif; ?>
 
             <!-- ── Personal section (every user) ── -->
