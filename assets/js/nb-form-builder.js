@@ -302,10 +302,64 @@ function _renderPropsInPanel(card, body) {
   var type = card.dataset.type || 'text';
   var col  = parseInt(card.dataset.col, 10) || 6;
 
+  // Render premium tabs at the top of Properties Panel body
+  var tabsContainer = document.createElement('div');
+  tabsContainer.className = 'flex border-b border-slate-200 dark:border-slate-800 mb-4';
+
+  var tabNames = ['General', 'Validation', 'Advanced', 'Style'];
+  var activeTab = 'General';
+
+  tabNames.forEach(function (tabName) {
+    var tabBtn = document.createElement('button');
+    tabBtn.type = 'button';
+    tabBtn.className = 'flex-grow py-2 text-center text-[11px] font-bold tracking-wider uppercase border-b-2 focus:outline-none transition-colors ' +
+      (tabName === activeTab ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800');
+    tabBtn.dataset.tabName = tabName;
+    tabBtn.textContent = tabName;
+    tabBtn.addEventListener('click', function () {
+      activeTab = tabName;
+      tabsContainer.querySelectorAll('button').forEach(function (b) {
+        b.className = 'flex-grow py-2 text-center text-[11px] font-bold tracking-wider uppercase border-b-2 focus:outline-none transition-colors ' +
+          (b.dataset.tabName === activeTab ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800');
+      });
+      body.querySelectorAll('.nb-props-tab-pane').forEach(function (p) {
+        p.classList.toggle('hidden', p.dataset.tabName !== activeTab);
+      });
+    });
+    tabsContainer.appendChild(tabBtn);
+  });
+  body.appendChild(tabsContainer);
+
+  // Property Filter Input
+  var filterInp = document.createElement('input');
+  filterInp.type = 'text';
+  filterInp.placeholder = 'Filter properties...';
+  filterInp.className = 'w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4 transition-all';
+  filterInp.addEventListener('input', function () {
+    var query = filterInp.value.toLowerCase().trim();
+    body.querySelectorAll('.nb-fp').forEach(function (el) {
+      var text = (el.querySelector('label')?.textContent || '').toLowerCase();
+      el.style.display = text.includes(query) ? '' : 'none';
+    });
+  });
+  body.appendChild(filterInp);
+
+  // Panes
+  var panes = {};
+  tabNames.forEach(function (tabName) {
+    var pane = document.createElement('div');
+    pane.className = 'nb-props-tab-pane flex flex-col gap-3' + (tabName === activeTab ? '' : ' hidden');
+    pane.dataset.tabName = tabName;
+    body.appendChild(pane);
+    panes[tabName] = pane;
+  });
+
+  // Helpers
   function _fp(labelText, inputEl, full) {
     var wrap = document.createElement('div');
-    wrap.className = 'nb-fp' + (full ? ' nb-fp-full' : '');
+    wrap.className = 'nb-fp flex flex-col gap-1 w-full';
     var lbl = document.createElement('label');
+    lbl.className = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider';
     lbl.textContent = labelText;
     wrap.appendChild(lbl);
     wrap.appendChild(inputEl);
@@ -315,7 +369,7 @@ function _renderPropsInPanel(card, body) {
   function _inp(val, ph) {
     var i = document.createElement('input');
     i.type = 'text';
-    i.className = 'nu-input';
+    i.className = 'nu-input w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-all';
     i.placeholder = ph || '';
     i.setAttribute('value', val || '');
     i.value = val || '';
@@ -333,33 +387,31 @@ function _renderPropsInPanel(card, body) {
     return '';
   }
 
-  // Width bar
+  // --- Style Tab Content ---
   var spanBar = document.createElement('div');
-  spanBar.className = 'nb-span-bar';
+  spanBar.className = 'nb-span-bar flex items-center gap-1 flex-wrap pb-2 border-b border-slate-100 dark:border-slate-800 mb-2';
   var spanLabel = document.createElement('span');
-  spanLabel.className = 'nb-span-bar-label';
+  spanLabel.className = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider mr-2';
   spanLabel.textContent = 'Width (cols)';
   spanBar.appendChild(spanLabel);
   [3, 4, 6, 8, 12].forEach(function (n) {
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'nb-span-btn' + (n === col ? ' active' : '');
+    btn.className = 'nb-span-btn px-2 py-1 text-xs border border-slate-200 dark:border-slate-800 rounded ' + (n === col ? 'bg-primary text-white font-bold' : 'bg-transparent text-slate-500');
     btn.dataset.span = n;
     btn.textContent = n;
     btn.addEventListener('click', function () {
       window.nbFormBuilder._applyColSpan(card, n);
       spanBar.querySelectorAll('.nb-span-btn').forEach(function (b) {
-        b.classList.toggle('active', parseInt(b.dataset.span, 10) === n);
+        b.className = 'nb-span-btn px-2 py-1 text-xs border border-slate-200 dark:border-slate-800 rounded ' + (parseInt(b.dataset.span, 10) === n ? 'bg-primary text-white font-bold' : 'bg-transparent text-slate-500');
       });
+      window.nbUpdateLivePreview();
     });
     spanBar.appendChild(btn);
   });
+  panes['Style'].appendChild(spanBar);
 
-  var grid = document.createElement('div');
-  grid.className = 'nb-fp-grid';
-  grid.appendChild(spanBar);
-
-  // Common text fields
+  // --- General Tab Content ---
   var labelInput = _inp(_fromCard('fieldLabel', '.nu-field-label'), 'Field label');
   labelInput.addEventListener('input', function () {
     card.dataset.fieldLabel = labelInput.value;
@@ -369,6 +421,7 @@ function _renderPropsInPanel(card, body) {
     if (hdr) hdr.textContent = labelInput.value || '(no label)';
     var titleEl = document.getElementById('nb-props-title');
     if (titleEl) titleEl.textContent = labelInput.value || 'Properties';
+    window.nbUpdateLivePreview();
   });
 
   var nameInput = _inp(_fromCard('fieldName', '.nu-field-name'), 'field_name');
@@ -376,10 +429,11 @@ function _renderPropsInPanel(card, body) {
     card.dataset.fieldName = nameInput.value;
     var orig = card.querySelector('.nb-cfield-body .nu-field-name');
     if (orig) { orig.value = nameInput.value; orig.setAttribute('value', nameInput.value); }
+    window.nbUpdateLivePreview();
   });
 
-  grid.appendChild(_fp('Label', labelInput));
-  grid.appendChild(_fp('Field Name', nameInput));
+  panes['General'].appendChild(_fp('Label', labelInput));
+  panes['General'].appendChild(_fp('Field Name', nameInput));
 
   if (type !== 'subform') {
     var phInput = _inp(_fromCard('fieldPh', '.nu-field-placeholder'), 'Placeholder text');
@@ -387,6 +441,7 @@ function _renderPropsInPanel(card, body) {
       card.dataset.fieldPh = phInput.value;
       var orig = card.querySelector('.nb-cfield-body .nu-field-placeholder');
       if (orig) { orig.value = phInput.value; orig.setAttribute('value', phInput.value); }
+      window.nbUpdateLivePreview();
     });
 
     var defInput = _inp(_fromCard('fieldDefault', '.nu-field-default'), 'Default value');
@@ -394,10 +449,11 @@ function _renderPropsInPanel(card, body) {
       card.dataset.fieldDefault = defInput.value;
       var orig = card.querySelector('.nb-cfield-body .nu-field-default');
       if (orig) { orig.value = defInput.value; orig.setAttribute('value', defInput.value); }
+      window.nbUpdateLivePreview();
     });
 
-    grid.appendChild(_fp('Placeholder', phInput));
-    grid.appendChild(_fp('Default', defInput));
+    panes['General'].appendChild(_fp('Placeholder', phInput));
+    panes['General'].appendChild(_fp('Default', defInput));
   }
 
   var helpInput = _inp(_fromCard('fieldHelp', '.nu-field-help'), 'Help text shown to user');
@@ -405,10 +461,63 @@ function _renderPropsInPanel(card, body) {
     card.dataset.fieldHelp = helpInput.value;
     var orig = card.querySelector('.nb-cfield-body .nu-field-help');
     if (orig) { orig.value = helpInput.value; orig.setAttribute('value', helpInput.value); }
+    window.nbUpdateLivePreview();
   });
-  grid.appendChild(_fp('Help Text', helpInput, true));
+  panes['General'].appendChild(_fp('Help Text', helpInput, true));
 
-  // Type-specific extras from body grid (skip standard fields already rendered above)
+  // --- Validation Tab Content ---
+  var visWrap = document.createElement('div');
+  visWrap.className = 'nb-vis-flags flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800';
+  [
+    { cls: 'nu-field-required',      label: 'Required' },
+    { cls: 'nu-field-no-duplicate',  label: 'No Duplicate' },
+    { cls: 'nu-field-readonly',      label: 'Readonly' },
+    { cls: 'nu-field-hidden',        label: 'Hidden' },
+    { cls: 'nu-field-hidden-normal', label: 'Hidden for normal users' }
+  ].forEach(function (flag) {
+    var origChk = card.querySelector('.nb-cfield-body .' + flag.cls);
+    var lbl = document.createElement('label');
+    lbl.className = 'flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer';
+    var chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'rounded text-primary focus:ring-primary border-slate-300 dark:border-slate-700';
+    chk.checked = !!(origChk && origChk.checked);
+    chk.addEventListener('change', function () {
+      if (origChk) origChk.checked = chk.checked;
+      window.nbUpdateLivePreview();
+    });
+    lbl.appendChild(chk);
+    lbl.appendChild(document.createTextNode(' ' + flag.label));
+    visWrap.appendChild(lbl);
+  });
+  panes['Validation'].appendChild(visWrap);
+
+  // Style flags
+  var styleFlagsWrap = document.createElement('div');
+  styleFlagsWrap.className = 'flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800';
+  [
+    { cls: 'nu-field-label-on-top',  label: 'Label on Top' },
+    { cls: 'nu-field-chk-label-left', label: 'Checkbox Label on Left' },
+    { cls: 'nu-field-collapsible-group', label: 'Collapsible Group/Section' }
+  ].forEach(function (flag) {
+    var origChk = card.querySelector('.nb-cfield-body .' + flag.cls);
+    var lbl = document.createElement('label');
+    lbl.className = 'flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer';
+    var chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'rounded text-primary focus:ring-primary border-slate-300 dark:border-slate-700';
+    chk.checked = !!(origChk && origChk.checked);
+    chk.addEventListener('change', function () {
+      if (origChk) origChk.checked = chk.checked;
+      window.nbUpdateLivePreview();
+    });
+    lbl.appendChild(chk);
+    lbl.appendChild(document.createTextNode(' ' + flag.label));
+    styleFlagsWrap.appendChild(lbl);
+  });
+  panes['Style'].appendChild(styleFlagsWrap);
+
+  // --- Advanced Tab Content ---
   var cardBody = card.querySelector('.nb-cfield-body');
   if (cardBody) {
     var bodyGrid = cardBody.querySelector('.nb-fp-grid');
@@ -426,17 +535,34 @@ function _renderPropsInPanel(card, body) {
 
         // Subform panel: build live, never clone
         if (child.classList.contains('nb-sf-fk-panel')) {
-          _renderSubformPanel(card, grid);
+          _renderSubformPanel(card, panes['Advanced']);
           return;
         }
 
-        // Generic extras: clone + wire two-way sync
+        // Collapsible Advanced section
         var clone = child.cloneNode(true);
+        if (clone.classList.contains('nb-select-manual') || clone.classList.contains('nb-select-from-table')) {
+          // Keep flat but synced
+        } else {
+          clone.className = 'nb-prop-section border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden mb-2';
+          var origHeader = document.createElement('div');
+          origHeader.className = 'bg-slate-100 dark:bg-slate-800/40 p-2 text-xs font-semibold cursor-pointer flex justify-between items-center';
+          origHeader.innerHTML = '<span>Configure element settings</span><span>▼</span>';
+          origHeader.addEventListener('click', function () {
+            var bodyEl = clone.querySelector('.nb-fp-grid') || clone;
+            bodyEl.classList.toggle('hidden');
+          });
+          clone.insertBefore(origHeader, clone.firstChild);
+        }
+
         child.querySelectorAll('input, select, textarea').forEach(function (origEl, idx) {
           var cloneEl = clone.querySelectorAll('input, select, textarea')[idx];
           if (!cloneEl) return;
           if (origEl.type === 'checkbox' || origEl.type === 'radio') {
             cloneEl.checked = origEl.checked;
+            if (origEl.type === 'radio') {
+              cloneEl.name = 'props-clone-' + origEl.name;
+            }
           } else {
             var val = (origEl.value !== undefined && origEl.value !== '') ? origEl.value : (origEl.getAttribute('value') || '');
             cloneEl.setAttribute('value', val);
@@ -447,73 +573,57 @@ function _renderPropsInPanel(card, body) {
               if (o.type !== 'checkbox' && o.type !== 'radio') {
                 o.value = c.value;
                 o.setAttribute('value', c.value);
+                window.nbUpdateLivePreview();
               }
             });
             c.addEventListener('change', function () {
               if (o.type === 'checkbox' || o.type === 'radio') {
                 o.checked = c.checked;
+                var evt = document.createEvent('HTMLEvents');
+                evt.initEvent('change', true, false);
+                o.dispatchEvent(evt);
+
+                if (c.classList.contains('nu-field-opt-src')) {
+                  var isTable = clone.querySelector('.nu-field-opt-src[value="table"]').checked;
+                  var clManual = clone.querySelector('.nb-select-manual');
+                  var clTable = clone.querySelector('.nb-select-from-table');
+                  if (clManual) clManual.style.display = isTable ? 'none' : '';
+                  if (clTable) clTable.style.display = isTable ? '' : 'none';
+                }
               } else {
                 o.value = c.value;
                 o.setAttribute('value', c.value);
               }
+              window.nbUpdateLivePreview();
             });
           }(origEl, cloneEl));
         });
-        grid.appendChild(clone);
+        panes['Advanced'].appendChild(clone);
       });
     }
   }
 
-  // Visibility flags
-  var visWrap = document.createElement('div');
-  visWrap.className = 'nb-vis-flags nb-fp-full';
-  var visTitle = document.createElement('label');
-  visTitle.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;flex-basis:100%;margin-bottom:2px;';
-  visTitle.textContent = 'Field Options';
-  visWrap.appendChild(visTitle);
-  [
-    { cls: 'nu-field-required',      label: 'Required' },
-    { cls: 'nu-field-no-duplicate',  label: 'No Duplicate' },
-    { cls: 'nu-field-readonly',      label: 'Readonly' },
-    { cls: 'nu-field-hidden',        label: 'Hidden' },
-    { cls: 'nu-field-hidden-normal', label: 'Hidden for normal users' }
-  ].forEach(function (flag) {
-    var origChk = card.querySelector('.nb-cfield-body .' + flag.cls);
-    var lbl = document.createElement('label');
-    var chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.checked = !!(origChk && origChk.checked);
-    chk.addEventListener('change', function () { if (origChk) origChk.checked = chk.checked; });
-    lbl.appendChild(chk);
-    lbl.appendChild(document.createTextNode(' ' + flag.label));
-    visWrap.appendChild(lbl);
-  });
-
-  grid.appendChild(visWrap);
-
-  // Custom attributes for developers
+  // Custom Attributes in Advanced Tab
   var attrWrap = document.createElement('div');
-  attrWrap.className = 'nb-fp nb-fp-full';
-  attrWrap.style.marginTop = '10px';
+  attrWrap.className = 'nb-fp flex flex-col gap-1 mt-2';
   var attrLabel = document.createElement('label');
-  attrLabel.textContent = 'Custom Attributes (JSON or key=val)';
-  attrLabel.style.fontWeight = '700';
+  attrLabel.className = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
+  attrLabel.textContent = 'Custom Attributes (JSON)';
   attrWrap.appendChild(attrLabel);
   var attrArea = document.createElement('textarea');
-  attrArea.className = 'nu-input nu-field-custom-attrs';
-  attrArea.rows = 3;
-  attrArea.placeholder = 'data-custom="value"\n{"style": "color:red"}';
+  attrArea.className = 'nu-input w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-all';
+  attrArea.rows = 2;
+  attrArea.placeholder = 'data-custom="value"';
   var liveAttr = _fromCard('fieldCustomAttrs', '.nu-field-custom-attrs');
   attrArea.value = liveAttr;
   attrArea.addEventListener('input', function () {
     card.dataset.fieldCustomAttrs = attrArea.value;
     var orig = card.querySelector('.nb-cfield-body .nu-field-custom-attrs');
     if (orig) { orig.value = attrArea.value; orig.setAttribute('value', attrArea.value); }
+    window.nbUpdateLivePreview();
   });
   attrWrap.appendChild(attrArea);
-  grid.appendChild(attrWrap);
-
-  body.appendChild(grid);
+  panes['Advanced'].appendChild(attrWrap);
 }
 
 function _openPropsPanel(card) {

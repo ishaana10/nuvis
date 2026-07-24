@@ -150,6 +150,18 @@ try {
     <link rel="stylesheet" href="<?= nu_asset('assets/css/select2.min.css') ?>">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b1020">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: 'var(--color-primary, #4f6bed)',
+            }
+          }
+        }
+      }
+    </script>
 </head>
 <body>
 <?php if (!$isLoggedIn): ?>
