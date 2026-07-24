@@ -412,6 +412,67 @@ function _renderPropsInPanel(card, body) {
   panes['Style'].appendChild(spanBar);
 
   // --- General Tab Content ---
+  if (type !== 'group' && type !== 'tab') {
+    var supportedTypes = [
+      { value: 'text', label: 'Text' },
+      { value: 'textarea', label: 'Textarea' },
+      { value: 'number', label: 'Number' },
+      { value: 'email', label: 'Email' },
+      { value: 'password', label: 'Password' },
+      { value: 'date', label: 'Date' },
+      { value: 'datetime', label: 'DateTime' },
+      { value: 'time', label: 'Time' },
+      { value: 'checkbox', label: 'Checkbox' },
+      { value: 'file', label: 'File' },
+      { value: 'select', label: 'Select' },
+      { value: 'select2', label: 'Select2' },
+      { value: 'radio', label: 'Radio' },
+      { value: 'checkbox_group', label: 'Checkbox Group' },
+      { value: 'calculated', label: 'Calculated' },
+      { value: 'lookup', label: 'Lookup' },
+      { value: 'subform', label: 'Subform' },
+      { value: 'color', label: 'Color' },
+      { value: 'range', label: 'Range' },
+      { value: 'customnumber', label: 'Custom Number' },
+      { value: 'uploadbutton', label: 'Upload Button' },
+      { value: 'signaturepad', label: 'Signature Pad' }
+    ];
+
+    var typeSelect = document.createElement('select');
+    typeSelect.className = 'nu-input nu-field-type-select w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-3 transition-all';
+    typeSelect.style.fontSize = '12px';
+
+    supportedTypes.forEach(function (t) {
+      var opt = document.createElement('option');
+      opt.value = t.value;
+      opt.textContent = t.label;
+      if (t.value === type) opt.selected = true;
+      typeSelect.appendChild(opt);
+    });
+
+    typeSelect.addEventListener('change', function () {
+      var newType = typeSelect.value;
+      if (newType === type) return;
+
+      var currentData = _readFieldCard(card);
+      currentData.type = newType;
+
+      var newCard = window.nbFormBuilder._makeFieldCard(newType, currentData.label, currentData.name, !!currentData.required, currentData);
+
+      card.parentNode.replaceChild(newCard, card);
+
+      window.nbFormBuilder._isDirty = true;
+      window.nbFormBuilder._updateEmptyState();
+
+      _openPropsPanel(newCard);
+
+      if (window.nbUpdateLivePreview) window.nbUpdateLivePreview();
+      if (window.nbUpdateTreeOutline) window.nbUpdateTreeOutline();
+    });
+
+    panes['General'].appendChild(_fp('Type', typeSelect));
+  }
+
   var labelInput = _inp(_fromCard('fieldLabel', '.nu-field-label'), 'Field label');
   labelInput.addEventListener('input', function () {
     card.dataset.fieldLabel = labelInput.value;

@@ -1604,6 +1604,9 @@ function nu_handle_subform_list() {
                     ->fetchAll(PDO::FETCH_ASSOC);
 
     foreach ($records as &$row) {
+        if (isset($row[$pk])) {
+            $row['id'] = $row[$pk];
+        }
         foreach ($allFields as $field) {
             if (nu_field_type($field) !== 'lookup') continue;
             $fname = nu_field_name($field);
@@ -1978,6 +1981,13 @@ function nu_handle_list() {
         $recordsSql  = "SELECT {$selectSql} FROM `{$table}`" . $joinSql . $whereSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}";
         $records     = nu_q($recordsSql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    foreach ($records as &$row) {
+        if (isset($row[$pk])) {
+            $row['id'] = $row[$pk];
+        }
+    }
+    unset($row);
 
     nu_json(['success' => true, 'data' => [
         'layout'  => nu_flatten_layout_for_grid($layout), 'records' => $records,
