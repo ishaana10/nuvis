@@ -68,11 +68,14 @@ foreach ($forms as $f) {
 .nb-canvas {
   flex:1; overflow-y:auto; border:2px dashed var(--border-color);
   border-radius:10px; padding:10px; background:var(--bg-elevated);
-  transition:border-color .2s; position:relative;
+  background-image: radial-gradient(rgba(0,0,0,0.06) 1.5px, transparent 1.5px);
+  background-size: 16px 16px;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.04);
+  transition: border-color .2s, background-color .2s, box-shadow .2s; position:relative;
 }
 .nb-canvas::-webkit-scrollbar { width:5px; }
 .nb-canvas::-webkit-scrollbar-thumb { background:var(--border-color); border-radius:4px; }
-.nb-canvas.drag-over { border-color:var(--color-primary); background:color-mix(in oklch,var(--color-primary) 4%,var(--bg-elevated)); }
+.nb-canvas.drag-over { border-color:var(--color-primary); background-color:color-mix(in oklch,var(--color-primary) 4%,var(--bg-elevated)); box-shadow: 0 0 15px rgba(79,107,237,0.15); }
 .nb-canvas-empty {
   text-align:center; padding:60px 20px; color:var(--text-tertiary);
   font-size:13px; pointer-events:none; position:absolute;
@@ -560,6 +563,24 @@ foreach ($forms as $f) {
   color:var(--text-tertiary); transition:all .15s; margin-left:auto; align-self:center;
 }
 .nb-cfield-tab-add-btn:hover { border-color:var(--color-primary); color:var(--color-primary); }
+
+.nb-cfield-selected-multi {
+  outline: 2.5px dashed var(--color-primary) !important;
+  box-shadow: 0 0 14px rgba(79,107,237,0.3) !important;
+  transform: scale(1.01);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#nbMultiSelectBar {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#nbMultiSelectBar.opacity-0 {
+  opacity: 0;
+  transform: translate(-50%, 20px);
+}
+#nbMultiSelectBar:not(.opacity-0) {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
 </style>
 
 <div class="nu-forms">
@@ -819,75 +840,173 @@ foreach ($forms as $f) {
 
     <!-- ── TAB: Fields ── -->
     <div class="nb-tab-panel active" id="panelFields">
-      <div class="nb-builder-wrap">
-        <div class="nb-toolbox">
-          <div class="nb-toolbox-title">Field Types</div>
-          <div class="nb-tools-group">
-            <div class="nb-tools-group-label">Basic</div>
-            <div class="nb-tool" data-type="text"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>Text</div>
-            <div class="nb-tool" data-type="textarea" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>Textarea</div>
-            <div class="nb-tool" data-type="number"   draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8h2v8M15 8h2v8"/></svg>Number</div>
-            <div class="nb-tool" data-type="email"    draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>Email</div>
-            <div class="nb-tool" data-type="password" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Password</div>
-            <div class="nb-tool" data-type="date"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Date</div>
-            <div class="nb-tool" data-type="datetime" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v4l2 2"/></svg>DateTime</div>
-            <div class="nb-tool" data-type="time"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Time</div>
-            <div class="nb-tool" data-type="checkbox" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Checkbox</div>
-            <div class="nb-tool" data-type="file"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>File</div>
-          </div>
-          <div class="nb-tools-group">
-            <div class="nb-tools-group-label">Choice</div>
-            <div class="nb-tool" data-type="select" draggable="true">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>Select
+      <!-- Premium Hover Tooltip -->
+      <div id="nb-hover-tooltip" class="fixed pointer-events-none bg-slate-900/95 dark:bg-slate-950/95 text-white text-xs px-3 py-2 rounded-lg shadow-xl border border-slate-700/80 z-[99999] opacity-0 transition-opacity duration-150 backdrop-blur-sm hidden max-w-xs flex flex-col gap-1">
+        <div class="font-bold border-b border-slate-700/60 pb-1 mb-1 text-primary text-[11px] uppercase tracking-wider" id="nb-tooltip-title"></div>
+        <div id="nb-tooltip-desc" class="leading-normal"></div>
+      </div>
+
+      <div class="nb-builder-wrap flex gap-4 h-[calc(100vh-320px)] min-h-[550px]">
+
+        <!-- Left Toolbox -->
+        <div class="nb-toolbox w-[200px] flex-shrink-0 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-col overflow-y-auto">
+          <div class="text-[10px] font-bold tracking-wider uppercase text-slate-500 mb-2">Field Palette</div>
+
+          <input type="text" id="nbToolboxSearch" placeholder="Search components..." oninput="nbFilterTools(this.value)" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-3 transition-all">
+
+          <!-- Categories -->
+          <div class="flex flex-col gap-2">
+
+            <!-- Category: Basic -->
+            <div class="nb-tools-group border border-slate-200/60 dark:border-slate-800/60 rounded-lg overflow-hidden bg-white dark:bg-slate-900/20">
+              <div onclick="nbToggleToolboxCategory(this)" class="flex items-center justify-between p-2 bg-slate-100/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <span class="nb-tools-group-label text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Basic</span>
+                <span class="nb-category-chevron transition-transform duration-200 text-slate-400">▼</span>
+              </div>
+              <div class="nb-tools-list p-1.5 grid grid-cols-1 gap-1">
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="text" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>Text</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="textarea" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>Textarea</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="number" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8h2v8M15 8h2v8"/></svg>Number</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="email" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>Email</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="password" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Password</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="date" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Date</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="datetime" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v4l2 2"/></svg>DateTime</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="time" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Time</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="checkbox" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Checkbox</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="file" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>File</div>
+              </div>
             </div>
-            <div class="nb-tool" data-type="select2" draggable="true">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>Select2
+
+            <!-- Category: Choice -->
+            <div class="nb-tools-group border border-slate-200/60 dark:border-slate-800/60 rounded-lg overflow-hidden bg-white dark:bg-slate-900/20">
+              <div onclick="nbToggleToolboxCategory(this)" class="flex items-center justify-between p-2 bg-slate-100/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <span class="nb-tools-group-label text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Choice</span>
+                <span class="nb-category-chevron transition-transform duration-200 text-slate-400">▼</span>
+              </div>
+              <div class="nb-tools-list p-1.5 grid grid-cols-1 gap-1">
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="select" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>Select</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="select2" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>Select2</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="radio" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>Radio</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="checkbox_group" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Checkbox Group</div>
+              </div>
             </div>
-            <div class="nb-tool" data-type="radio" draggable="true">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>Radio
+
+            <!-- Category: Advanced -->
+            <div class="nb-tools-group border border-slate-200/60 dark:border-slate-800/60 rounded-lg overflow-hidden bg-white dark:bg-slate-900/20">
+              <div onclick="nbToggleToolboxCategory(this)" class="flex items-center justify-between p-2 bg-slate-100/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <span class="nb-tools-group-label text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Advanced</span>
+                <span class="nb-category-chevron transition-transform duration-200 text-slate-400">▼</span>
+              </div>
+              <div class="nb-tools-list p-1.5 grid grid-cols-1 gap-1">
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="lookup" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Lookup</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="subform" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Subform</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="calculated" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h8M4 17h12"/></svg>Calc</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="range" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="12" r="2"/><path d="M2 12h4M10 12h12"/></svg>Range</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="color" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Color</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="uploadbutton" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Upload Button</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="signaturepad" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 14 4-4M16 11V7a4 4 0 0 0-8 0v4"/></svg>Signature Pad</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="customnumber" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17v-4M15 17v-4M9 11v-4M15 11v-4"/></svg>Custom Number</div>
+              </div>
             </div>
-            <div class="nb-tool" data-type="checkbox_group" draggable="true">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Checkbox Group
+
+            <!-- Category: Layout -->
+            <div class="nb-tools-group border border-slate-200/60 dark:border-slate-800/60 rounded-lg overflow-hidden bg-white dark:bg-slate-900/20">
+              <div onclick="nbToggleToolboxCategory(this)" class="flex items-center justify-between p-2 bg-slate-100/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <span class="nb-tools-group-label text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Layout</span>
+                <span class="nb-category-chevron transition-transform duration-200 text-slate-400">▼</span>
+              </div>
+              <div class="nb-tools-list p-1.5 grid grid-cols-1 gap-1">
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="html" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l-5-6 5-6M15 6l5 6-5 6"/></svg>HTML</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="divider" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>Divider</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="button" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="2"/></svg>Button</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="group" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></svg>Group</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="tab" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M9 5v4M15 5v4"/></svg>Tab</div>
+              </div>
+            </div>
+
+            <!-- Category: Reusable Blocks -->
+            <div class="nb-tools-group border border-slate-200/60 dark:border-slate-800/60 rounded-lg overflow-hidden bg-white dark:bg-slate-900/20">
+              <div onclick="nbToggleToolboxCategory(this)" class="flex items-center justify-between p-2 bg-slate-100/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <span class="nb-tools-group-label text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Reusable Blocks</span>
+                <span class="nb-category-chevron transition-transform duration-200 text-slate-400">▼</span>
+              </div>
+              <div class="nb-tools-list p-1.5 grid grid-cols-1 gap-1">
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="block_address" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Address Block</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="block_contact" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.79 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>Contact Info</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="block_billing" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Billing Block</div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Hierarchical Outline tree view -->
+          <div class="mt-4 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900/20 overflow-hidden flex flex-col">
+            <div class="bg-slate-100/50 dark:bg-slate-800/40 p-2 font-bold uppercase tracking-wider text-[10px] text-slate-600 dark:text-slate-400">
+              Form Outline
+            </div>
+            <div id="nbTreeOutline" class="p-2 flex flex-col gap-1 text-[11px] max-h-[180px] overflow-y-auto">
+              <div class="text-slate-400 text-center p-4">No elements to display</div>
             </div>
           </div>
-          <div class="nb-tools-group">
-            <div class="nb-tools-group-label">Advanced</div>
-            <div class="nb-tool" data-type="lookup"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Lookup</div>
-            <div class="nb-tool" data-type="subform"    draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Subform</div>
-            <div class="nb-tool" data-type="calculated" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h8M4 17h12"/></svg>Calc</div>
-            <div class="nb-tool" data-type="range"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="12" r="2"/><path d="M2 12h4M10 12h12"/></svg>Range</div>
-            <div class="nb-tool" data-type="color"      draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Color</div>
-           <div class="nb-tool" data-type="uploadbutton" draggable="true">Upload Button</div>
-<div class="nb-tool" data-type="signaturepad" draggable="true">Signature Pad</div>
-<div class="nb-tool" data-type="customnumber" draggable="true">Custom Number</div>
-          </div>
-          <div class="nb-tools-group">
-            <div class="nb-tools-group-label">Layout</div>
-            <div class="nb-tool" data-type="html"    draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l-5-6 5-6M15 6l5 6-5 6"/></svg>HTML</div>
-            <div class="nb-tool" data-type="divider" draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>Divider</div>
-            <div class="nb-tool" data-type="button"  draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="2"/></svg>Button</div>
-            <div class="nb-tool" data-type="group"   draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></svg>Group</div>
-            <div class="nb-tool" data-type="tab"     draggable="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M9 5v4M15 5v4"/></svg>Tab</div>
-          </div>
-          <div class="nb-tools-group">
-            <div class="nb-tools-group-label">Reusable Blocks</div>
-            <div class="nb-tool" data-type="block_address" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);">Address Block</div>
-            <div class="nb-tool" data-type="block_contact" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);">Contact Info</div>
-            <div class="nb-tool" data-type="block_billing" draggable="true" style="background:var(--bg-offset);border-color:var(--color-primary);">Billing Block</div>
-          </div>
+
+        </div>
+
+        <!-- Floating Multi-select action bar -->
+        <div id="nbMultiSelectBar" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-slate-700/80 flex items-center gap-3 z-[99999] opacity-0 transition-opacity duration-200 pointer-events-none hidden backdrop-blur-sm">
+          <span class="text-xs font-bold mr-2 text-slate-300" id="nbSelectedCount">0 selected</span>
+          <div class="h-4 w-px bg-slate-700"></div>
+
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Span</span>
+          <button type="button" class="bg-slate-800 hover:bg-slate-700 text-xs px-2 py-1 rounded" onclick="nbBulkSetSpan(3)">3</button>
+          <button type="button" class="bg-slate-800 hover:bg-slate-700 text-xs px-2 py-1 rounded" onclick="nbBulkSetSpan(4)">4</button>
+          <button type="button" class="bg-slate-800 hover:bg-slate-700 text-xs px-2 py-1 rounded" onclick="nbBulkSetSpan(6)">6</button>
+          <button type="button" class="bg-slate-800 hover:bg-slate-700 text-xs px-2 py-1 rounded" onclick="nbBulkSetSpan(12)">12</button>
+
+          <div class="h-4 w-px bg-slate-700"></div>
+
+          <button type="button" class="bg-slate-800 hover:bg-slate-700 text-xs px-2 py-1 rounded" onclick="nbBulkAlign('left')">Align Left</button>
+          <button type="button" class="bg-slate-800 hover:bg-slate-700 text-xs px-2 py-1 rounded" onclick="nbBulkAlign('center')">Align Center</button>
+
+          <div class="h-4 w-px bg-slate-700"></div>
+
+          <button type="button" class="bg-slate-800 hover:bg-slate-700 text-xs px-2 py-1 rounded text-primary font-semibold" onclick="nbBulkDuplicate()">Duplicate</button>
+          <button type="button" class="bg-red-900 hover:bg-red-800 text-xs px-2 py-1 rounded text-red-200 font-semibold" onclick="nbBulkDelete()">Delete</button>
         </div>
 
         <!-- Canvas -->
-        <div class="nb-canvas-wrap">
-          <div class="nb-canvas-topbar">
-            <span class="nb-canvas-title">Form Layout</span>
-            <div class="nb-canvas-topbar-actions">
-              <span style="font-size:10px;color:var(--text-tertiary);">Drag fields into rows · resize with column buttons</span>
-              <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nbFormBuilder.addRow()" style="font-size:11px;padding:3px 10px;">+ Add Row</button>
+        <div class="nb-canvas-wrap flex flex-col flex-grow">
+          <div class="nb-canvas-topbar flex items-center justify-between mb-2">
+            <span class="nb-canvas-title text-[10px] font-bold uppercase tracking-wider text-slate-500">Form Layout</span>
+            <div class="nb-canvas-topbar-actions flex items-center gap-3">
+              <span class="text-[10px] text-slate-400">Drag components into rows · Click to configure</span>
+              <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" id="nbToggleLivePreview" onclick="nbToggleLivePreviewSplit()">👁 Split Preview</button>
+              <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nbFormBuilder.addRow()">+ Add Row</button>
             </div>
           </div>
-          <div class="nb-canvas" id="formCanvas">
-            <div class="nb-canvas-empty" id="canvasEmpty">&#x2B06; Drag a field here or click a field type · rows are created automatically</div>
+
+          <div class="nb-canvas flex-grow relative rounded-xl border border-dashed border-slate-300 dark:border-slate-800" id="formCanvas">
+            <!-- Premium Empty State with Illustration -->
+            <div class="nb-canvas-empty flex flex-col items-center justify-center gap-4 text-center p-12 transition-all duration-300" id="canvasEmpty">
+              <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary animate-pulse shadow-md">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lucide lucide-layout-grid"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+              </div>
+              <div class="max-w-sm">
+                <h4 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Start Designing Your Form</h4>
+                <p class="text-xs text-slate-400 dark:text-slate-400 mt-1">Select field types from the palette on the left or drag-and-drop components directly onto this canvas to build your interface.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Form Preview Side Pane -->
+        <div id="nbLivePreviewPane" class="w-[340px] flex-shrink-0 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-950 p-4 overflow-y-auto hidden">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+              👁 Rendered Form Preview
+            </span>
+          </div>
+          <div id="nbLivePreviewFormBody" class="grid grid-cols-12 gap-3">
+            <div class="col-span-12 text-center text-slate-400 text-xs py-12">Drag elements onto the canvas to see preview.</div>
           </div>
         </div>
       </div>
@@ -973,6 +1092,447 @@ foreach ($forms as $f) {
           <script>
             // Store roles array in JS for dynamic rendering
             window.nuRolesList = <?php echo json_encode($roles); ?>;
+
+            // Toggle split live preview panel
+            window.nbToggleLivePreviewSplit = function () {
+              var pane = document.getElementById('nbLivePreviewPane');
+              var btn = document.getElementById('nbToggleLivePreview');
+              if (!pane) return;
+              if (pane.classList.contains('hidden')) {
+                pane.classList.remove('hidden');
+                btn.textContent = '✕ Close Preview';
+                btn.classList.add('bg-primary/20', 'text-primary');
+                window.nbUpdateLivePreview();
+              } else {
+                pane.classList.add('hidden');
+                btn.textContent = '👁 Split Preview';
+                btn.classList.remove('bg-primary/20', 'text-primary');
+              }
+            };
+
+            // Dynamic live form renderer
+            window.nbUpdateLivePreview = function () {
+              var previewBody = document.getElementById('nbLivePreviewFormBody');
+              if (!previewBody) return;
+
+              previewBody.innerHTML = '';
+              var layout = [];
+              try {
+                layout = window.nbFormBuilder.getLayout();
+              } catch (e) { return; }
+
+              if (!Array.isArray(layout) || layout.length === 0) {
+                previewBody.innerHTML = '<div class="col-span-12 text-center text-slate-400 text-xs py-12">Drag elements onto the canvas to see preview.</div>';
+                return;
+              }
+
+              layout.forEach(function (f) {
+                if (f.type === 'divider') {
+                  var div = document.createElement('div');
+                  div.className = 'col-span-12 my-2 border-t border-slate-200 dark:border-slate-800';
+                  previewBody.appendChild(div);
+                  return;
+                }
+                if (f.type === 'html') {
+                  var div = document.createElement('div');
+                  div.className = 'col-span-12 text-xs text-slate-600 dark:text-slate-400 font-medium py-1';
+                  div.innerHTML = f.label || '';
+                  previewBody.appendChild(div);
+                  return;
+                }
+
+                var wrapper = document.createElement('div');
+                var span = f.col || 6;
+                wrapper.className = 'col-span-' + span + ' flex flex-col gap-1 mb-2';
+
+                var labelEl = document.createElement('label');
+                labelEl.className = 'text-[11px] font-semibold text-slate-600 dark:text-slate-400';
+                labelEl.textContent = f.label || '(no label)';
+
+                var input;
+                if (f.type === 'textarea') {
+                  input = document.createElement('textarea');
+                  input.rows = 2;
+                } else if (f.type === 'select' || f.type === 'select2') {
+                  input = document.createElement('select');
+                  var opt = document.createElement('option');
+                  opt.textContent = '-- select option --';
+                  input.appendChild(opt);
+                  if (Array.isArray(f.options)) {
+                    f.options.forEach(function (o) {
+                      var itemOpt = document.createElement('option');
+                      itemOpt.textContent = o.label || o.value;
+                      input.appendChild(itemOpt);
+                    });
+                  }
+                } else if (f.type === 'checkbox') {
+                  wrapper.innerHTML = '';
+                  var isLeft = !!f.checkbox_label_left;
+                  var cbDiv = document.createElement('div');
+                  cbDiv.className = 'flex items-center gap-2 py-1.5';
+
+                  var cbInput = document.createElement('input');
+                  cbInput.type = 'checkbox';
+                  cbInput.className = 'rounded text-primary focus:ring-primary border-slate-300 dark:border-slate-700';
+
+                  var cbLabel = document.createElement('span');
+                  cbLabel.className = 'text-[11px] font-semibold text-slate-600 dark:text-slate-400';
+                  cbLabel.textContent = f.label || '';
+
+                  if (isLeft) {
+                    cbDiv.appendChild(cbLabel);
+                    cbDiv.appendChild(cbInput);
+                  } else {
+                    cbDiv.appendChild(cbInput);
+                    cbDiv.appendChild(cbLabel);
+                  }
+                  wrapper.appendChild(cbDiv);
+                  previewBody.appendChild(wrapper);
+                  return;
+                } else {
+                  input = document.createElement('input');
+                  input.type = f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text';
+                }
+
+                if (f.label_on_top !== false) {
+                  wrapper.appendChild(labelEl);
+                }
+
+                if (input) {
+                  input.className = 'w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent dark:text-white transition-all';
+                  input.placeholder = f.placeholder || '';
+                  input.disabled = !!f.readonly;
+                  wrapper.appendChild(input);
+                }
+
+                previewBody.appendChild(wrapper);
+              });
+            };
+
+            // Toggle category lists in Field Palette toolbox
+            window.nbToggleToolboxCategory = function (header) {
+              var group = header.closest('.nb-tools-group');
+              if (!group) return;
+              var content = group.querySelector('.nb-tools-list');
+              var chevron = header.querySelector('.nb-category-chevron');
+              if (content) {
+                var isHidden = content.classList.contains('hidden');
+                if (isHidden) {
+                  content.classList.remove('hidden');
+                  if (chevron) chevron.textContent = '▼';
+                } else {
+                  content.classList.add('hidden');
+                  if (chevron) chevron.textContent = '▶';
+                }
+              }
+            };
+
+            // Live filter tools in left toolbox
+            window.nbFilterTools = function (query) {
+              query = (query || '').toLowerCase().trim();
+              document.querySelectorAll('.nb-tools-group').forEach(function (group) {
+                var groupLabel = (group.querySelector('.nb-tools-group-label')?.textContent || '').toLowerCase();
+                var hasVisibleChild = false;
+                var list = group.querySelector('.nb-tools-list');
+
+                group.querySelectorAll('.nb-tool').forEach(function (tool) {
+                  var text = tool.textContent.toLowerCase();
+                  var type = (tool.dataset.type || '').toLowerCase();
+                  var matches = text.includes(query) || type.includes(query) || groupLabel.includes(query);
+                  if (matches) {
+                    tool.style.display = '';
+                    hasVisibleChild = true;
+                  } else {
+                    tool.style.display = 'none';
+                  }
+                });
+
+                if (query && hasVisibleChild) {
+                  if (list) list.classList.remove('hidden');
+                  var chevron = group.querySelector('.nb-category-chevron');
+                  if (chevron) chevron.textContent = '▼';
+                }
+
+                group.style.display = hasVisibleChild ? '' : 'none';
+              });
+            };
+
+            // Custom Hover Tooltips with type previews
+            document.addEventListener('mouseover', function (e) {
+              var tool = e.target.closest('.nb-tool');
+              var card = e.target.closest('.nb-cfield');
+              var tooltip = document.getElementById('nb-hover-tooltip');
+              if (!tooltip) return;
+
+              if (tool) {
+                var type = tool.dataset.type || '';
+                var name = tool.textContent.trim();
+                document.getElementById('nb-tooltip-title').textContent = 'Palette Component';
+                document.getElementById('nb-tooltip-desc').innerHTML = '<strong>' + name + '</strong><br><span class="text-slate-400">Type: ' + type + '</span>';
+                tooltip.classList.remove('hidden');
+                requestAnimationFrame(function() { tooltip.classList.add('opacity-100'); });
+              } else if (card) {
+                var ctype = card.dataset.type || '';
+                var clabel = card.dataset.fieldLabel || card.dataset.fieldName || '(No label)';
+                var cname = card.dataset.fieldName || '';
+                var ccol = card.dataset.col || '6';
+                document.getElementById('nb-tooltip-title').textContent = 'Canvas Element';
+                document.getElementById('nb-tooltip-desc').innerHTML = '<strong>' + clabel + '</strong><br><span class="text-slate-400">Name: ' + cname + '</span><br><span class="text-slate-400">Type: ' + ctype + ' (' + ccol + '/12 cols)</span>';
+                tooltip.classList.remove('hidden');
+                requestAnimationFrame(function() { tooltip.classList.add('opacity-100'); });
+              } else {
+                tooltip.classList.remove('opacity-100');
+                tooltip.classList.add('hidden');
+              }
+            });
+
+            document.addEventListener('mousemove', function (e) {
+              var tooltip = document.getElementById('nb-hover-tooltip');
+              if (tooltip && !tooltip.classList.contains('hidden')) {
+                tooltip.style.top = (e.clientY + 12) + 'px';
+                tooltip.style.left = (e.clientX + 12) + 'px';
+              }
+            });
+
+            document.addEventListener('mouseout', function (e) {
+              var tooltip = document.getElementById('nb-hover-tooltip');
+              if (tooltip && !e.relatedTarget) {
+                tooltip.classList.remove('opacity-100');
+                tooltip.classList.add('hidden');
+              }
+            });
+
+            // --- JS Undo / Redo History Stack ---
+            window.nbHistory = {
+              undoStack: [],
+              redoStack: [],
+
+              saveState: function () {
+                try {
+                  var state = JSON.stringify(window.nbFormBuilder.getLayout());
+                  if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== state) {
+                    this.undoStack.push(state);
+                    this.redoStack = []; // Clear redo
+                  }
+                } catch (e) { console.error('[History] Failed to save state:', e); }
+              },
+
+              undo: function () {
+                if (this.undoStack.length <= 1) {
+                  NuApp.toast('Nothing to undo', 'info');
+                  return;
+                }
+                var currentState = this.undoStack.pop();
+                this.redoStack.push(currentState);
+
+                var prevState = this.undoStack[this.undoStack.length - 1];
+                this._applyState(prevState);
+                NuApp.toast('Undo', 'success');
+              },
+
+              redo: function () {
+                if (this.redoStack.length === 0) {
+                  NuApp.toast('Nothing to redo', 'info');
+                  return;
+                }
+                var nextState = this.redoStack.pop();
+                this.undoStack.push(nextState);
+                this._applyState(nextState);
+                NuApp.toast('Redo', 'success');
+              },
+
+              _applyState: function (jsonState) {
+                if (!jsonState) return;
+                try {
+                  var layout = JSON.parse(jsonState);
+                  var canvas = document.getElementById('formCanvas');
+                  if (canvas) {
+                    canvas.querySelectorAll('.nb-row, .nb-container').forEach(function (el) { el.remove(); });
+                  }
+
+                  var rowMap = {}, topOrder = [], seenRows = {};
+                  layout.forEach(function (item) {
+                    if (item.type === 'group' || item.type === 'tab') {
+                      topOrder.push({ kind: 'container', ctype: item.type, data: item });
+                    } else {
+                      var ri = (item.row_index !== undefined && item.row_index !== null) ? parseInt(item.row_index, 10) : -1;
+                      if (isNaN(ri)) ri = -1;
+                      if (!rowMap[ri]) {
+                        rowMap[ri] = [];
+                        topOrder.push({ kind: 'row', row_index: ri, fields: rowMap[ri] });
+                      }
+                      rowMap[ri].push(item);
+                    }
+                  });
+
+                  topOrder.filter(function (e) {
+                    if (e.kind !== 'row') return true;
+                    if (seenRows[e.row_index]) return false;
+                    seenRows[e.row_index] = true;
+                    return true;
+                  }).forEach(function (entry) {
+                    if (entry.kind === 'container') {
+                      var cEl = entry.ctype === 'tab' ? _makeTabContainer(entry.data) : _makeGroupContainer(entry.data);
+                      canvas.appendChild(cEl);
+                      _wireRowDrag(cEl);
+                    } else {
+                      var row = window.nbFormBuilder.addRow();
+                      if (!row) return;
+                      var rb = row.querySelector('.nb-row-body');
+                      if (!rb) return;
+                      var hint = rb.querySelector('.nb-row-drop-hint');
+                      if (hint) hint.remove();
+                      entry.fields.forEach(function (f) {
+                        var fType  = f.type  || 'text';
+                        var fLabel = f.label || f.fieldlabel || f.field_label || f.title || f.name || '';
+                        var fName  = f.name  || f.fieldname  || f.field_name  || f.column_name || '';
+                        var fReq   = !!f.required;
+
+                        var card = window.nbFormBuilder._makeFieldCard(fType, fLabel, fName, fReq, f);
+                        if (!card) return;
+                        _prepCard(card);
+                        rb.appendChild(card);
+                        window.nbFormBuilder._applyColSpan(card, parseInt(f.col, 10) || 6);
+                        _restoreFieldState(card, f);
+                      });
+                    }
+                  });
+
+                  window.nbFormBuilder._updateEmptyState();
+                  if (window.nbUpdateLivePreview) window.nbUpdateLivePreview();
+                  if (window.nbUpdateTreeOutline) window.nbUpdateTreeOutline();
+                } catch (e) { console.error('[History] Failed to apply state:', e); }
+              }
+            };
+
+            // Keyboard shortcut listener for Ctrl+Z and Ctrl+Y
+            document.addEventListener('keydown', function (e) {
+              if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                window.nbHistory.undo();
+              }
+              if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                window.nbHistory.redo();
+              }
+            });
+
+            // --- Multi-Select Alignments & Actions ---
+            window.nbSelectedCards = [];
+
+            window.nbUpdateMultiSelectBar = function () {
+              var bar = document.getElementById('nbMultiSelectBar');
+              var countLabel = document.getElementById('nbSelectedCount');
+              if (!bar) return;
+
+              if (window.nbSelectedCards.length > 1) {
+                countLabel.textContent = window.nbSelectedCards.length + ' selected';
+                bar.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+              } else {
+                bar.classList.add('hidden', 'opacity-0', 'pointer-events-none');
+              }
+            };
+
+            window.nbClearMultiSelect = function () {
+              window.nbSelectedCards.forEach(function (card) {
+                card.classList.remove('nb-cfield-selected-multi');
+              });
+              window.nbSelectedCards = [];
+              window.nbUpdateMultiSelectBar();
+            };
+
+            window.nbBulkSetSpan = function (n) {
+              window.nbHistory.saveState();
+              window.nbSelectedCards.forEach(function (card) {
+                window.nbFormBuilder._applyColSpan(card, n);
+              });
+              NuApp.toast('Updated column spans', 'success');
+              window.nbHistory.saveState();
+            };
+
+            window.nbBulkAlign = function (dir) {
+              window.nbHistory.saveState();
+              window.nbSelectedCards.forEach(function (card) {
+                card.dataset.align = dir;
+              });
+              NuApp.toast('Aligned selected elements', 'success');
+              window.nbHistory.saveState();
+            };
+
+            window.nbBulkDuplicate = function () {
+              window.nbHistory.saveState();
+              window.nbSelectedCards.forEach(function (card) {
+                var layout = _readFieldCard(card);
+                if (!layout) return;
+
+                var dup = Object.assign({}, layout, {
+                  id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                  name: layout.name + '_copy'
+                });
+
+                var parentBody = card.parentNode;
+                if (parentBody) {
+                  var nc = window.nbFormBuilder._makeFieldCard(dup);
+                  if (nc) {
+                    _prepCard(nc);
+                    parentBody.appendChild(nc);
+                    window.nbFormBuilder._applyColSpan(nc, dup.col || 6);
+                  }
+                }
+              });
+              window.nbClearMultiSelect();
+              window.nbFormBuilder._updateEmptyState();
+              window.nbHistory.saveState();
+            };
+
+            // --- Form Hierarchical Tree/Outline View ---
+            window.nbUpdateTreeOutline = function () {
+              var outline = document.getElementById('nbTreeOutline');
+              if (!outline) return;
+              outline.innerHTML = '';
+
+              var layout = [];
+              try {
+                layout = window.nbFormBuilder.getLayout();
+              } catch(e) { return; }
+
+              if (layout.length === 0) {
+                outline.innerHTML = '<div class="text-slate-400 text-center p-4">No elements to display</div>';
+                return;
+              }
+
+              var formNode = document.createElement('div');
+              formNode.className = 'font-bold text-primary flex items-center gap-1 mb-1.5';
+              formNode.innerHTML = '📂 Form Root';
+              outline.appendChild(formNode);
+
+              var rows = document.querySelectorAll('#formCanvas .nb-row');
+              rows.forEach(function (row, rIdx) {
+                var rowNode = document.createElement('div');
+                rowNode.className = 'pl-2 text-slate-500 font-semibold cursor-pointer hover:text-slate-800 dark:hover:text-white flex items-center gap-1 my-0.5';
+                rowNode.innerHTML = '├─ 📋 Row ' + (rIdx + 1);
+                rowNode.addEventListener('click', function () {
+                  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  row.classList.add('bg-primary/10');
+                  setTimeout(function () { row.classList.remove('bg-primary/10'); }, 1000);
+                });
+                outline.appendChild(rowNode);
+
+                // Loop elements in row
+                var fields = row.querySelectorAll('.nb-cfield');
+                fields.forEach(function (card) {
+                  var label = card.dataset.fieldLabel || card.dataset.fieldName || '(no label)';
+                  var fieldNode = document.createElement('div');
+                  fieldNode.className = 'pl-5 text-slate-600 dark:text-slate-400 hover:text-primary cursor-pointer flex items-center gap-1 transition-colors py-0.5';
+                  fieldNode.innerHTML = '│  ├─ 📄 ' + label;
+                  fieldNode.addEventListener('click', function () {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    _openPropsPanel(card);
+                  });
+                  outline.appendChild(fieldNode);
+                });
+              });
+            };
           </script>
         </div>
 
