@@ -921,6 +921,7 @@ foreach ($forms as $f) {
                 <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="button" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="2"/></svg>Button</div>
                 <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="group" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></svg>Group</div>
                 <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="tab" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M9 5v4M15 5v4"/></svg>Tab</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="iframe" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9M14 15H10"/></svg>Iframe</div>
               </div>
             </div>
 
@@ -1126,18 +1127,100 @@ foreach ($forms as $f) {
                 return;
               }
 
-              layout.forEach(function (f) {
+              function renderField(f, containerEl) {
+                if (!f) return;
+
                 if (f.type === 'divider') {
                   var div = document.createElement('div');
                   div.className = 'col-span-12 my-2 border-t border-slate-200 dark:border-slate-800';
-                  previewBody.appendChild(div);
+                  containerEl.appendChild(div);
                   return;
                 }
                 if (f.type === 'html') {
                   var div = document.createElement('div');
                   div.className = 'col-span-12 text-xs text-slate-600 dark:text-slate-400 font-medium py-1';
                   div.innerHTML = f.label || '';
-                  previewBody.appendChild(div);
+                  containerEl.appendChild(div);
+                  return;
+                }
+
+                if (f.type === 'group') {
+                  var groupDiv = document.createElement('div');
+                  groupDiv.className = 'col-span-12 p-3 bg-slate-50 dark:bg-slate-900/30 rounded-xl border border-slate-100 dark:border-slate-800 mb-2 flex flex-col gap-2';
+                  var groupHeader = document.createElement('div');
+                  groupHeader.className = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800 pb-1.5 flex justify-between items-center cursor-pointer';
+                  groupHeader.innerHTML = '<span>📦 ' + (f.label || 'Group') + '</span><span>▼</span>';
+                  groupDiv.appendChild(groupHeader);
+
+                  var groupBody = document.createElement('div');
+                  groupBody.className = 'grid grid-cols-12 gap-3';
+                  groupHeader.addEventListener('click', function () {
+                    groupBody.classList.toggle('hidden');
+                    var isHidden = groupBody.classList.contains('hidden');
+                    groupHeader.querySelector('span:last-child').textContent = isHidden ? '▶' : '▼';
+                  });
+                  groupDiv.appendChild(groupBody);
+
+                  if (Array.isArray(f.rows)) {
+                    f.rows.forEach(function (row) {
+                      if (Array.isArray(row.fields)) {
+                        row.fields.forEach(function (subField) {
+                          renderField(subField, groupBody);
+                        });
+                      }
+                    });
+                  }
+                  containerEl.appendChild(groupDiv);
+                  return;
+                }
+
+                if (f.type === 'tab') {
+                  var tabDiv = document.createElement('div');
+                  tabDiv.className = 'col-span-12 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden mb-2';
+
+                  var nav = document.createElement('div');
+                  nav.className = 'flex bg-slate-100/50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800';
+
+                  var paneWrap = document.createElement('div');
+                  paneWrap.className = 'p-3 bg-white dark:bg-slate-950';
+
+                  tabDiv.appendChild(nav);
+                  tabDiv.appendChild(paneWrap);
+
+                  if (Array.isArray(f.tabs)) {
+                    f.tabs.forEach(function (tab, tIdx) {
+                      var tabBtn = document.createElement('button');
+                      tabBtn.type = 'button';
+                      tabBtn.className = 'flex-1 py-1.5 text-center text-[10px] uppercase font-bold border-b-2 focus:outline-none transition-colors ' +
+                        (tIdx === 0 ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800');
+                      tabBtn.textContent = tab.name || 'Tab';
+                      nav.appendChild(tabBtn);
+
+                      var tabBody = document.createElement('div');
+                      tabBody.className = 'grid grid-cols-12 gap-3' + (tIdx === 0 ? '' : ' hidden');
+                      paneWrap.appendChild(tabBody);
+
+                      tabBtn.addEventListener('click', function () {
+                        nav.querySelectorAll('button').forEach(function (b) {
+                          b.className = b === tabBtn ? 'flex-1 py-1.5 text-center text-[10px] uppercase font-bold border-b-2 focus:outline-none border-primary text-primary' : 'flex-1 py-1.5 text-center text-[10px] uppercase font-bold border-b-2 focus:outline-none border-transparent text-slate-500 hover:text-slate-800';
+                        });
+                        paneWrap.querySelectorAll(':scope > div').forEach(function (p, pIdx) {
+                          p.classList.toggle('hidden', pIdx !== tIdx);
+                        });
+                      });
+
+                      if (Array.isArray(tab.rows)) {
+                        tab.rows.forEach(function (row) {
+                          if (Array.isArray(row.fields)) {
+                            row.fields.forEach(function (subField) {
+                              renderField(subField, tabBody);
+                            });
+                          }
+                        });
+                      }
+                    });
+                  }
+                  containerEl.appendChild(tabDiv);
                   return;
                 }
 
@@ -1187,7 +1270,7 @@ foreach ($forms as $f) {
                     cbDiv.appendChild(cbLabel);
                   }
                   wrapper.appendChild(cbDiv);
-                  previewBody.appendChild(wrapper);
+                  containerEl.appendChild(wrapper);
                   return;
                 } else {
                   input = document.createElement('input');
@@ -1205,7 +1288,11 @@ foreach ($forms as $f) {
                   wrapper.appendChild(input);
                 }
 
-                previewBody.appendChild(wrapper);
+                containerEl.appendChild(wrapper);
+              }
+
+              layout.forEach(function (f) {
+                renderField(f, previewBody);
               });
             };
 
@@ -1372,9 +1459,9 @@ foreach ($forms as $f) {
                     return true;
                   }).forEach(function (entry) {
                     if (entry.kind === 'container') {
-                      var cEl = entry.ctype === 'tab' ? _makeTabContainer(entry.data) : _makeGroupContainer(entry.data);
+                      var cEl = entry.ctype === 'tab' ? window._makeTabContainer(entry.data) : window._makeGroupContainer(entry.data);
                       canvas.appendChild(cEl);
-                      _wireRowDrag(cEl);
+                      if (window._wireRowDrag) window._wireRowDrag(cEl);
                     } else {
                       var row = window.nbFormBuilder.addRow();
                       if (!row) return;
@@ -1390,10 +1477,10 @@ foreach ($forms as $f) {
 
                         var card = window.nbFormBuilder._makeFieldCard(fType, fLabel, fName, fReq, f);
                         if (!card) return;
-                        _prepCard(card);
+                        if (window._prepCard) window._prepCard(card);
                         rb.appendChild(card);
                         window.nbFormBuilder._applyColSpan(card, parseInt(f.col, 10) || 6);
-                        _restoreFieldState(card, f);
+                        if (window._restoreFieldState) window._restoreFieldState(card, f);
                       });
                     }
                   });
@@ -1462,7 +1549,7 @@ foreach ($forms as $f) {
             window.nbBulkDuplicate = function () {
               window.nbHistory.saveState();
               window.nbSelectedCards.forEach(function (card) {
-                var layout = _readFieldCard(card);
+                var layout = window._readFieldCard ? window._readFieldCard(card) : null;
                 if (!layout) return;
 
                 var dup = Object.assign({}, layout, {
@@ -1472,13 +1559,24 @@ foreach ($forms as $f) {
 
                 var parentBody = card.parentNode;
                 if (parentBody) {
-                  var nc = window.nbFormBuilder._makeFieldCard(dup);
+                  var nc = window.nbFormBuilder._makeFieldCard(dup.type, dup.label, dup.name, !!dup.required, dup);
                   if (nc) {
-                    _prepCard(nc);
+                    if (window._prepCard) window._prepCard(nc);
                     parentBody.appendChild(nc);
                     window.nbFormBuilder._applyColSpan(nc, dup.col || 6);
                   }
                 }
+              });
+              window.nbClearMultiSelect();
+              window.nbFormBuilder._updateEmptyState();
+              window.nbHistory.saveState();
+            };
+
+            window.nbBulkDelete = function () {
+              if (!confirm('Are you sure you want to delete ' + window.nbSelectedCards.length + ' items?')) return;
+              window.nbHistory.saveState();
+              window.nbSelectedCards.forEach(function (card) {
+                card.remove();
               });
               window.nbClearMultiSelect();
               window.nbFormBuilder._updateEmptyState();

@@ -80,6 +80,9 @@ if (is_array($currentUser)) {
 $_role   = strtolower((string)($currentUser['usr_role'] ?? ''));
 $isAdmin = ($_role === 'globeadmin' || $_role === 'admin');
 
+// Check if embedded mode parameter is passed
+$isEmbeddedMode = (isset($_GET['embedded']) && ($_GET['embedded'] === '1' || $_GET['embedded'] === 1));
+
 // ── Resolve global (wildcard) form permissions for this role ─────────────────
 // Used to inject nuUserPerms into JS so NuPerms can evaluate canAdd/canEdit/canDelete
 $_nuUserPerms = ['canAdd' => false, 'canEdit' => false, 'canDelete' => false];
@@ -213,10 +216,10 @@ try {
 
 <?php else: ?>
 <!-- ════════════════════════════════ APP SHELL ════════════════════════════════ -->
-<div class="nu-app" id="nuApp">
+<div class="nu-app <?= $isEmbeddedMode ? 'sidebar-collapsed' : '' ?>" id="nuApp" <?= $isEmbeddedMode ? 'style="grid-template-columns: 0px 1fr;"' : '' ?>>
 
     <!-- Sidebar -->
-    <aside class="nu-sidebar" id="sidebar">
+    <aside class="nu-sidebar" id="sidebar" <?= $isEmbeddedMode ? 'style="display:none;"' : '' ?>>
         <div class="nu-sidebar-header">
             <?php if ($customAppLogo !== ''): ?>
                 <img src="<?= h($customAppLogo) ?>" alt="Logo" class="nu-custom-logo" style="max-height: 32px; border-radius: 4px; margin-right: 8px;">
@@ -473,6 +476,7 @@ try {
 
     <!-- Main -->
     <main class="nu-main">
+        <?php if (!$isEmbeddedMode): ?>
         <header class="nu-header">
             <button class="nu-menu-btn" id="menuBtn" title="Toggle sidebar"
                     onclick="(function(){
@@ -511,6 +515,7 @@ try {
                 </button>
             </div>
         </header>
+        <?php endif; ?>
 
         <div class="nu-content" id="contentArea">
             <div class="nu-spinner" style="margin:40px auto"></div>

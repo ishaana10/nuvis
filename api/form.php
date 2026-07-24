@@ -675,9 +675,63 @@ function nu_render_field($field, $value = '', $record = []) {
         return $html;
     }
 
-    $fullWidthTypes = ['subform', 'html', 'content', 'button', 'fieldset', 'checkbox'];
+    $fullWidthTypes = ['subform', 'html', 'content', 'button', 'fieldset', 'checkbox', 'iframe'];
 
     if (in_array($type, $fullWidthTypes, true)) {
+
+        if ($type === 'iframe') {
+            $iframeUrl = $field['iframe_url'] ?? '';
+            $iframeHeight = trim((string)($field['iframe_height'] ?? ''));
+            if ($iframeHeight === '') {
+                $iframeHeight = '400px';
+            } elseif (is_numeric($iframeHeight)) {
+                $iframeHeight .= 'px';
+            }
+            $isEmbedded = !empty($field['iframe_embedded']);
+            $parentId = (string)($field['_parent_id'] ?? '');
+
+            // Check if URL uses #RECORD_ID# and the record is currently empty/new
+            if (strpos($iframeUrl, '#RECORD_ID#') !== false && $parentId === '') {
+                return '<div class="nu-field-wrapper" style="grid-column:span ' . $col . ';min-width:0;margin-bottom:12px;">'
+                     . '<div class="nu-alert nu-alert-info" style="padding:12px 16px;background:var(--bg-offset,#f1f5f9);border:1px solid var(--border,#cbd5e1);border-radius:8px;color:var(--text-muted,#475569);font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;">'
+                     . '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-primary,#4f6bed);"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+                     . 'Iframe content is available once the record is saved.'
+                     . '</div>'
+                     . '</div>';
+            }
+
+            // Resolve #RECORD_ID#
+            $iframeUrl = str_replace('#RECORD_ID#', urlencode($parentId), $iframeUrl);
+
+            // Resolve general ##fieldname## hashes
+            // Resolve from session meta
+            if (isset($_SESSION['nu_user_meta']) && is_array($_SESSION['nu_user_meta'])) {
+                foreach ($_SESSION['nu_user_meta'] as $hk => $hv) {
+                    $iframeUrl = str_replace('##' . $hk . '##', urlencode((string)$hv), $iframeUrl);
+                }
+            }
+            // Resolve from active record fields
+            if (is_array($record)) {
+                foreach ($record as $rk => $rv) {
+                    if (is_scalar($rv)) {
+                        $iframeUrl = str_replace('##' . $rk . '##', urlencode((string)$rv), $iframeUrl);
+                    }
+                }
+            }
+
+            // If embedded mode is toggled, append &embedded=1
+            if ($isEmbedded) {
+                if (strpos($iframeUrl, '?') !== false) {
+                    $iframeUrl .= '&embedded=1';
+                } else {
+                    $iframeUrl .= '?embedded=1';
+                }
+            }
+
+            return '<div class="nu-field-wrapper" style="grid-column:span ' . $col . ';min-width:0;margin-bottom:12px;">'
+                 . '<iframe src="' . nu_attr($iframeUrl) . '" style="width:100%;height:' . nu_attr($iframeHeight) . ';border:1px solid var(--border,#ddd);border-radius:8px;background:#fff;" allowfullscreen></iframe>'
+                 . '</div>';
+        }
 
         if ($type === 'checkbox') {
             // readonly checkbox: disable interaction
@@ -1985,8 +2039,7 @@ function nu_handle_list() {
         'query'   => $q,      'browsesearchenabled'   => $searchEnabled,
         'browsesearchplaceholder' => $form[$c['browse_search_placeholder']] ?? 'Search...',
         'browse_layout' => $form[$c['browse_layout']] ?? null,
-        'browse_delete_enabled' => (int)($form[$c['browse_delete_enabled']] ?? 1),
-        'form_table' => $form[$c['table']] ?? ''
+        'browse_delete_enabled' => (int)($form[$c['browse_delete_enabled']] ?? 1)
     ]]);
 }
 
