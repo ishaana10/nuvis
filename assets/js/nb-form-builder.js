@@ -2405,7 +2405,7 @@ entry.fields.forEach(function (f) {
 
   // Extend nbFormBuilder object with the new designer and revisions methods
   window.nbFormBuilder.addBrowseColumnDesignerRow = function (data) {
-    var d = data || { fieldname: '', fieldlabel: '', width: '', align: 'left', formatter: 'text', sortable: true, frozen: false, rules: [] };
+    var d = data || { fieldname: '', fieldlabel: '', width: '', align: 'left', formatter: 'text', sortable: true, frozen: false, aggregate: 'none', rules: [] };
     var list = document.getElementById('browseColumnsList');
     if (!list) return;
 
@@ -2418,11 +2418,16 @@ entry.fields.forEach(function (f) {
     var row = document.createElement('div');
     row.className = 'nb-browse-column-row';
     row.setAttribute('draggable', 'true');
-    row.style.cssText = 'display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr auto;gap:8px;align-items:center;background:var(--bg-surface);padding:10px;border-radius:6px;border:1px solid var(--border-color);margin-bottom:6px;';
+    row.style.cssText = 'display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr 1.2fr auto;gap:8px;align-items:center;background:var(--bg-surface);padding:10px;border-radius:6px;border:1px solid var(--border-color);margin-bottom:6px;';
 
     var alignLeft = d.align === 'left' ? 'selected' : '';
     var alignCenter = d.align === 'center' ? 'selected' : '';
     var alignRight = d.align === 'right' ? 'selected' : '';
+
+    var aggNone = (d.aggregate === 'none' || !d.aggregate) ? 'selected' : '';
+    var aggSum = d.aggregate === 'sum' ? 'selected' : '';
+    var aggAvg = d.aggregate === 'avg' ? 'selected' : '';
+    var aggCount = d.aggregate === 'count' ? 'selected' : '';
 
     var formatters = ['text', 'currency', 'badge', 'progress_bar', 'date', 'checkbox_toggle', 'image', 'html', 'custom_button'];
     var formatOpts = '';
@@ -2455,6 +2460,14 @@ entry.fields.forEach(function (f) {
       </div>
       <div>
         <select class="nu-input nb-col-format" style="font-size:12px;padding:4px 6px;">${formatOpts}</select>
+      </div>
+      <div>
+        <select class="nu-input nb-col-aggregate" style="font-size:12px;padding:4px 6px;" title="Aggregation Function">
+          <option value="none" ${aggNone}>NONE</option>
+          <option value="sum" ${aggSum}>SUM</option>
+          <option value="avg" ${aggAvg}>AVG</option>
+          <option value="count" ${aggCount}>COUNT</option>
+        </select>
       </div>
       <div style="display:flex;gap:10px;align-items:center;">
         <label style="font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer;" title="Make column sortable">
@@ -2633,6 +2646,7 @@ entry.fields.forEach(function (f) {
       var formatter = row.querySelector('.nb-col-format').value;
       var sortable = row.querySelector('.nb-col-sortable').checked;
       var frozen = row.querySelector('.nb-col-frozen').checked;
+      var aggregate = row.querySelector('.nb-col-aggregate') ? row.querySelector('.nb-col-aggregate').value : 'none';
 
       var rules = [];
       row.querySelectorAll('.nb-col-rule-row').forEach(function (rRow) {
@@ -2662,6 +2676,7 @@ entry.fields.forEach(function (f) {
         formatter: formatter,
         sortable: sortable,
         frozen: frozen,
+        aggregate: aggregate,
         rules: rules,
         btn_label: btnLabel,
         btn_class: btnClass,

@@ -1278,26 +1278,37 @@ window.NuApp = {
 
         td.style.cssText += `padding:12px;text-align:${col.align || 'left'};font-size:12px;`;
 
-        // Calculate sum or average for numeric columns
-        const isNumeric = records.some(r => {
-          const v = r[col.fieldname];
-          return v !== null && v !== '' && !isNaN(parseFloat(v));
-        });
+        let aggText = '';
+        const aggType = col.aggregate || 'none';
 
-        if (isNumeric && col.fieldname !== 'id') {
-          const sum = records.reduce((acc, r) => {
-            const v = parseFloat(r[col.fieldname]);
-            return acc + (isNaN(v) ? 0 : v);
-          }, 0);
+        if (aggType !== 'none') {
+          const nonNullVals = records.map(r => r[col.fieldname]).filter(v => v !== null && v !== '');
 
-          if (col.formatter === 'currency') {
-            td.textContent = 'Sum: $' + sum.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-          } else {
-            td.textContent = 'Sum: ' + Number(sum.toFixed(2));
+          if (aggType === 'sum') {
+            const sum = nonNullVals.reduce((acc, v) => {
+              const num = parseFloat(v);
+              return acc + (isNaN(num) ? 0 : num);
+            }, 0);
+            if (col.formatter === 'currency') {
+              aggText = 'Sum: $' + sum.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            } else {
+              aggText = 'Sum: ' + Number(sum.toFixed(2));
+            }
+          } else if (aggType === 'avg') {
+            const nums = nonNullVals.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            const sum = nums.reduce((acc, v) => acc + v, 0);
+            const avg = nums.length > 0 ? sum / nums.length : 0;
+            if (col.formatter === 'currency') {
+              aggText = 'Avg: $' + avg.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            } else {
+              aggText = 'Avg: ' + Number(avg.toFixed(2));
+            }
+          } else if (aggType === 'count') {
+            aggText = 'Count: ' + nonNullVals.length;
           }
-        } else {
-          td.textContent = '';
         }
+
+        td.textContent = aggText;
         footRow.appendChild(td);
       });
 
