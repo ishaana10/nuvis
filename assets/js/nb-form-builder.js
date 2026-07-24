@@ -544,15 +544,23 @@ function _renderPropsInPanel(card, body) {
         if (clone.classList.contains('nb-select-manual') || clone.classList.contains('nb-select-from-table')) {
           // Keep flat but synced
         } else {
+          var innerBody = document.createElement('div');
+          innerBody.className = 'p-3 flex flex-col gap-2';
+          while (clone.firstChild) {
+            innerBody.appendChild(clone.firstChild);
+          }
+
           clone.className = 'nb-prop-section border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden mb-2';
           var origHeader = document.createElement('div');
           origHeader.className = 'bg-slate-100 dark:bg-slate-800/40 p-2 text-xs font-semibold cursor-pointer flex justify-between items-center';
           origHeader.innerHTML = '<span>Configure element settings</span><span>▼</span>';
           origHeader.addEventListener('click', function () {
-            var bodyEl = clone.querySelector('.nb-fp-grid') || clone;
-            bodyEl.classList.toggle('hidden');
+            innerBody.classList.toggle('hidden');
+            var isHidden = innerBody.classList.contains('hidden');
+            origHeader.querySelector('span:last-child').textContent = isHidden ? '▶' : '▼';
           });
-          clone.insertBefore(origHeader, clone.firstChild);
+          clone.appendChild(origHeader);
+          clone.appendChild(innerBody);
         }
 
         child.querySelectorAll('input, select, textarea').forEach(function (origEl, idx) {
@@ -578,15 +586,21 @@ function _renderPropsInPanel(card, body) {
             });
             c.addEventListener('change', function () {
               if (o.type === 'checkbox' || o.type === 'radio') {
+                if (o.type === 'radio') {
+                  var originalGroup = card.querySelectorAll('input[type="radio"][name="' + o.name + '"]');
+                  originalGroup.forEach(function (origRadio) {
+                    origRadio.checked = false;
+                  });
+                }
                 o.checked = c.checked;
                 var evt = document.createEvent('HTMLEvents');
                 evt.initEvent('change', true, false);
                 o.dispatchEvent(evt);
 
                 if (c.classList.contains('nu-field-opt-src')) {
-                  var isTable = clone.querySelector('.nu-field-opt-src[value="table"]').checked;
-                  var clManual = clone.querySelector('.nb-select-manual');
-                  var clTable = clone.querySelector('.nb-select-from-table');
+                  var isTable = c.value === 'table' && c.checked;
+                  var clManual = panes['Advanced'].querySelector('.nb-select-manual');
+                  var clTable = panes['Advanced'].querySelector('.nb-select-from-table');
                   if (clManual) clManual.style.display = isTable ? 'none' : '';
                   if (clTable) clTable.style.display = isTable ? '' : 'none';
                 }
@@ -624,6 +638,14 @@ function _renderPropsInPanel(card, body) {
   });
   attrWrap.appendChild(attrArea);
   panes['Advanced'].appendChild(attrWrap);
+
+  // Ensure correct initial option source panel visibility inside Advanced pane
+  var initSrcTable = panes['Advanced'].querySelector('.nu-field-opt-src[value="table"]');
+  var initIsTable = initSrcTable ? initSrcTable.checked : false;
+  var clManual = panes['Advanced'].querySelector('.nb-select-manual');
+  var clTable = panes['Advanced'].querySelector('.nb-select-from-table');
+  if (clManual) clManual.style.display = initIsTable ? 'none' : '';
+  if (clTable) clTable.style.display = initIsTable ? '' : 'none';
 }
 
 function _openPropsPanel(card) {
@@ -1037,7 +1059,22 @@ fields.forEach(function (f) {
     card.addEventListener('click', function (e) {
       if (e.target.closest('.nb-cfield-actions')) return;
       if (e.target.classList.contains('nb-cfield-resize')) return;
-      _openPropsPanel(card);
+
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        var idx = window.nbSelectedCards.indexOf(card);
+        if (idx !== -1) {
+          window.nbSelectedCards.splice(idx, 1);
+          card.classList.remove('nb-cfield-selected-multi');
+        } else {
+          window.nbSelectedCards.push(card);
+          card.classList.add('nb-cfield-selected-multi');
+        }
+        if (window.nbUpdateMultiSelectBar) window.nbUpdateMultiSelectBar();
+      } else {
+        if (window.nbClearMultiSelect) window.nbClearMultiSelect();
+        _openPropsPanel(card);
+      }
     });
     _attachResizeHandle(card);
   }
@@ -1868,9 +1905,9 @@ entry.fields.forEach(function (f) {
       console.error('[nb-read] _val: no element for', sel, 'card.id=', card.id);
       return '';
     }
-    var attrVal = e.getAttribute('value');
     var propVal = e.value;
-    return attrVal || propVal || '';
+    var attrVal = e.getAttribute('value');
+    return (propVal !== undefined && propVal !== null && propVal !== '') ? propVal : (attrVal || '');
   };
 
   var _chk = function (sel) {
@@ -2656,7 +2693,13 @@ entry.fields.forEach(function (f) {
     });
   });
 
-
+  // Expose internal helper functions to global scope to prevent ReferenceErrors from external modules
+  window._prepCard = _prepCard;
+  window._restoreFieldState = _restoreFieldState;
+  window._makeTabContainer = _makeTabContainer;
+  window._makeGroupContainer = _makeGroupContainer;
+  window._readFieldCard = _readFieldCard;
+  window._wireRowDrag = _wireRowDrag;
 
 
 }(window));
