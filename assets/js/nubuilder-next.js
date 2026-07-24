@@ -1314,23 +1314,80 @@ window.NuApp = {
     if ((data.pages || 1) > 1) {
       const pagination = document.createElement('div');
       pagination.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:16px;';
+
+      const totalPages = data.pages || 1;
+      const currentPage = data.page || 1;
+
+      // First Button
+      const firstBtn = document.createElement('button');
+      firstBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; firstBtn.textContent = '« First';
+      firstBtn.disabled = currentPage <= 1;
+      firstBtn.onclick = () => this.browseForm(code, 1, currentQuery, label, displayMode, currentSortField, currentSortDir);
+      pagination.appendChild(firstBtn);
+
+      // Prev Button
       const prevBtn = document.createElement('button');
-      prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; prevBtn.textContent = '\u2190 Prev';
-      prevBtn.disabled = (data.page || 1) <= 1;
-      prevBtn.onclick = () => this.browseForm(code, (data.page || 1) - 1, currentQuery, label, displayMode, currentSortField, currentSortDir);
+      prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; prevBtn.textContent = '← Prev';
+      prevBtn.disabled = currentPage <= 1;
+      prevBtn.onclick = () => this.browseForm(code, currentPage - 1, currentQuery, label, displayMode, currentSortField, currentSortDir);
       pagination.appendChild(prevBtn);
-      for (let i = 1; i <= (data.pages || 1); i++) {
-        const pageBtn = document.createElement('button');
-        pageBtn.className = 'nu-btn ' + (i === (data.page || 1) ? 'nu-btn-primary' : 'nu-btn-ghost') + ' nu-btn-sm';
-        pageBtn.textContent = i;
-        pageBtn.onclick = () => this.browseForm(code, i, currentQuery, label, displayMode, currentSortField, currentSortDir);
-        pagination.appendChild(pageBtn);
+
+      // Page indicators (numbers & ellipses)
+      const pagesToRender = [];
+      if (totalPages <= 10) {
+        for (let i = 1; i <= totalPages; i++) {
+          pagesToRender.push(i);
+        }
+      } else {
+        pagesToRender.push(1);
+
+        const start = Math.max(2, currentPage - 2);
+        const end = Math.min(totalPages - 1, currentPage + 2);
+
+        if (start > 2) {
+          pagesToRender.push('...');
+        }
+
+        for (let i = start; i <= end; i++) {
+          pagesToRender.push(i);
+        }
+
+        if (end < totalPages - 1) {
+          pagesToRender.push('...');
+        }
+
+        pagesToRender.push(totalPages);
       }
+
+      pagesToRender.forEach(p => {
+        if (p === '...') {
+          const dots = document.createElement('span');
+          dots.style.cssText = 'padding:0 4px;color:#aaa;font-size:14px;font-weight:bold;cursor:default;user-select:none;';
+          dots.textContent = '...';
+          pagination.appendChild(dots);
+        } else {
+          const pageBtn = document.createElement('button');
+          pageBtn.className = 'nu-btn ' + (p === currentPage ? 'nu-btn-primary' : 'nu-btn-ghost') + ' nu-btn-sm';
+          pageBtn.textContent = p;
+          pageBtn.onclick = () => this.browseForm(code, p, currentQuery, label, displayMode, currentSortField, currentSortDir);
+          pagination.appendChild(pageBtn);
+        }
+      });
+
+      // Next Button
       const nextBtn = document.createElement('button');
-      nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; nextBtn.textContent = 'Next \u2192';
-      nextBtn.disabled = (data.page || 1) >= (data.pages || 1);
-      nextBtn.onclick = () => this.browseForm(code, (data.page || 1) + 1, currentQuery, label, displayMode, currentSortField, currentSortDir);
+      nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; nextBtn.textContent = 'Next →';
+      nextBtn.disabled = currentPage >= totalPages;
+      nextBtn.onclick = () => this.browseForm(code, currentPage + 1, currentQuery, label, displayMode, currentSortField, currentSortDir);
       pagination.appendChild(nextBtn);
+
+      // Last Button
+      const lastBtn = document.createElement('button');
+      lastBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm'; lastBtn.textContent = 'Last »';
+      lastBtn.disabled = currentPage >= totalPages;
+      lastBtn.onclick = () => this.browseForm(code, totalPages, currentQuery, label, displayMode, currentSortField, currentSortDir);
+      pagination.appendChild(lastBtn);
+
       const meta = document.createElement('span');
       meta.style.cssText = 'margin-left:8px;color:#666;font-size:13px;';
       meta.textContent = 'Total: ' + (data.total || 0) + ' records';
