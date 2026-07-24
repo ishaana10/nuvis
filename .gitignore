@@ -34,6 +34,3 @@ api/test.php
 # Composer Dependencies
 vendor/
 composer.lock
-
-# TCPDF downloaded library
-lib/tcpdf/
