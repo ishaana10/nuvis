@@ -102,7 +102,7 @@ window.NuApp = {
     'dashboard','forms','reports','queries','calendar','ai','integrations',
     'menus','users','roles','audit','files','workflow','inspector','errorlog',
     'password_policy','appcloner','password','report_dashboards','email_settings',
-    'updater','import_export','developer_settings'
+    'updater','import_export','developer_settings','word_certificates'
   ]),
 
   init() {
@@ -1219,6 +1219,19 @@ window.NuApp = {
           actionTd.appendChild(viewBtn);
         }
 
+        // Certificates button
+        const certBtn = document.createElement('button');
+        certBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+        certBtn.style.color = 'var(--color-primary, #4f6bed)';
+        certBtn.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Certificates
+        `;
+        certBtn.onclick = (e) => {
+          e.stopPropagation();
+          this.openRecordCertificatesModal(code, row.id);
+        };
+        actionTd.appendChild(certBtn);
+
         // Single row delete button (conditional on deleteEnabled)
         if (deleteEnabled && NuPerms.canDelete()) {
           const delBtn = document.createElement('button');
@@ -1827,4 +1840,201 @@ window.deleteForm      = function (id, name) {
     if (json.success) { NuApp.toast('Deleted'); NuApp.loadModule('forms'); }
     else NuApp.toast(json.error || 'Failed', 'error');
   }).catch(function (e) { NuApp.toast('Error: ' + e.message, 'error'); });
+};
+
+// ══════════════════════════════════════════════════════════════════
+// Word Certificates Dialog Overlay & Interaction Manager
+// ══════════════════════════════════════════════════════════════════
+NuApp._currentCertContext = null;
+
+NuApp.openRecordCertificatesModal = function(formCode, recordId) {
+  // Ensure modal DOM elements exist
+  let modal = document.getElementById('recordCertsModal');
+  if (!modal) {
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <div class="nu-modal-overlay" id="recordCertsModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center;">
+          <div class="nu-modal" style="background:var(--bg-elevated); border:1px solid var(--border-color); border-radius:var(--radius-lg); width:100%; max-width:550px; padding:24px; position:relative; box-shadow:var(--shadow-lg);">
+              <div class="nu-modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border-color); padding-bottom:12px;">
+                  <h3 class="nu-modal-title">Record Certificates</h3>
+                  <button class="nu-modal-close" onclick="document.getElementById('recordCertsModal').style.display='none'" style="background:none; border:none; cursor:pointer; color:var(--text-secondary);">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+              </div>
+              <div class="nu-modal-body" style="display:flex; flex-direction:column; gap:16px;">
+                  <div class="nu-field">
+                      <label style="font-weight:600; font-size:12px; margin-bottom:6px; display:block;">Select a Certificate Template</label>
+                      <select class="nu-input" id="recordCertTemplateSelect" style="width:100%;" onchange="NuApp.onRecordCertTemplateChanged(this.value)"></select>
+                  </div>
+
+                  <div id="recordCertActionsContainer" style="display:none; flex-direction:column; gap:16px; border-top:1px solid var(--border-color); padding-top:16px;">
+                      <!-- Download options -->
+                      <div>
+                          <label style="font-weight:600; font-size:12px; margin-bottom:8px; display:block;">Print &amp; Download Options</label>
+                          <div style="display:flex; gap:10px;">
+                              <button type="button" class="nu-btn nu-btn-ghost" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="NuApp.downloadRecordCert('docx')">
+                                  📥 Word (.docx)
+                              </button>
+                              <button type="button" class="nu-btn nu-btn-ghost" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="NuApp.downloadRecordCert('pdf')">
+                                  📄 PDF (.pdf)
+                              </button>
+                          </div>
+                      </div>
+
+                      <!-- Email option -->
+                      <div style="border-top:1px dashed var(--border-color); padding-top:12px;">
+                          <label style="font-weight:600; font-size:12px; margin-bottom:8px; display:block;">Email Certificate Options</label>
+                          <div style="display:flex; gap:10px; margin-bottom:12px;">
+                              <button type="button" class="nu-btn nu-btn-ghost" style="flex:1;" onclick="NuApp.showRecordCertEmailForm('docx')">
+                                  ✉️ Email Word (.docx)
+                              </button>
+                              <button type="button" class="nu-btn nu-btn-ghost" style="flex:1;" onclick="NuApp.showRecordCertEmailForm('pdf')">
+                                  ✉️ Email PDF (.pdf)
+                              </button>
+                          </div>
+
+                          <!-- Email input form -->
+                          <div id="recordCertEmailForm" style="display:none; flex-direction:column; gap:10px; background:var(--bg-secondary); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
+                              <div class="nu-field">
+                                  <label style="font-size:11px; font-weight:600;">Recipient Email <span style="color:#ef4444;">*</span></label>
+                                  <input type="email" class="nu-input" id="recordCertEmailTo" placeholder="client@example.com" style="width:100%; font-size:12px;">
+                              </div>
+                              <div class="nu-field">
+                                  <label style="font-size:11px; font-weight:600;">Subject (Optional)</label>
+                                  <input type="text" class="nu-input" id="recordCertEmailSubject" placeholder="Your Certificate is Ready" style="width:100%; font-size:12px;">
+                              </div>
+                              <div class="nu-field">
+                                  <label style="font-size:11px; font-weight:600;">Message / Body (Optional)</label>
+                                  <textarea class="nu-input" id="recordCertEmailBody" rows="3" placeholder="Please find your certificate attached." style="width:100%; font-size:12px;"></textarea>
+                              </div>
+                              <div style="display:flex; justify-content:flex-end; gap:8px;">
+                                  <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" onclick="document.getElementById('recordCertEmailForm').style.display='none'">Cancel</button>
+                                  <button type="button" class="nu-btn nu-btn-primary nu-btn-sm" id="recordCertEmailSendBtn" onclick="NuApp.sendRecordCertEmail()">Send Email</button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div id="recordCertNoTemplatesMessage" style="display:none; text-align:center; color:var(--text-secondary); padding:12px;">
+                      No certificate templates available for this form.
+                  </div>
+              </div>
+          </div>
+      </div>
+    `.trim();
+    document.body.appendChild(div.firstChild);
+    modal = document.getElementById('recordCertsModal');
+  }
+
+  // Clear previous email form values
+  document.getElementById('recordCertEmailForm').style.display = 'none';
+  document.getElementById('recordCertEmailTo').value = '';
+  document.getElementById('recordCertEmailSubject').value = '';
+  document.getElementById('recordCertEmailBody').value = '';
+
+  NuApp._currentCertContext = { formCode, recordId };
+
+  // Fetch available templates for this form
+  fetch(`api/word_certificates.php?action=list_templates&form_code=${encodeURIComponent(formCode)}`, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        const select = document.getElementById('recordCertTemplateSelect');
+        select.innerHTML = '<option value="">-- choose certificate template --</option>';
+        data.templates.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.cert_id;
+          opt.textContent = t.cert_title;
+          select.appendChild(opt);
+        });
+
+        const hasTemplates = data.templates.length > 0;
+        document.getElementById('recordCertActionsContainer').style.display = 'none';
+        document.getElementById('recordCertNoTemplatesMessage').style.display = hasTemplates ? 'none' : 'block';
+
+        modal.style.display = 'flex';
+      } else {
+        NuApp.toast('Failed to load certificate templates: ' + data.error, 'error');
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      NuApp.toast('Connection error', 'error');
+    });
+};
+
+NuApp.onRecordCertTemplateChanged = function(certId) {
+  const container = document.getElementById('recordCertActionsContainer');
+  if (certId) {
+    container.style.display = 'flex';
+    NuApp._currentCertContext.certId = certId;
+  } else {
+    container.style.display = 'none';
+  }
+};
+
+NuApp.downloadRecordCert = function(format) {
+  const ctx = NuApp._currentCertContext;
+  if (!ctx || !ctx.certId) return;
+
+  const url = `api/word_certificates.php?action=generate&cert_id=${ctx.certId}&record_id=${encodeURIComponent(ctx.recordId)}&form_code=${encodeURIComponent(ctx.formCode)}&format=${format}`;
+  window.open(url, '_blank');
+};
+
+NuApp.showRecordCertEmailForm = function(format) {
+  document.getElementById('recordCertEmailForm').style.display = 'flex';
+  NuApp._currentCertContext.format = format;
+
+  // Set default subject
+  const select = document.getElementById('recordCertTemplateSelect');
+  const title = select.options[select.selectedIndex].text;
+  document.getElementById('recordCertEmailSubject').value = `Certificate: ${title}`;
+};
+
+NuApp.sendRecordCertEmail = function() {
+  const ctx = NuApp._currentCertContext;
+  if (!ctx || !ctx.certId || !ctx.format) return;
+
+  const emailTo = document.getElementById('recordCertEmailTo').value.trim();
+  const subject = document.getElementById('recordCertEmailSubject').value.trim();
+  const body = document.getElementById('recordCertEmailBody').value.trim();
+
+  if (!emailTo) {
+    NuApp.toast('Recipient email is required', 'error');
+    return;
+  }
+
+  const sendBtn = document.getElementById('recordCertEmailSendBtn');
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Sending...';
+
+  const payload = {
+    email: emailTo,
+    subject: subject,
+    body: body
+  };
+
+  fetch(`api/word_certificates.php?action=send_email&cert_id=${ctx.certId}&record_id=${encodeURIComponent(ctx.recordId)}&form_code=${encodeURIComponent(ctx.formCode)}&format=${ctx.format}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    credentials: 'same-origin'
+  })
+  .then(r => r.json())
+  .then(data => {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send Email';
+    if (data.success) {
+      NuApp.toast('Email sent successfully!', 'success');
+      document.getElementById('recordCertEmailForm').style.display = 'none';
+    } else {
+      NuApp.toast('Failed to send email: ' + (data.message || 'Unknown error'), 'error');
+    }
+  })
+  .catch(err => {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send Email';
+    console.error(err);
+    NuApp.toast('Connection error while sending email', 'error');
+  });
 };
