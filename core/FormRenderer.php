@@ -83,6 +83,9 @@ class NuFormRenderer {
         if ($recordId && $perms['delete']) {
             $html .= '<button type="button" class="nu-btn nu-btn-danger" onclick="deleteRecord(this)">Delete</button>';
         }
+        if ($recordId) {
+            $html .= '<button type="button" class="nu-btn nu-btn-ghost" onclick="NuApp.openRecordCertificatesModal(\'' . htmlspecialchars($formCode) . '\', \'' . htmlspecialchars((string)$recordId) . '\')" style="color:var(--color-primary);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Certificates</button>';
+        }
         $html .= '</div>';
         $html .= '</form>';
 
