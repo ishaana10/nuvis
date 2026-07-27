@@ -292,40 +292,55 @@ switch ($action) {
                 // PDF mode
                 $html = $template['cert_html_template'] ?? '';
                 if (empty(trim($html))) {
-                    // Generate a beautiful, custom dynamic table listing all the fields and values of the active record!
-                    $html = '<div style="font-family: Helvetica, Arial, sans-serif; padding: 20px; color: #333;">';
-                    $html .= '<h1 style="color: #4f6bed; border-bottom: 2px solid #4f6bed; padding-bottom: 8px; font-size: 24px; font-weight: bold;">' . htmlspecialchars($template['cert_title']) . '</h1>';
-                    $html .= '<p style="color: #666; font-size: 12px; margin-bottom: 20px;">Generated on: ' . date('Y-m-d H:i') . '</p>';
-                    $html .= '<table cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 10px;">';
-
-                    $rowIdx = 0;
-                    foreach ($record as $key => $val) {
-                        if (in_array($key, ['password', 'pwd_hash', 'deleted_at'], true)) continue;
-
-                        $label = ucwords(str_replace('_', ' ', $key));
-                        $bgColor = ($rowIdx % 2 === 0) ? '#f9f9f9' : '#ffffff';
-
-                        // Treat checkbox / yes-no friendly value formatting for readability
-                        $displayVal = (string)($val ?? '-');
-                        if ($val === 1 || $val === '1' || $val === true) {
-                            $displayVal = '☑ Yes';
-                        } elseif ($val === 0 || $val === '0' || $val === false) {
-                            $displayVal = '☐ No';
+                    if (!empty($template['file_path']) && file_exists($template['file_path'])) {
+                        // High-fidelity same-layout conversion from Docx XML directly to PDF HTML!
+                        $zip = new ZipArchive();
+                        if ($zip->open($template['file_path']) === true) {
+                            $xmlContent = $zip->getFromName('word/document.xml');
+                            if ($xmlContent) {
+                                $html = convertDocxXmlToHtml($xmlContent, $replacements);
+                            }
+                            $zip->close();
                         }
-
-                        $html .= '<tr style="background-color: ' . $bgColor . ';">';
-                        $html .= '<td style="width: 30%; font-weight: bold; border-bottom: 1px solid #eee; font-size: 12px; color: #555;">' . htmlspecialchars($label) . '</td>';
-                        $html .= '<td style="width: 70%; border-bottom: 1px solid #eee; font-size: 12px; color: #111;">' . htmlspecialchars($displayVal) . '</td>';
-                        $html .= '</tr>';
-
-                        $rowIdx++;
                     }
 
-                    $html .= '</table>';
-                    $html .= '<div style="margin-top: 40px; text-align: center; color: #888; font-size: 11px;">';
-                    $html .= 'nuvis Certificates System — Verified Secure';
-                    $html .= '</div>';
-                    $html .= '</div>';
+                    // Fallback to table if docx extraction failed or doesn't exist
+                    if (empty(trim($html))) {
+                        // Generate a beautiful, custom dynamic table listing all the fields and values of the active record!
+                        $html = '<div style="font-family: Helvetica, Arial, sans-serif; padding: 20px; color: #333;">';
+                        $html .= '<h1 style="color: #4f6bed; border-bottom: 2px solid #4f6bed; padding-bottom: 8px; font-size: 24px; font-weight: bold;">' . htmlspecialchars($template['cert_title']) . '</h1>';
+                        $html .= '<p style="color: #666; font-size: 12px; margin-bottom: 20px;">Generated on: ' . date('Y-m-d H:i') . '</p>';
+                        $html .= '<table cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 10px;">';
+
+                        $rowIdx = 0;
+                        foreach ($record as $key => $val) {
+                            if (in_array($key, ['password', 'pwd_hash', 'deleted_at'], true)) continue;
+
+                            $label = ucwords(str_replace('_', ' ', $key));
+                            $bgColor = ($rowIdx % 2 === 0) ? '#f9f9f9' : '#ffffff';
+
+                            // Treat checkbox / yes-no friendly value formatting for readability
+                            $displayVal = (string)($val ?? '-');
+                            if ($val === 1 || $val === '1' || $val === true) {
+                                $displayVal = '☑ Yes';
+                            } elseif ($val === 0 || $val === '0' || $val === false) {
+                                $displayVal = '☐ No';
+                            }
+
+                            $html .= '<tr style="background-color: ' . $bgColor . ';">';
+                            $html .= '<td style="width: 30%; font-weight: bold; border-bottom: 1px solid #eee; font-size: 12px; color: #555;">' . htmlspecialchars($label) . '</td>';
+                            $html .= '<td style="width: 70%; border-bottom: 1px solid #eee; font-size: 12px; color: #111;">' . htmlspecialchars($displayVal) . '</td>';
+                            $html .= '</tr>';
+
+                            $rowIdx++;
+                        }
+
+                        $html .= '</table>';
+                        $html .= '<div style="margin-top: 40px; text-align: center; color: #888; font-size: 11px;">';
+                        $html .= 'nuvis Certificates System — Verified Secure';
+                        $html .= '</div>';
+                        $html .= '</div>';
+                    }
                 } else {
                     // Render placeholders in HTML
                     foreach ($replacements as $key => $val) {
@@ -404,5 +419,78 @@ switch ($action) {
     default:
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
+}
+
+/**
+ * Cleanly translates MS Word paragraphs, runs, alignments, and styling tags directly into high-fidelity inline-styled HTML blocks.
+ */
+function convertDocxXmlToHtml(string $xmlContent, array $replacements): string {
+    // 1. Clean up and heal split placeholders inside XML
+    $xmlContent = preg_replace_callback('/\{\{[^{}]*\}\}/', function($m) {
+        return strip_tags($m[0]);
+    }, $xmlContent);
+    $xmlContent = preg_replace_callback('/\{[^{}]*\}/', function($m) {
+        return strip_tags($m[0]);
+    }, $xmlContent);
+
+    // 2. Load into DOM
+    $dom = new DOMDocument();
+    @$dom->loadXML($xmlContent);
+
+    $html = '<div style="font-family: \'Times New Roman\', Times, Georgia, serif; line-height: 1.6; color: #111; padding: 20px;">';
+
+    $paragraphs = $dom->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'p');
+    foreach ($paragraphs as $p) {
+        $align = 'left';
+        // Check alignment
+        $jcNodes = $p->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'jc');
+        if ($jcNodes->length > 0) {
+            $val = $jcNodes->item(0)->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+            if (in_array($val, ['center', 'right', 'justify'])) {
+                $align = $val;
+            }
+        }
+
+        $pStyle = 'text-align: ' . $align . '; margin-bottom: 12px; font-size: 14px;';
+        $pContent = '';
+
+        $runs = $p->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+        foreach ($runs as $r) {
+            $isBold = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'b')->length > 0;
+            $isItalic = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'i')->length > 0;
+            $isUnderline = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'u')->length > 0;
+
+            $textNodes = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+            $runText = '';
+            foreach ($textNodes as $t) {
+                $runText .= $t->nodeValue;
+            }
+
+            if ($runText === '') continue;
+
+            // Replaces placeholders inside this text run
+            foreach ($replacements as $key => $val) {
+                $runText = str_replace('{{' . $key . '}}', (string)$val, $runText);
+                $runText = str_replace('{' . $key . '}', (string)$val, $runText);
+            }
+
+            // Format HTML tags
+            $formatted = htmlspecialchars($runText, ENT_QUOTES, 'UTF-8');
+            if ($isBold)      $formatted = '<strong>' . $formatted . '</strong>';
+            if ($isItalic)    $formatted = '<em>' . $formatted . '</em>';
+            if ($isUnderline) $formatted = '<u>' . $formatted . '</u>';
+
+            $pContent .= $formatted;
+        }
+
+        if ($pContent !== '') {
+            $html .= '<p style="' . $pStyle . '">' . $pContent . '</p>';
+        } else {
+            $html .= '<br/>';
+        }
+    }
+
+    $html .= '</div>';
+    return $html;
 }
 ?>
