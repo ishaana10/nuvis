@@ -2120,12 +2120,26 @@ if (!window._nbFormsModuleInit) {
       nbFormBuilder.clearCanvas();
     }
 
+    const existingFieldNames = new Set();
+    document.querySelectorAll('#formCanvas .nb-cfield').forEach(card => {
+      const fn = card.dataset.fieldName || card.getAttribute('data-field-name') || '';
+      if (fn) {
+        existingFieldNames.add(fn.toLowerCase().trim());
+      }
+    });
+
+    let loadedCount = 0;
     userCols.forEach(col => {
+      if (existingFieldNames.has(col.Field.toLowerCase().trim())) {
+        return;
+      }
       if (typeof nbFormBuilder.addField === 'function') {
         nbFormBuilder.addField(
           mapType(col.Type),
           { name: col.Field, label: makeLabel(col.Field), col: 6 }
         );
+        existingFieldNames.add(col.Field.toLowerCase().trim());
+        loadedCount++;
       }
     });
 
@@ -2133,7 +2147,7 @@ if (!window._nbFormsModuleInit) {
       statusEl.style.background = 'color-mix(in oklch,#22c55e 8%,var(--bg-surface))';
       statusEl.style.color = '#15803d';
       statusEl.style.border = '1px solid color-mix(in oklch,#22c55e 30%,transparent)';
-      statusEl.textContent = '✓ Loaded ' + userCols.length + ' field' + (userCols.length !== 1 ? 's' : '') + ' from ' + tableName;
+      statusEl.textContent = '✓ Loaded ' + loadedCount + ' field' + (loadedCount !== 1 ? 's' : '') + ' from ' + tableName;
     }
 
     const fieldsTab = document.querySelector('.nb-tab[data-panel="panelFields"]');
