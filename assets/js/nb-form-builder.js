@@ -1284,7 +1284,11 @@ fields.forEach(function (f) {
       var radio = document.querySelector('input[name="formPkType"][value="' + type + '"]'); if (radio) radio.checked = true;
     },
 
-    selectDisplayMode: function (mode) { var sel = document.getElementById('browseDisplayMode'); if (sel) sel.value = mode || 'inline'; },
+    selectDisplayMode: function (mode) {
+      var val = mode || 'inline';
+      var radio = document.querySelector('input[name="browseDisplayMode"][value="' + val + '"]');
+      if (radio) radio.checked = true;
+    },
 
     _updateEmptyState: function () {
       var canvas = document.getElementById('formCanvas'); var empty = document.getElementById('canvasEmpty');
@@ -1728,7 +1732,7 @@ if (canvasType === 'subform' && sfData) {
         form_type: _r('formType') || 'main', form_table_mode: tableMode, form_pk_type: _r('formPkType') || 'autoincrement',
         form_layout: JSON.stringify(this.getLayout()),
         create_table: (tableMode === 'new' && !editId) ? 1 : 0,
-        browse_display_mode: _v('browseDisplayMode'), browse_sql: _v('formBrowseSql'), browse_columns: browseColumnsValue,
+        browse_display_mode: _r('browseDisplayMode'), browse_sql: _v('formBrowseSql'), browse_columns: browseColumnsValue,
         browse_layout: this._collectBrowseLayout(),
         browse_page_size: _v('formBrowsePageSize'), browse_default_sort: _v('formBrowseDefaultSort'),
         browse_search_enabled: _c('formBrowseSearchEnabled') ? 1 : 0, browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
