@@ -12,9 +12,19 @@ try {
       `cert_form_code` VARCHAR(255) NULL,
       `cert_file_id` INT NULL,
       `cert_html_template` LONGTEXT NULL,
+      `cert_button_label` VARCHAR(255) NULL,
+      `cert_output_name_template` VARCHAR(255) NULL,
       `cert_created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       `cert_created_by` VARCHAR(36) NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    // Idempotent column additions
+    try {
+        $db->query("ALTER TABLE `nu_word_certificates` ADD COLUMN `cert_button_label` VARCHAR(255) NULL");
+    } catch (\Throwable $t) {}
+    try {
+        $db->query("ALTER TABLE `nu_word_certificates` ADD COLUMN `cert_output_name_template` VARCHAR(255) NULL");
+    } catch (\Throwable $t) {}
 } catch (\Throwable $e) {}
 
 $forms = $db->fetchAll("SELECT form_code, form_name FROM nu_forms WHERE form_active = 1 ORDER BY form_name ASC");
@@ -112,6 +122,19 @@ $certs = $db->fetchAll(
             </div>
 
             <div class="nu-field">
+                <label style="font-weight:600; font-size:12px; margin-bottom:4px; display:block;">Custom Button Label <span style="font-weight:400; color:var(--text-tertiary);">(Optional, e.g. "Print Contract")</span></label>
+                <input type="text" class="nu-input" id="certButtonLabel" placeholder="defaults to 'Certificates' if blank" style="width:100%;">
+            </div>
+
+            <div class="nu-field">
+                <label style="font-weight:600; font-size:12px; margin-bottom:4px; display:block;">Custom Output File Name Template <span style="font-weight:400; color:var(--text-tertiary);">(Optional)</span></label>
+                <input type="text" class="nu-input" id="certOutputNameTemplate" placeholder="e.g. {{customer_name}}_{{certificate_no}}" style="width:100%;">
+                <p style="font-size:11px; color:var(--text-tertiary); margin-top:4px; margin-bottom:0;">
+                    Tip: Use <code>{{fieldname}}</code> placeholders based on form fields. e.g. <code>{{customer_name}}_{{certificate_no}}</code>.
+                </p>
+            </div>
+
+            <div class="nu-field">
                 <label style="font-weight:600; font-size:12px; margin-bottom:4px; display:block;">Associated Form</label>
                 <select class="nu-input" id="certFormCode" style="width:100%;">
                     <option value="">-- Global / Available on All Forms --</option>
@@ -155,6 +178,8 @@ $certs = $db->fetchAll(
 function openCertModal() {
     document.getElementById('certId').value = '';
     document.getElementById('certTitle').value = '';
+    document.getElementById('certButtonLabel').value = '';
+    document.getElementById('certOutputNameTemplate').value = '';
     document.getElementById('certFormCode').value = '';
     document.getElementById('certFileId').value = '';
     document.getElementById('certHtmlTemplate').value = '';
@@ -203,6 +228,8 @@ function handleFileSelected(input) {
 function saveCert() {
     let certId = document.getElementById('certId').value;
     let title = document.getElementById('certTitle').value.trim();
+    let btnLabel = document.getElementById('certButtonLabel').value.trim();
+    let nameTemplate = document.getElementById('certOutputNameTemplate').value.trim();
     let formCode = document.getElementById('certFormCode').value;
     let fileId = document.getElementById('certFileId').value;
     let htmlTemplate = document.getElementById('certHtmlTemplate').value;
@@ -219,6 +246,8 @@ function saveCert() {
     let payload = {
         cert_id: certId,
         cert_title: title,
+        cert_button_label: btnLabel,
+        cert_output_name_template: nameTemplate,
         cert_form_code: formCode,
         cert_file_id: fileId,
         cert_html_template: htmlTemplate
@@ -258,6 +287,8 @@ function editCert(id) {
             if (cert) {
                 document.getElementById('certId').value = cert.cert_id;
                 document.getElementById('certTitle').value = cert.cert_title;
+                document.getElementById('certButtonLabel').value = cert.cert_button_label || '';
+                document.getElementById('certOutputNameTemplate').value = cert.cert_output_name_template || '';
                 document.getElementById('certFormCode').value = cert.cert_form_code || '';
                 document.getElementById('certFileId').value = cert.cert_file_id || '';
                 document.getElementById('certHtmlTemplate').value = cert.cert_html_template || '';

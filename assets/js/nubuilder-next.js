@@ -571,12 +571,24 @@ window.NuApp = {
     if (sort) url += '&sort=' + encodeURIComponent(sort) + '&dir=' + encodeURIComponent(dir || 'ASC');
     const json = await this.apiJson(url, { credentials: 'same-origin' });
     if (!json.success) throw new Error(json.error || 'Browse failed');
+
+    // Pre-fetch certificate templates for this form asynchronously
+    try {
+      const certRes = await this.apiJson('api/word_certificates.php?action=list_templates&form_code=' + encodeURIComponent(code), { credentials: 'same-origin' });
+      if (certRes && certRes.success) {
+        json.certificate_templates = certRes.templates;
+      }
+    } catch (e) {
+      console.error('Failed to pre-fetch certificate templates', e);
+    }
+
     return json;
   },
 
   // ── Browse table builder ─────────────────────────────────────────────────
   _buildBrowseTable(json, code, page, query, label, displayMode, container, onEdit, canEdit, canAdd, currentSortField, currentSortDir) {
     const _canEdit          = (canEdit !== undefined) ? canEdit : NuPerms.canEdit();
+    const certTemplates     = json.certificate_templates || [];
     const _canAdd           = (canAdd  !== undefined) ? canAdd  : NuPerms.canAdd();
     const data              = json.data || {};
     const layout            = Array.isArray(data.layout)  ? data.layout  : [];
@@ -1219,18 +1231,26 @@ window.NuApp = {
           actionTd.appendChild(viewBtn);
         }
 
-        // Certificates button
-        const certBtn = document.createElement('button');
-        certBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
-        certBtn.style.color = 'var(--color-primary, #4f6bed)';
-        certBtn.innerHTML = `
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Certificates
-        `;
-        certBtn.onclick = (e) => {
-          e.stopPropagation();
-          this.openRecordCertificatesModal(code, row.id);
-        };
-        actionTd.appendChild(certBtn);
+        // Render a dedicated action button for each available certificate template!
+        if (Array.isArray(certTemplates) && certTemplates.length > 0) {
+          certTemplates.forEach(t => {
+            const labelText = t.cert_button_label && t.cert_button_label.trim() !== ''
+              ? t.cert_button_label.trim()
+              : 'Certificates';
+
+            const certBtn = document.createElement('button');
+            certBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+            certBtn.style.color = 'var(--color-primary, #4f6bed)';
+            certBtn.innerHTML = `
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> ${labelText}
+            `;
+            certBtn.onclick = (e) => {
+              e.stopPropagation();
+              this.openRecordCertificatesModal(code, row.id, t.cert_id);
+            };
+            actionTd.appendChild(certBtn);
+          });
+        }
 
         // Single row delete button (conditional on deleteEnabled)
         if (deleteEnabled && NuPerms.canDelete()) {
@@ -1847,7 +1867,7 @@ window.deleteForm      = function (id, name) {
 // ══════════════════════════════════════════════════════════════════
 NuApp._currentCertContext = null;
 
-NuApp.openRecordCertificatesModal = function(formCode, recordId) {
+NuApp.openRecordCertificatesModal = function(formCode, recordId, preSelectedCertId) {
   // Ensure modal DOM elements exist
   let modal = document.getElementById('recordCertsModal');
   if (!modal) {
@@ -1948,8 +1968,18 @@ NuApp.openRecordCertificatesModal = function(formCode, recordId) {
           select.appendChild(opt);
         });
 
+        const selectWrapper = select.closest('.nu-field');
+        if (preSelectedCertId) {
+          select.value = preSelectedCertId;
+          if (selectWrapper) selectWrapper.style.display = 'none';
+          NuApp.onRecordCertTemplateChanged(preSelectedCertId);
+        } else {
+          select.value = '';
+          if (selectWrapper) selectWrapper.style.display = 'block';
+          document.getElementById('recordCertActionsContainer').style.display = 'none';
+        }
+
         const hasTemplates = data.templates.length > 0;
-        document.getElementById('recordCertActionsContainer').style.display = 'none';
         document.getElementById('recordCertNoTemplatesMessage').style.display = hasTemplates ? 'none' : 'block';
 
         modal.style.display = 'flex';

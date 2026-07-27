@@ -27,9 +27,19 @@ try {
       `cert_form_code` VARCHAR(255) NULL,
       `cert_file_id` INT NULL,
       `cert_html_template` LONGTEXT NULL,
+      `cert_button_label` VARCHAR(255) NULL,
+      `cert_output_name_template` VARCHAR(255) NULL,
       `cert_created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       `cert_created_by` VARCHAR(36) NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    // Idempotent column additions
+    try {
+        $db->query("ALTER TABLE `nu_word_certificates` ADD COLUMN `cert_button_label` VARCHAR(255) NULL");
+    } catch (\Throwable $t) {}
+    try {
+        $db->query("ALTER TABLE `nu_word_certificates` ADD COLUMN `cert_output_name_template` VARCHAR(255) NULL");
+    } catch (\Throwable $t) {}
 } catch (\Throwable $e) {
     // Ignore if table already exists or permission issues
 }
@@ -87,6 +97,8 @@ switch ($action) {
         $formCode = $input['cert_form_code'] ?? '';
         $fileId = isset($input['cert_file_id']) && $input['cert_file_id'] !== '' ? (int)$input['cert_file_id'] : null;
         $htmlTemplate = $input['cert_html_template'] ?? '';
+        $buttonLabel = $input['cert_button_label'] ?? '';
+        $outputNameTemplate = $input['cert_output_name_template'] ?? '';
 
         if (empty($title)) {
             echo json_encode(['success' => false, 'error' => 'Certificate Title is required']);
@@ -95,11 +107,13 @@ switch ($action) {
 
         try {
             $data = [
-                'cert_title'         => $title,
-                'cert_form_code'     => $formCode,
-                'cert_file_id'       => $fileId,
-                'cert_html_template' => $htmlTemplate,
-                'cert_created_by'    => $_SESSION['nu_user_id'] ?? null
+                'cert_title'                => $title,
+                'cert_form_code'            => $formCode,
+                'cert_file_id'              => $fileId,
+                'cert_html_template'        => $htmlTemplate,
+                'cert_button_label'         => $buttonLabel,
+                'cert_output_name_template' => $outputNameTemplate,
+                'cert_created_by'           => $_SESSION['nu_user_id'] ?? null
             ];
 
             if ($certId > 0) {
@@ -202,6 +216,23 @@ switch ($action) {
             $replacements['cert_title']    = $template['cert_title'];
             $replacements['company_name']  = $_SESSION['nu_user_meta']['company_name'] ?? 'nuvis Inc.';
 
+            // Custom output name construction
+            $nameTemplate = $template['cert_output_name_template'] ?? '';
+            if (empty(trim($nameTemplate))) {
+                $rawBaseName = $template['cert_title'] . '_' . $recordId;
+            } else {
+                $rawBaseName = $nameTemplate;
+                foreach ($replacements as $key => $val) {
+                    $rawBaseName = str_replace('{{' . $key . '}}', (string)$val, $rawBaseName);
+                    $rawBaseName = str_replace('{' . $key . '}', (string)$val, $rawBaseName);
+                }
+            }
+            $cleanBaseName = preg_replace('/[^a-zA-Z0-9_ -]/', '_', $rawBaseName);
+            $cleanBaseName = trim($cleanBaseName);
+            if (empty($cleanBaseName)) {
+                $cleanBaseName = 'certificate_' . $recordId;
+            }
+
             if ($format === 'docx') {
                 if (empty($template['file_path']) || !file_exists($template['file_path'])) {
                     throw new \Exception('Word template .docx file not uploaded or missing on disk');
@@ -246,7 +277,7 @@ switch ($action) {
                 }
 
                 $fileData = file_get_contents($tempFile);
-                $outFilename = preg_replace('/[^a-zA-Z0-9_-]/', '_', $template['cert_title']) . '_' . $recordId . '.docx';
+                $outFilename = $cleanBaseName . '.docx';
                 $mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
                 // Clean up temporary file
@@ -276,7 +307,7 @@ switch ($action) {
                     'company_name' => $replacements['company_name']
                 ]);
 
-                $outFilename = preg_replace('/[^a-zA-Z0-9_-]/', '_', $template['cert_title']) . '_' . $recordId . '.pdf';
+                $outFilename = $cleanBaseName . '.pdf';
                 $mime = 'application/pdf';
             }
 
