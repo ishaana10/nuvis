@@ -697,17 +697,17 @@ function nu_render_field($field, $value = '', $record = []) {
 
         if ($type === 'subform') {
             $sf       = $field['subform'] ?? [];
-            $sfCode   = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? $name));
-            $sfFk     = nu_safe_ident($sf['fk_field']  ?? ($sf['fkfield']  ?? ''));
-            $sfViewRaw = $sf['view'] ?? ($sf['subform_view'] ?? 'grid');
+            $sfCode   = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? ($field['sf_form_code'] ?? ($field['form_code'] ?? $name))));
+            $sfFk     = nu_safe_ident($sf['fk_field']  ?? ($sf['fkfield']  ?? ($field['sf_fk_field']  ?? ($field['fk_field']  ?? ''))));
+            $sfViewRaw = $sf['view'] ?? ($sf['subform_view'] ?? ($field['subform_view'] ?? 'grid'));
             $sfView   = in_array($sfViewRaw, ['grid','form','inline'], true) ? $sfViewRaw : 'grid';
             $sfParent = (string)($field['_parent_id'] ?? '');
             $parentFormCode = (string)($field['_parent_form_code'] ?? '');
 
-            $sfSearchable   = !empty($sf['searchable']) ? '1' : '0';
-            $sfSelectedOnly = !empty($sf['selected_fields_only']) ? '1' : '0';
-            $sfViewRoles    = trim((string)($sf['view_roles'] ?? ''));
-            $sfEditRoles    = trim((string)($sf['edit_roles'] ?? ''));
+            $sfSearchable   = (!isset($sf['searchable']) && !isset($field['searchable'])) || !empty($sf['searchable']) || !empty($field['searchable']) ? '1' : '0';
+            $sfSelectedOnly = !empty($sf['selected_fields_only']) || !empty($field['selected_fields_only']) ? '1' : '0';
+            $sfViewRoles    = trim((string)($sf['view_roles'] ?? ($field['view_roles'] ?? '')));
+            $sfEditRoles    = trim((string)($sf['edit_roles'] ?? ($field['edit_roles'] ?? '')));
 
             return '<div class="nu-field-wrapper" data-field="' . nu_attr($name) . '"'
                  . ' style="grid-column:span ' . $col . ';min-width:0;margin-bottom:8px;">'
@@ -1620,20 +1620,28 @@ function nu_get_subform_roles($parentFormCode, $childFormCode, $fkField) {
     }
     $parentForm = nu_get_form($parentFormCode);
     if (!$parentForm) {
+        $table = nu_form_table_name();
+        $c = nu_form_columns();
+        try {
+            $stmt = nu_q("SELECT * FROM `{$table}` WHERE LOWER(`{$c['code']}`) = LOWER(?) LIMIT 1", [$parentFormCode]);
+            $parentForm = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {}
+    }
+    if (!$parentForm) {
         return $defaults;
     }
     $layout = nu_decode_layout($parentForm);
     $flat = nu_flatten_subforms($layout);
     foreach ($flat as $node) {
         $sf = $node['subform'] ?? [];
-        $sfCode = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? ($node['name'] ?? '')));
-        $sfFk = nu_safe_ident($sf['fk_field'] ?? ($sf['fkfield'] ?? ''));
-        if ($sfCode === $childFormCode && $sfFk === $fkField) {
+        $sfCode = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? ($node['sf_form_code'] ?? ($node['form_code'] ?? ($node['name'] ?? '')))));
+        $sfFk = nu_safe_ident($sf['fk_field'] ?? ($sf['fkfield'] ?? ($node['sf_fk_field'] ?? ($node['fk_field'] ?? ''))));
+        if (strtolower($sfCode) === strtolower($childFormCode) && strtolower($sfFk) === strtolower($fkField)) {
             return [
-                'view' => trim((string)($sf['view_roles'] ?? '')),
-                'edit' => trim((string)($sf['edit_roles'] ?? '')),
-                'selected_fields_only' => !empty($sf['selected_fields_only']),
-                'searchable' => !isset($sf['searchable']) || !empty($sf['searchable'])
+                'view' => trim((string)($sf['view_roles'] ?? ($node['view_roles'] ?? ''))),
+                'edit' => trim((string)($sf['edit_roles'] ?? ($node['edit_roles'] ?? ''))),
+                'selected_fields_only' => !empty($sf['selected_fields_only']) || !empty($node['selected_fields_only']),
+                'searchable' => (!isset($sf['searchable']) && !isset($node['searchable'])) || !empty($sf['searchable']) || !empty($node['searchable'])
             ];
         }
     }
