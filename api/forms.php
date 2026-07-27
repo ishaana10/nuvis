@@ -153,17 +153,27 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
     foreach ($desired as $col => $def) {
         if (isset($existing[$col])) continue;
         try {
-            // MySQL uses AFTER, not BEFORE. Find the column just before created_at.
+            // MySQL uses AFTER, not BEFORE. If it is a custom field, find the first existing system column
+            // and position this column right before it (by placing it AFTER the column before that system column).
             $positionClause = '';
-            if (isset($existing['created_at'])) {
-                // Get the column that comes right before created_at
+            $systemCols = ['user_id', 'location', 'created_at', 'updated_at'];
+            if (!in_array($col, $systemCols, true)) {
+                $firstSystemCol = null;
                 $cols = array_keys($existing);
-                $caIdx = array_search('created_at', $cols);
-                if ($caIdx === 0) {
-                    $positionClause = ' FIRST';
-                } elseif ($caIdx !== false) {
-                    $prevCol = $cols[$caIdx - 1];
-                    $positionClause = ' AFTER `' . $prevCol . '`';
+                foreach ($cols as $cName) {
+                    if (in_array($cName, $systemCols, true)) {
+                        $firstSystemCol = $cName;
+                        break;
+                    }
+                }
+                if ($firstSystemCol !== null) {
+                    $caIdx = array_search($firstSystemCol, $cols);
+                    if ($caIdx === 0) {
+                        $positionClause = ' FIRST';
+                    } elseif ($caIdx !== false) {
+                        $prevCol = $cols[$caIdx - 1];
+                        $positionClause = ' AFTER `' . $prevCol . '`';
+                    }
                 }
             }
             nu_ddl($db, "ALTER TABLE `{$table}` ADD COLUMN `{$col}` {$def}{$positionClause}");
