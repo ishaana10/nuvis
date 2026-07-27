@@ -164,6 +164,10 @@ function _renderSubformPanel(card, grid) {
   var origIsFk     = card.querySelector('.nb-cfield-body .nb-sf-is-fk');
   var origHideGrid = card.querySelector('.nb-cfield-body .nb-sf-hide-in-grid');
   var origSrvRo    = card.querySelector('.nb-cfield-body .nb-sf-server-readonly');
+  var origSearchable = card.querySelector('.nb-cfield-body .nb-sf-searchable');
+  var origSelectedOnly = card.querySelector('.nb-cfield-body .nb-sf-selected-fields-only');
+  var origViewRoles = card.querySelector('.nb-cfield-body .nb-sf-view-roles');
+  var origEditRoles = card.querySelector('.nb-cfield-body .nb-sf-edit-roles');
 
   /* ── FIX: getAttribute first, then .value, then dataset ── */
   function _readSel(el, dsKey) {
@@ -171,19 +175,21 @@ function _renderSubformPanel(card, grid) {
     return el.getAttribute('value') || el.value || card.dataset[dsKey] || '';
   }
 
-    var liveFormCode = _readSel(origFormSel, 'sfFormCode');
+  var liveFormCode = _readSel(origFormSel, 'sfFormCode');
   var liveFkField  = _readSel(origFkSel,   'sfFkField');
   var liveView     = _readSel(origViewSel, 'sfSubformView') || 'grid';
   var liveIsFk     = origIsFk     ? origIsFk.checked     : (card.dataset.sfIsFk === '1');
   var liveHideGrid = origHideGrid ? origHideGrid.checked : (card.dataset.sfHideInGrid === '1');
   var liveSrvRo    = origSrvRo    ? origSrvRo.checked    : (card.dataset.sfServerReadonly === '1');
+  var liveSearchable = origSearchable ? origSearchable.checked : (card.dataset.sfSearchable !== '0');
+  var liveSelectedOnly = origSelectedOnly ? origSelectedOnly.checked : (card.dataset.sfSelectedFieldsOnly === '1');
+  var liveViewRoles  = origViewRoles ? origViewRoles.value : (card.dataset.sfViewRoles || '');
+  var liveEditRoles  = origEditRoles ? origEditRoles.value : (card.dataset.sfEditRoles || '');
   
   console.group('[nb-sfpanel] _renderSubformPanel card.id=' + card.id);
   console.log('  liveFormCode :', liveFormCode);
   console.log('  liveFkField  :', liveFkField);
   console.log('  liveView     :', liveView);
-  console.log('  origFormSel  :', origFormSel);
-  console.log('  origFkSel    :', origFkSel);
   console.groupEnd();
 
   if (liveFormCode) card.dataset.sfFormCode    = liveFormCode;
@@ -192,13 +198,19 @@ function _renderSubformPanel(card, grid) {
   card.dataset.sfIsFk           = liveIsFk     ? '1' : '0';
   card.dataset.sfHideInGrid     = liveHideGrid ? '1' : '0';
   card.dataset.sfServerReadonly = liveSrvRo    ? '1' : '0';
+  card.dataset.sfSearchable     = liveSearchable ? '1' : '0';
+  card.dataset.sfSelectedFieldsOnly = liveSelectedOnly ? '1' : '0';
+  card.dataset.sfViewRoles      = liveViewRoles;
+  card.dataset.sfEditRoles      = liveEditRoles;
 
   var sfWrap = document.createElement('div');
   sfWrap.style.cssText = 'grid-column:1/-1;';
   sfWrap.innerHTML = _subformPanelHTML({
     form_code: liveFormCode, fk_field: liveFkField, subform_view: liveView,
     help_text: card.dataset.sfHelpText || '',
-    is_fk: liveIsFk, hide_in_grid: liveHideGrid, server_readonly: liveSrvRo
+    is_fk: liveIsFk, hide_in_grid: liveHideGrid, server_readonly: liveSrvRo,
+    searchable: liveSearchable, selected_fields_only: liveSelectedOnly,
+    view_roles: liveViewRoles, edit_roles: liveEditRoles
   });
   var livePanel = sfWrap.querySelector('.nb-sf-fk-panel') || sfWrap;
 
@@ -207,25 +219,29 @@ function _renderSubformPanel(card, grid) {
   var mirrorIsFk     = livePanel.querySelector('.nb-sf-is-fk');
   var mirrorHideGrid = livePanel.querySelector('.nb-sf-hide-in-grid');
   var mirrorSrvRo    = livePanel.querySelector('.nb-sf-server-readonly');
+  var mirrorSearchable = livePanel.querySelector('.nb-sf-searchable');
+  var mirrorSelectedOnly = livePanel.querySelector('.nb-sf-selected-fields-only');
 
   if (mirrorIsFk)     mirrorIsFk.checked     = liveIsFk;
   if (mirrorHideGrid) mirrorHideGrid.checked = liveHideGrid;
   if (mirrorSrvRo)    mirrorSrvRo.checked    = liveSrvRo;
+  if (mirrorSearchable) mirrorSearchable.checked = liveSearchable;
+  if (mirrorSelectedOnly) mirrorSelectedOnly.checked = liveSelectedOnly;
   if (mirrorView && liveView) mirrorView.value = liveView;
 
-   if (origFormSel && liveFormCode) {
+  if (origFormSel && liveFormCode) {
     origFormSel.value = liveFormCode;
     origFormSel.setAttribute('value', liveFormCode);
   }
   if (origFkSel && liveFkField) {
     origFkSel.setAttribute('value', liveFkField);
-    /* Don't set .value yet — options haven't loaded — but setAttribute
-       ensures _readFieldCard's getAttribute() path finds it */
   }
   if (origViewSel && liveView)    { origViewSel.setAttribute('value', liveView); }
   if (origIsFk)     origIsFk.checked     = liveIsFk;
   if (origHideGrid) origHideGrid.checked = liveHideGrid;
   if (origSrvRo)    origSrvRo.checked    = liveSrvRo;
+  if (origSearchable) origSearchable.checked = liveSearchable;
+  if (origSelectedOnly) origSelectedOnly.checked = liveSelectedOnly;
 
   // Must be in the live DOM before fetch callbacks fire
   grid.appendChild(sfWrap);
@@ -259,7 +275,6 @@ function _renderSubformPanel(card, grid) {
       card.dataset.sfFormCode = mirrorFormSel.value;
       if (origFormSel) { origFormSel.value = mirrorFormSel.value; origFormSel.setAttribute('value', mirrorFormSel.value); }
       if (origFkSel)   { origFkSel.innerHTML = '<option value="">— select FK field —</option>'; origFkSel.value = ''; }
-      // ← FIXED: pass cb so origFkSel syncs after FK options load on form change
       _populateFkDropdown(livePanel, mirrorFormSel.value, '', function () {
         var liveFkSel = livePanel.querySelector('.nb-sf-fk-field');
         console.log('[nb-sfpanel] formChange FK repopulated. liveFkSel.value=',
@@ -274,22 +289,72 @@ function _renderSubformPanel(card, grid) {
 
   livePanel.addEventListener('change', function (e) {
     var tgt = e.target;
-  var m = (tgt.className || '').match(/\bnb-sf-[\w-]+\b/);
-  if (!m) return;
+
+    // Check if roles checklist changed
+    if (tgt.classList.contains('nb-sf-view-role-chk') || tgt.classList.contains('nb-sf-edit-role-chk')) {
+      var viewRoles = [];
+      livePanel.querySelectorAll('.nb-sf-view-role-chk:checked').forEach(function (chk) { viewRoles.push(chk.value); });
+      var editRoles = [];
+      livePanel.querySelectorAll('.nb-sf-edit-role-chk:checked').forEach(function (chk) { editRoles.push(chk.value); });
+
+      card.dataset.sfViewRoles = viewRoles.join(',');
+      card.dataset.sfEditRoles = editRoles.join(',');
+
+      if (!origViewRoles) {
+        origViewRoles = document.createElement('input');
+        origViewRoles.type = 'hidden';
+        origViewRoles.className = 'nb-sf-view-roles';
+        card.querySelector('.nb-cfield-body').appendChild(origViewRoles);
+      }
+      origViewRoles.value = viewRoles.join(',');
+      origViewRoles.setAttribute('value', viewRoles.join(','));
+
+      if (!origEditRoles) {
+        origEditRoles = document.createElement('input');
+        origEditRoles.type = 'hidden';
+        origEditRoles.className = 'nb-sf-edit-roles';
+        card.querySelector('.nb-cfield-body').appendChild(origEditRoles);
+      }
+      origEditRoles.value = editRoles.join(',');
+      origEditRoles.setAttribute('value', editRoles.join(','));
+
+      window.nbUpdateLivePreview();
+      return;
+    }
+
+    var m = (tgt.className || '').match(/\bnb-sf-[\w-]+\b/);
+    if (!m) return;
+
     var origEl = card.querySelector('.nb-cfield-body .' + m[0]);
+    if (!origEl) {
+      if (tgt.type === 'checkbox') {
+        origEl = document.createElement('input');
+        origEl.type = 'checkbox';
+        origEl.className = m[0];
+        card.querySelector('.nb-cfield-body').appendChild(origEl);
+      } else {
+        origEl = document.createElement('input');
+        origEl.type = 'hidden';
+        origEl.className = m[0];
+        card.querySelector('.nb-cfield-body').appendChild(origEl);
+      }
+    }
+
     console.log('[nb-sfpanel] livePanel change', m[0], 'origEl=', !!origEl, 'tgt.value=', tgt.value, 'tgt.checked=', tgt.checked);
-    if (!origEl) return;
     if (tgt.type === 'checkbox') {
       origEl.checked = tgt.checked;
-      if (m[0] === 'nb-sf-is-fk')          card.dataset.sfIsFk           = tgt.checked ? '1' : '0';
-      if (m[0] === 'nb-sf-hide-in-grid')    card.dataset.sfHideInGrid     = tgt.checked ? '1' : '0';
-      if (m[0] === 'nb-sf-server-readonly') card.dataset.sfServerReadonly = tgt.checked ? '1' : '0';
+      if (m[0] === 'nb-sf-is-fk')               card.dataset.sfIsFk               = tgt.checked ? '1' : '0';
+      if (m[0] === 'nb-sf-hide-in-grid')         card.dataset.sfHideInGrid         = tgt.checked ? '1' : '0';
+      if (m[0] === 'nb-sf-server-readonly')      card.dataset.sfServerReadonly      = tgt.checked ? '1' : '0';
+      if (m[0] === 'nb-sf-searchable')           card.dataset.sfSearchable           = tgt.checked ? '1' : '0';
+      if (m[0] === 'nb-sf-selected-fields-only') card.dataset.sfSelectedFieldsOnly = tgt.checked ? '1' : '0';
     } else {
       origEl.value = tgt.value;
       origEl.setAttribute('value', tgt.value);
       if (m[0] === 'nb-sf-fk-field') card.dataset.sfFkField     = tgt.value;
       if (m[0] === 'nb-sf-view')     card.dataset.sfSubformView = tgt.value;
     }
+    window.nbUpdateLivePreview();
   });
 
   var createBtn = livePanel.querySelector('.nb-sf-create-fk');
@@ -534,7 +599,9 @@ function _renderPropsInPanel(card, body) {
     { cls: 'nu-field-no-duplicate',  label: 'No Duplicate' },
     { cls: 'nu-field-readonly',      label: 'Readonly' },
     { cls: 'nu-field-hidden',        label: 'Hidden' },
-    { cls: 'nu-field-hidden-normal', label: 'Hidden for normal users' }
+    { cls: 'nu-field-hidden-normal', label: 'Hidden for normal users' },
+    { cls: 'nu-field-searchable',    label: 'Searchable (Subform)' },
+    { cls: 'nu-field-hide-in-grid',  label: 'Hide in Grid (Subform)' }
   ].forEach(function (flag) {
     var origChk = card.querySelector('.nb-cfield-body .' + flag.cls);
     var lbl = document.createElement('label');
@@ -542,7 +609,11 @@ function _renderPropsInPanel(card, body) {
     var chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.className = 'rounded text-primary focus:ring-primary border-slate-300 dark:border-slate-700';
-    chk.checked = !!(origChk && origChk.checked);
+    if (flag.cls === 'nu-field-searchable') {
+      chk.checked = origChk ? origChk.checked : true;
+    } else {
+      chk.checked = !!(origChk && origChk.checked);
+    }
     chk.addEventListener('change', function () {
       if (origChk) origChk.checked = chk.checked;
       window.nbUpdateLivePreview();
@@ -743,16 +814,43 @@ function _openPropsPanel(card) {
     function _sfRead(card) {
       var fc = card.dataset.sfFormCode || '';
       if (fc) {
-        return { form_code: fc, fk_field: card.dataset.sfFkField || '', subform_view: card.dataset.sfSubformView || 'grid', help_text: card.dataset.sfHelpText || '', is_fk: card.dataset.sfIsFk === '1', hide_in_grid: card.dataset.sfHideInGrid === '1', server_readonly: card.dataset.sfServerReadonly === '1' };
+        return {
+          form_code: fc,
+          fk_field: card.dataset.sfFkField || '',
+          subform_view: card.dataset.sfSubformView || 'grid',
+          help_text: card.dataset.sfHelpText || '',
+          is_fk: card.dataset.sfIsFk === '1',
+          hide_in_grid: card.dataset.sfHideInGrid === '1',
+          server_readonly: card.dataset.sfServerReadonly === '1',
+          searchable: card.dataset.sfSearchable === '1',
+          selected_fields_only: card.dataset.sfSelectedFieldsOnly === '1',
+          view_roles: card.dataset.sfViewRoles || '',
+          edit_roles: card.dataset.sfEditRoles || ''
+        };
       }
       var raw = card.dataset.fieldJson || card.dataset.fieldData || '';
       if (raw) {
         try {
           var obj = JSON.parse(raw); var sf = (obj.subform && typeof obj.subform === 'object') ? obj.subform : {}; var fc2 = sf.form_code || sf.formcode || '';
-          if (fc2) { _sfWrite(card, { form_code: fc2, fk_field: sf.fk_field || sf.fkfield || '', subform_view: obj.subform_view || sf.subform_view || 'grid', help_text: obj.help_text || obj.field_help_text || '', is_fk: !!sf.is_fk, hide_in_grid: !!sf.hide_in_grid, server_readonly: !!sf.server_readonly }); return _sfRead(card); }
+          if (fc2) {
+            _sfWrite(card, {
+              form_code: fc2,
+              fk_field: sf.fk_field || sf.fkfield || '',
+              subform_view: obj.subform_view || sf.subform_view || 'grid',
+              help_text: obj.help_text || obj.field_help_text || '',
+              is_fk: !!sf.is_fk,
+              hide_in_grid: !!sf.hide_in_grid,
+              server_readonly: !!sf.server_readonly,
+              searchable: sf.searchable !== undefined ? !!sf.searchable : (obj.searchable !== undefined ? !!obj.searchable : false),
+              selected_fields_only: sf.selected_fields_only !== undefined ? !!sf.selected_fields_only : (obj.selected_fields_only !== undefined ? !!obj.selected_fields_only : false),
+              view_roles: sf.view_roles || obj.view_roles || '',
+              edit_roles: sf.edit_roles || obj.edit_roles || ''
+            });
+            return _sfRead(card);
+          }
         } catch (e) {}
       }
-      return { form_code: card.dataset.subformFormCode || card.dataset.formCode || '', fk_field: card.dataset.subformFkField || card.dataset.fkField || '', subform_view: 'grid', help_text: '', is_fk: false, hide_in_grid: false, server_readonly: false };
+      return { form_code: card.dataset.subformFormCode || card.dataset.formCode || '', fk_field: card.dataset.subformFkField || card.dataset.fkField || '', subform_view: 'grid', help_text: '', is_fk: false, hide_in_grid: false, server_readonly: false, searchable: false, selected_fields_only: false, view_roles: '', edit_roles: '' };
     }
     function _sfWrite(card, obj) {
       if (!obj) return;
@@ -763,9 +861,13 @@ function _openPropsPanel(card) {
       card.dataset.sfIsFk           = obj.is_fk           ? '1' : '0';
       card.dataset.sfHideInGrid     = obj.hide_in_grid    ? '1' : '0';
       card.dataset.sfServerReadonly = obj.server_readonly ? '1' : '0';
+      card.dataset.sfSearchable     = obj.searchable      ? '1' : '0';
+      card.dataset.sfSelectedFieldsOnly = obj.selected_fields_only ? '1' : '0';
+      card.dataset.sfViewRoles      = obj.view_roles      || '';
+      card.dataset.sfEditRoles      = obj.edit_roles      || '';
     }
     function _sfClear(card) {
-      ['sfFormCode','sfFkField','sfSubformView','sfHelpText','sfIsFk','sfHideInGrid','sfServerReadonly','fieldJson','fieldData'].forEach(function (k) { delete card.dataset[k]; });
+      ['sfFormCode','sfFkField','sfSubformView','sfHelpText','sfIsFk','sfHideInGrid','sfServerReadonly','sfSearchable','sfSelectedFieldsOnly','sfViewRoles','sfEditRoles','fieldJson','fieldData'].forEach(function (k) { delete card.dataset[k]; });
     }
     return { read: _sfRead, write: _sfWrite, clear: _sfClear };
   }());
@@ -783,6 +885,7 @@ function _openPropsPanel(card) {
 
   function _visibilityFlagsHTML(extra) {
     extra = extra || {};
+    var searchableChecked = (extra.searchable !== false && extra.searchable !== 'false' && extra.searchable !== 0 && extra.searchable !== '0') ? ' checked' : '';
     return '<div class="nb-fp nb-fp-full nb-vis-flags" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px 18px;padding:8px 10px;background:var(--bg-offset,#f5f7ff);border:1px solid var(--border,#e0e4ef);border-radius:7px;margin-top:4px;">'
       + '<label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;flex-basis:100%;margin-bottom:2px;">Field Options</label>'
       + '<label class="nb-fp-check" style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" class="nu-field-required"'      + (extra.required              ? ' checked' : '') + '> Required</label>'
@@ -790,6 +893,8 @@ function _openPropsPanel(card) {
       + '<label class="nb-fp-check" style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" class="nu-field-readonly"'      + (extra.readonly              ? ' checked' : '') + '> Readonly</label>'
       + '<label class="nb-fp-check" style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" class="nu-field-hidden"'        + (extra.hidden                ? ' checked' : '') + '> Hidden</label>'
       + '<label class="nb-fp-check" style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" class="nu-field-hidden-normal"' + (extra.hidden_for_normal_users ? ' checked' : '') + '> Hidden for normal users</label>'
+      + '<label class="nb-fp-check" style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" class="nu-field-searchable"'    + searchableChecked + '> Searchable</label>'
+      + '<label class="nb-fp-check" style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" class="nu-field-hide-in-grid"'  + (extra.hide_in_grid          ? ' checked' : '') + '> Hide in Grid</label>'
       + '</div>';
   }
 
@@ -1159,12 +1264,20 @@ fields.forEach(function (f) {
     '.nu-field-no-duplicate': 'no_duplicate',
     '.nu-field-readonly': 'readonly',
     '.nu-field-hidden': 'hidden',
-    '.nu-field-hidden-normal': 'hidden_for_normal_users'
+    '.nu-field-hidden-normal': 'hidden_for_normal_users',
+    '.nu-field-searchable': 'searchable',
+    '.nu-field-hide-in-grid': 'hide_in_grid'
   };
 
   Object.keys(map).forEach(function (sel) {
     var el = card.querySelector(sel);
-    if (el) el.checked = !!fd[map[sel]];
+    if (el) {
+      if (sel === '.nu-field-searchable') {
+        el.checked = fd.searchable !== undefined ? !!fd.searchable : true;
+      } else {
+        el.checked = !!fd[map[sel]];
+      }
+    }
   });
 
   var customAttrs = card.querySelector('.nu-field-custom-attrs');
@@ -1385,16 +1498,19 @@ fields.forEach(function (f) {
   if (canvasType === 'subform') {
   var sf = (extra.subform && typeof extra.subform === 'object') ? extra.subform : {};
   sfData = {
-    form_code:       sf.form_code       || extra.sf_form_code || '',
-    fk_field:        sf.fk_field        || extra.sf_fk_field  || '',
-    subform_view:    extra.subform_view  || 'grid',
-    help_text:       extra.help_text     || extra.field_help_text || '',
-    is_fk:           !!sf.is_fk,
-    hide_in_grid:    !!sf.hide_in_grid,
-    server_readonly: !!sf.server_readonly
+    form_code:            sf.form_code            || extra.sf_form_code || '',
+    fk_field:             sf.fk_field             || extra.sf_fk_field  || '',
+    subform_view:         sf.subform_view         || extra.subform_view  || 'grid',
+    help_text:            extra.help_text         || extra.field_help_text || '',
+    is_fk:                sf.is_fk !== undefined ? !!sf.is_fk : !!extra.is_fk,
+    hide_in_grid:         sf.hide_in_grid !== undefined ? !!sf.hide_in_grid : !!extra.hide_in_grid,
+    server_readonly:      sf.server_readonly !== undefined ? !!sf.server_readonly : !!extra.server_readonly,
+    searchable:           sf.searchable !== undefined ? !!sf.searchable : (extra.searchable !== undefined ? !!extra.searchable : true),
+    selected_fields_only: sf.selected_fields_only !== undefined ? !!sf.selected_fields_only : !!extra.selected_fields_only,
+    view_roles:           sf.view_roles || extra.view_roles || '',
+    edit_roles:           sf.edit_roles || extra.edit_roles || ''
   };
   extraBody += _subformPanelHTML(sfData);
-  // ← NO dataset writes here. card doesn't exist yet.
 }
 
   var card = document.createElement('div');
@@ -1416,6 +1532,10 @@ if (canvasType === 'subform' && sfData) {
   card.dataset.sfIsFk           = sfData.is_fk           ? '1' : '0';
   card.dataset.sfHideInGrid     = sfData.hide_in_grid    ? '1' : '0';
   card.dataset.sfServerReadonly = sfData.server_readonly ? '1' : '0';
+  card.dataset.sfSearchable     = sfData.searchable      ? '1' : '0';
+  card.dataset.sfSelectedFieldsOnly = sfData.selected_fields_only ? '1' : '0';
+  card.dataset.sfViewRoles      = sfData.view_roles      || '';
+  card.dataset.sfEditRoles      = sfData.edit_roles      || '';
 }
 /* ── END ADD ── */
 
@@ -1996,6 +2116,8 @@ entry.fields.forEach(function (f) {
     readonly:              _chk('.nu-field-readonly'),
     hidden:                _chk('.nu-field-hidden'),
     hidden_for_normal_users: _chk('.nu-field-hidden-normal'),
+    searchable:            card.querySelector('.nu-field-searchable') ? _chk('.nu-field-searchable') : true,
+    hide_in_grid:          _chk('.nu-field-hide-in-grid'),
     placeholder:           _val('.nu-field-placeholder'),
     default_value:         _val('.nu-field-default'),
     help_text:             _val('.nu-field-help'),
@@ -2194,10 +2316,65 @@ entry.fields.forEach(function (f) {
      Subform FK panel
   ═══════════════════════════════════════════════════════════════════ */
   function _subformPanelHTML(d) {
-    var isFk=d.is_fk?'checked':''; var hg=d.hide_in_grid?'checked':''; var sr=d.server_readonly?'checked':'';
-    var vg=(!d.subform_view||d.subform_view==='grid')?'selected':''; var vf=(d.subform_view==='form')?'selected':'';
-    function _tr(cls,dk,ca,lbl,hint){return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;"><input type="checkbox" class="'+cls+'" data-fk-flag="'+dk+'" '+ca+'><span><strong>'+lbl+'</strong>'+(hint?' <span style="color:var(--text-muted,#999);font-size:11px;">— '+hint+'</span>':'')+'</span></label>';}
-    return ['<div class="nb-sf-fk-panel" style="display:flex;flex-direction:column;gap:8px;padding:10px 0;grid-column:1/-1;">','<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Child Form</label><select class="nu-input nb-sf-form-code" style="width:100%;"><option value="">— select form —</option></select></div>','<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">FK Field</label><div style="display:flex;gap:6px;"><select class="nu-input nb-sf-fk-field" style="flex:1;"><option value="">— select FK field —</option></select><button type="button" class="nu-btn nu-btn-ghost nu-btn-sm nb-sf-create-fk">＋ Create FK Field</button></div></div>','<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Display Mode</label><select class="nu-input nb-sf-view" style="width:100%;"><option value="grid" '+vg+'>Grid (table)</option><option value="form" '+vf+'>Form (stacked)</option></select></div>','<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);"><label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">FK Field Flags</label>',_tr('nb-sf-is-fk','is_fk',isFk,'FK field','Force hidden; builder locks this field'),_tr('nb-sf-hide-in-grid','hide_in_grid',hg,'Hide in grid','Excludes column from subform table'),_tr('nb-sf-server-readonly','server_readonly',sr,'Server readonly','PHP ignores POST value; always writes parent ID'),'</div>','</div>'].join('');
+    var isFk=d.is_fk?'checked':'';
+    var hg=d.hide_in_grid?'checked':'';
+    var sr=d.server_readonly?'checked':'';
+    var searchable=(d.searchable !== false && d.searchable !== 'false' && d.searchable !== 0 && d.searchable !== '0') ? 'checked' : '';
+    var selectedOnly=d.selected_fields_only?'checked':'';
+    var vg=(!d.subform_view||d.subform_view==='grid')?'selected':'';
+    var vf=(d.subform_view==='form')?'selected':'';
+    var vi=(d.subform_view==='inline')?'selected':'';
+
+    function _tr(cls,dk,ca,lbl,hint){
+      return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;"><input type="checkbox" class="'+cls+'" data-fk-flag="'+dk+'" '+ca+'><span><strong>'+lbl+'</strong>'+(hint?' <span style="color:var(--text-muted,#999);font-size:11px;">— '+hint+'</span>':'')+'</span></label>';
+    }
+
+    var viewRolesHtml = '';
+    var editRolesHtml = '';
+    var viewRolesArr = (d.view_roles || '').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var editRolesArr = (d.edit_roles || '').split(',').map(function(s){return s.trim();}).filter(Boolean);
+
+    if (window.nuRolesList && window.nuRolesList.length) {
+      window.nuRolesList.forEach(function (r) {
+        var vSel = viewRolesArr.indexOf(r.role_code) !== -1 ? 'checked' : '';
+        var eSel = editRolesArr.indexOf(r.role_code) !== -1 ? 'checked' : '';
+        viewRolesHtml += '<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:11px;cursor:pointer;"><input type="checkbox" class="nb-sf-view-role-chk" value="'+r.role_code+'" '+vSel+'> '+r.role_name+'</label>';
+        editRolesHtml += '<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:11px;cursor:pointer;"><input type="checkbox" class="nb-sf-edit-role-chk" value="'+r.role_code+'" '+eSel+'> '+r.role_name+'</label>';
+      });
+    } else {
+      viewRolesHtml = '<span style="font-size:11px;color:#999;">No roles available</span>';
+      editRolesHtml = '<span style="font-size:11px;color:#999;">No roles available</span>';
+    }
+
+    return [
+      '<div class="nb-sf-fk-panel" style="display:flex;flex-direction:column;gap:8px;padding:10px 0;grid-column:1/-1;">',
+      '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Child Form</label><select class="nu-input nb-sf-form-code" style="width:100%;"><option value="">— select form —</option></select></div>',
+      '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">FK Field</label><div style="display:flex;gap:6px;"><select class="nu-input nb-sf-fk-field" style="flex:1;"><option value="">— select FK field —</option></select><button type="button" class="nu-btn nu-btn-ghost nu-btn-sm nb-sf-create-fk">＋ Create FK Field</button></div></div>',
+      '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Display Mode</label><select class="nu-input nb-sf-view" style="width:100%;"><option value="grid" '+vg+'>Grid (table)</option><option value="form" '+vf+'>Form (stacked)</option><option value="inline" '+vi+'>Inline Edit</option></select></div>',
+
+      '<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);"><label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">FK Field Flags</label>',
+      _tr('nb-sf-is-fk','is_fk',isFk,'FK field','Force hidden; builder locks this field'),
+      _tr('nb-sf-hide-in-grid','hide_in_grid',hg,'Hide in grid','Excludes column from subform table'),
+      _tr('nb-sf-server-readonly','server_readonly',sr,'Server readonly','PHP ignores POST value; always writes parent ID'),
+      '</div>',
+
+      '<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);"><label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Subform Features</label>',
+      _tr('nb-sf-searchable','searchable',searchable,'Searchable','Show search box in subform toolbar'),
+      _tr('nb-sf-selected-fields-only','selected_fields_only',selectedOnly,'Show Selected Fields Only','Only show fields with hide_in_grid=false inside the subform layout'),
+      '</div>',
+
+      '<div style="display:flex;flex-direction:column;gap:6px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);">',
+      '<label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;">Subform View Access Roles</label>',
+      '<div style="display:flex;flex-wrap:wrap;gap:2px 6px;">' + viewRolesHtml + '</div>',
+      '</div>',
+
+      '<div style="display:flex;flex-direction:column;gap:6px;padding:6px 8px;background:var(--bg-elevated,#f8f9fa);border-radius:6px;border:1px solid var(--border,#e0e0e0);">',
+      '<label style="font-size:11px;font-weight:700;color:var(--text-muted,#888);text-transform:uppercase;letter-spacing:.5px;">Subform Edit Access Roles</label>',
+      '<div style="display:flex;flex-wrap:wrap;gap:2px 6px;">' + editRolesHtml + '</div>',
+      '</div>',
+
+      '</div>'
+    ].join('');
   }
   function _attachSubformPanelEvents(card, initialData) {
     var panel = card.querySelector('.nb-sf-fk-panel'); if (!panel) return;
