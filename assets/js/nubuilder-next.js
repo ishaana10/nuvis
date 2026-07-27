@@ -1954,6 +1954,11 @@ NuApp.openRecordCertificatesModal = function(formCode, recordId, preSelectedCert
 
   NuApp._currentCertContext = { formCode, recordId };
 
+  const modalTitle = modal.querySelector('.nu-modal-title');
+  if (modalTitle) {
+    modalTitle.textContent = 'Record Certificates';
+  }
+
   // Fetch available templates for this form
   fetch(`api/word_certificates.php?action=list_templates&form_code=${encodeURIComponent(formCode)}`, { credentials: 'same-origin' })
     .then(r => r.json())
@@ -1970,6 +1975,12 @@ NuApp.openRecordCertificatesModal = function(formCode, recordId, preSelectedCert
 
         const selectWrapper = select.closest('.nu-field');
         if (preSelectedCertId) {
+          const t = data.templates.find(x => x.cert_id == preSelectedCertId);
+          if (t && modalTitle) {
+            modalTitle.textContent = t.cert_button_label && t.cert_button_label.trim() !== ''
+              ? t.cert_button_label.trim()
+              : t.cert_title;
+          }
           select.value = preSelectedCertId;
           if (selectWrapper) selectWrapper.style.display = 'none';
           NuApp.onRecordCertTemplateChanged(preSelectedCertId);
