@@ -699,8 +699,16 @@ function nu_render_field($field, $value = '', $record = []) {
             $sf       = $field['subform'] ?? [];
             $sfCode   = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? $name));
             $sfFk     = nu_safe_ident($sf['fk_field']  ?? ($sf['fkfield']  ?? ''));
-            $sfView   = in_array($sf['view'] ?? 'grid', ['grid','form','inline'], true) ? ($sf['view'] ?? 'grid') : 'grid';
+            $sfViewRaw = $sf['view'] ?? ($sf['subform_view'] ?? 'grid');
+            $sfView   = in_array($sfViewRaw, ['grid','form','inline'], true) ? $sfViewRaw : 'grid';
             $sfParent = (string)($field['_parent_id'] ?? '');
+            $parentFormCode = (string)($field['_parent_form_code'] ?? '');
+
+            $sfSearchable   = !empty($sf['searchable']) ? '1' : '0';
+            $sfSelectedOnly = !empty($sf['selected_fields_only']) ? '1' : '0';
+            $sfViewRoles    = trim((string)($sf['view_roles'] ?? ''));
+            $sfEditRoles    = trim((string)($sf['edit_roles'] ?? ''));
+
             return '<div class="nu-field-wrapper" data-field="' . nu_attr($name) . '"'
                  . ' style="grid-column:span ' . $col . ';min-width:0;margin-bottom:8px;">'
                  . '<div class="nu-subform-container"'
@@ -708,6 +716,12 @@ function nu_render_field($field, $value = '', $record = []) {
                  . ' data-subform-fk="'    . nu_attr($sfFk)     . '"'
                  . ' data-subform-view="'  . nu_attr($sfView)   . '"'
                  . ' data-parent-id="'     . nu_attr($sfParent) . '"'
+                 . ' data-parent-form-code="' . nu_attr($parentFormCode) . '"'
+                 . ' data-subform-searchable="' . $sfSearchable . '"'
+                 . ' data-subform-selected-fields-only="' . $sfSelectedOnly . '"'
+                 . ' data-subform-view-roles="' . nu_attr($sfViewRoles) . '"'
+                 . ' data-subform-edit-roles="' . nu_attr($sfEditRoles) . '"'
+                 . ' data-subform-label="' . nu_attr($label) . '"'
                  . ' style="border:1px solid #ddd;border-radius:8px;overflow:hidden;">'
                  . '<div class="nu-subform-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-elevated,#f8f9fa);border-bottom:1px solid #ddd;">'
                  . '<span style="font-weight:600;font-size:13px;">' . nu_html($label) . '</span>'
@@ -1205,7 +1219,7 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
     $formCode = $form[$c['code']]  ?? '';
     $formTable= $form[$c['table']] ?? '';
 
-    $layout = nu_inject_parent_context($layout, $formTable, (string)($recordId ?? ''));
+    $layout = nu_inject_parent_context($layout, $formTable, (string)($recordId ?? ''), $formCode);
 
     $customPhp = trim((string)($form[$c['custom_php']] ?? ''));
     if ($customPhp !== '') {
@@ -1338,21 +1352,22 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
     return $html;
 }
 
-function nu_inject_parent_context(array $layout, string $parentTable, string $parentId): array {
+function nu_inject_parent_context(array $layout, string $parentTable, string $parentId, string $parentFormCode): array {
     foreach ($layout as &$node) {
         $t = $node['type'] ?? 'field';
         if ($t === 'subform') {
-            $node['_parent_table'] = $parentTable;
-            $node['_parent_id']    = $parentId;
+            $node['_parent_table']     = $parentTable;
+            $node['_parent_id']        = $parentId;
+            $node['_parent_form_code'] = $parentFormCode;
         } elseif (in_array($t, ['section', 'group', 'row'], true) && isset($node['children'])) {
-            $node['children'] = nu_inject_parent_context($node['children'], $parentTable, $parentId);
+            $node['children'] = nu_inject_parent_context($node['children'], $parentTable, $parentId, $parentFormCode);
         }
 
         // Also handle group/tab rows if present
         if ($t === 'group' && isset($node['rows'])) {
             foreach ($node['rows'] as &$row) {
                 if (isset($row['fields'])) {
-                    $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId);
+                    $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId, $parentFormCode);
                 }
             }
             unset($row);
@@ -1362,7 +1377,7 @@ function nu_inject_parent_context(array $layout, string $parentTable, string $pa
                 if (isset($tab['rows'])) {
                     foreach ($tab['rows'] as &$row) {
                         if (isset($row['fields'])) {
-                            $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId);
+                            $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId, $parentFormCode);
                         }
                     }
                     unset($row);
@@ -1556,6 +1571,75 @@ function nu_get_hash() {
 
 /* ── Subform handlers ─────────────────────────────────────────────── */
 
+function nu_flatten_subforms(array $layout): array {
+    $out = [];
+    $walk = function($items) use (&$walk, &$out) {
+        if (!is_array($items)) return;
+        foreach ($items as $item) {
+            if (!is_array($item)) continue;
+            $type = strtolower(trim((string)($item['type'] ?? '')));
+            if ($type === 'subform') {
+                $out[] = $item;
+                continue;
+            }
+            if ($type === 'tab') {
+                foreach (($item['tabs'] ?? []) as $tab) {
+                    if (!is_array($tab)) continue;
+                    foreach (($tab['rows'] ?? []) as $row) {
+                        $rowType = strtolower(trim((string)($row['type'] ?? 'row')));
+                        if ($rowType === 'group') {
+                            $walk($row['rows'] ?? []);
+                        } else {
+                            $walk($row['fields'] ?? []);
+                        }
+                    }
+                }
+                continue;
+            }
+            if ($type === 'section' || $type === 'group') {
+                $walk($item['children'] ?? []);
+                foreach (($item['rows'] ?? []) as $row) {
+                    $walk($row['fields'] ?? []);
+                }
+                continue;
+            }
+            if ($type === 'row' || isset($item['fields'])) {
+                $walk($item['fields'] ?? []);
+                continue;
+            }
+        }
+    };
+    $walk($layout);
+    return $out;
+}
+
+function nu_get_subform_roles($parentFormCode, $childFormCode, $fkField) {
+    $defaults = ['view' => '', 'edit' => '', 'selected_fields_only' => false, 'searchable' => true];
+    if ($parentFormCode === '') {
+        return $defaults;
+    }
+    $parentForm = nu_get_form($parentFormCode);
+    if (!$parentForm) {
+        return $defaults;
+    }
+    $layout = nu_decode_layout($parentForm);
+    $flat = nu_flatten_subforms($layout);
+    foreach ($flat as $node) {
+        $sf = $node['subform'] ?? [];
+        $sfCode = nu_safe_ident($sf['form_code'] ?? ($sf['formcode'] ?? ($node['name'] ?? '')));
+        $sfFk = nu_safe_ident($sf['fk_field'] ?? ($sf['fkfield'] ?? ''));
+        if ($sfCode === $childFormCode && $sfFk === $fkField) {
+            return [
+                'view' => trim((string)($sf['view_roles'] ?? '')),
+                'edit' => trim((string)($sf['edit_roles'] ?? '')),
+                'selected_fields_only' => !empty($sf['selected_fields_only']),
+                'searchable' => !isset($sf['searchable']) || !empty($sf['searchable'])
+            ];
+        }
+    }
+    return $defaults;
+}
+
 function nu_handle_subform_fields() {
     $code = $_GET['code'] ?? '';
     if ($code === '') nu_json(['success' => false, 'error' => 'Missing code'], 400);
@@ -1579,9 +1663,10 @@ function nu_handle_subform_fields() {
 }
 
 function nu_handle_subform_list() {
-    $code     = $_GET['code']      ?? '';
-    $fk       = nu_safe_ident($_GET['fk']  ?? '');
-    $parentId = $_GET['parent_id'] ?? '';
+    $code           = $_GET['code']            ?? '';
+    $fk             = nu_safe_ident($_GET['fk'] ?? '');
+    $parentId       = $_GET['parent_id']       ?? '';
+    $parentFormCode = $_GET['parent_form_code'] ?? '';
 
     if ($code === '' || $fk === '' || $parentId === '') {
         nu_json(['success' => false, 'error' => 'Missing subform params'], 400);
@@ -1590,18 +1675,82 @@ function nu_handle_subform_list() {
     $form = nu_get_form($code);
     if (!$form) nu_json(['success' => false, 'error' => 'Child form not found'], 404);
 
+    // ── Fetch Roles and Configs Pure Server-Side ──
+    $sfMeta = nu_get_subform_roles($parentFormCode, $code, $fk);
+
+    // ── Enforce View Roles ──
+    $viewRoles = $sfMeta['view'];
+    $auth = class_exists('NuAuth') ? NuAuth::getInstance() : null;
+    $currentRole = $auth ? $auth->getCurrentRole() : '';
+    if ($currentRole === '') {
+        $currentRole = $_SESSION['usr_role'] ?? $_SESSION['role'] ?? $_SESSION['access_level'] ?? '';
+    }
+    if ($viewRoles !== '') {
+        $allowed = array_map('trim', explode(',', strtolower($viewRoles)));
+        $currentRoleLower = strtolower($currentRole);
+        if (!in_array('*', $allowed, true) && !in_array('admin', $allowed, true) && !in_array('globeadmin', $allowed, true) && !in_array($currentRoleLower, $allowed, true)) {
+            nu_json(['success' => false, 'error' => 'Access Denied: View Roles restriction.'], 403);
+        }
+    }
+
     $c      = nu_form_columns();
     $table  = nu_safe_ident($form[$c['table']] ?? '');
     $layout = nu_decode_layout($form);
 
     $allFields  = nu_flatten_layout($layout);
-    $gridFields = nu_flatten_layout_for_grid($layout);
+    $selectedFieldsOnly = $sfMeta['selected_fields_only'];
+
+    if ($selectedFieldsOnly) {
+        $gridFields = nu_flatten_layout_for_grid($layout);
+    } else {
+        $gridFields = array_values(array_filter($allFields, function($f) {
+            $type = nu_field_type($f);
+            if (in_array($type, ['html','heading','divider','fieldset','subform','button','uploadbutton','signaturepad','picturecanvas'], true)) return false;
+            return true;
+        }));
+    }
 
     if ($table === '') nu_json(['success' => false, 'error' => 'No table for child form'], 400);
 
-    $pk      = nu_get_pk($table);
-    $records = nu_q("SELECT * FROM `{$table}` WHERE `{$fk}` = ? ORDER BY `{$pk}` ASC", [$parentId])
-                    ->fetchAll(PDO::FETCH_ASSOC);
+    $pk = nu_get_pk($table);
+
+    // Get searchable fields
+    $searchFields = [];
+    foreach ($allFields as $field) {
+        $fname = nu_safe_ident(nu_field_name($field));
+        $searchable = !isset($field['searchable']) || $field['searchable'] === true || $field['searchable'] === 'true' || $field['searchable'] === 1 || $field['searchable'] === '1';
+        if ($fname !== '' && $searchable) {
+            $searchFields[] = $fname;
+        }
+    }
+
+    $q = trim($_GET['q'] ?? '');
+    $where = ["`{$fk}` = ?"];
+    $params = [$parentId];
+
+    if ($q !== '' && $sfMeta['searchable']) {
+        $likes = [];
+        foreach ($searchFields as $fn) {
+            $likes[] = "`{$fn}` LIKE ?";
+            $params[] = '%' . $q . '%';
+        }
+        if (!empty($likes)) {
+            $where[] = '(' . implode(' OR ', $likes) . ')';
+        }
+    }
+
+    $whereSql = implode(' AND ', $where);
+    $totalSql = "SELECT COUNT(*) FROM `{$table}` WHERE {$whereSql}";
+    $total = (int)nu_q($totalSql, $params)->fetchColumn();
+
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $pageSize = max(1, (int)($_GET['page_size'] ?? 10));
+    $pages = max(1, (int)ceil($total / $pageSize));
+    if ($page > $pages) $page = $pages;
+    $offset = max(0, ($page - 1) * $pageSize);
+
+    $recordsSql = "SELECT * FROM `{$table}` WHERE {$whereSql} ORDER BY `{$pk}` ASC LIMIT {$pageSize} OFFSET {$offset}";
+    $records = nu_q($recordsSql, $params)->fetchAll(PDO::FETCH_ASSOC);
 
     foreach ($records as &$row) {
         if (isset($row[$pk])) {
@@ -1621,20 +1770,40 @@ function nu_handle_subform_list() {
         'all_fields' => $allFields,
         'records'    => $records,
         'pk'         => $pk,
+        'total'      => $total,
+        'page'       => $page,
+        'page_size'  => $pageSize
     ]]);
 }
 
 function nu_handle_subform_save() {
-    $code     = $_GET['code']      ?? '';
-    $fk       = nu_safe_ident($_GET['fk']  ?? '');
-    $parentId = $_GET['parent_id'] ?? '';
-    $id       = $_GET['id']        ?? '';
-    $data     = nu_request_json();
+    $code           = $_GET['code']            ?? '';
+    $fk             = nu_safe_ident($_GET['fk'] ?? '');
+    $parentId       = $_GET['parent_id']       ?? '';
+    $parentFormCode = $_GET['parent_form_code'] ?? '';
+    $id             = $_GET['id']              ?? '';
+    $data           = nu_request_json();
 
     if ($code === '' || $fk === '') nu_json(['success' => false, 'error' => 'Missing params'], 400);
 
     $form = nu_get_form($code);
     if (!$form) nu_json(['success' => false, 'error' => 'Child form not found'], 404);
+
+    // ── Check Edit Roles purely server side ──
+    $sfMeta = nu_get_subform_roles($parentFormCode, $code, $fk);
+    $editRoles = $sfMeta['edit'];
+    $auth = class_exists('NuAuth') ? NuAuth::getInstance() : null;
+    $currentRole = $auth ? $auth->getCurrentRole() : '';
+    if ($currentRole === '') {
+        $currentRole = $_SESSION['usr_role'] ?? $_SESSION['role'] ?? $_SESSION['access_level'] ?? '';
+    }
+    if ($editRoles !== '') {
+        $allowed = array_map('trim', explode(',', strtolower($editRoles)));
+        $currentRoleLower = strtolower($currentRole);
+        if (!in_array('*', $allowed, true) && !in_array('admin', $allowed, true) && !in_array('globeadmin', $allowed, true) && !in_array($currentRoleLower, $allowed, true)) {
+            nu_json(['success' => false, 'error' => 'Access Denied: Edit Roles restriction.'], 403);
+        }
+    }
 
     $c      = nu_form_columns();
     $table  = nu_safe_ident($form[$c['table']] ?? '');
@@ -1784,12 +1953,31 @@ function nu_handle_subform_save() {
 }
 
 function nu_handle_subform_delete() {
-    $code  = $_GET['code'] ?? '';
-    $id    = $_GET['id']   ?? '';
+    $code           = $_GET['code']            ?? '';
+    $fk             = nu_safe_ident($_GET['fk'] ?? '');
+    $id             = $_GET['id']              ?? '';
+    $parentFormCode = $_GET['parent_form_code'] ?? '';
+
     if ($code === '' || $id === '') nu_json(['success' => false, 'error' => 'Missing params'], 400);
 
     $form = nu_get_form($code);
     if (!$form) nu_json(['success' => false, 'error' => 'Child form not found'], 404);
+
+    // ── Check Edit Roles purely server side ──
+    $sfMeta = nu_get_subform_roles($parentFormCode, $code, $fk);
+    $editRoles = $sfMeta['edit'];
+    $auth = class_exists('NuAuth') ? NuAuth::getInstance() : null;
+    $currentRole = $auth ? $auth->getCurrentRole() : '';
+    if ($currentRole === '') {
+        $currentRole = $_SESSION['usr_role'] ?? $_SESSION['role'] ?? $_SESSION['access_level'] ?? '';
+    }
+    if ($editRoles !== '') {
+        $allowed = array_map('trim', explode(',', strtolower($editRoles)));
+        $currentRoleLower = strtolower($currentRole);
+        if (!in_array('*', $allowed, true) && !in_array('admin', $allowed, true) && !in_array('globeadmin', $allowed, true) && !in_array($currentRoleLower, $allowed, true)) {
+            nu_json(['success' => false, 'error' => 'Access Denied: Edit Roles restriction.'], 403);
+        }
+    }
 
     $c     = nu_form_columns();
     $table = nu_safe_ident($form[$c['table']] ?? '');

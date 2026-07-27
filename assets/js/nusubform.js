@@ -54,21 +54,203 @@
   /* ── get container meta ───────────────────────────────────────────── */
   function meta(container) {
     return {
-      code:     container.dataset.subformCode || '',
-      fk:       container.dataset.subformFk   || '',
-      view:     container.dataset.subformView  || 'grid',
-      parentId: container.dataset.parentId    || ''
+      code:               container.dataset.subformCode || '',
+      fk:                 container.dataset.subformFk   || '',
+      view:               container.dataset.subformView  || 'grid',
+      parentId:           container.dataset.parentId    || '',
+      parentFormCode:     container.dataset.parentFormCode || '',
+      searchable:         container.dataset.subformSearchable === '1',
+      selectedFieldsOnly: container.dataset.subformSelectedFieldsOnly === '1',
+      viewRoles:          container.dataset.subformViewRoles || '',
+      editRoles:          container.dataset.subformEditRoles || '',
+      q:                  container.dataset.subformQ || '',
+      page:               parseInt(container.dataset.subformPage || '1', 10),
+      pageSize:           parseInt(container.dataset.subformPageSize || '10', 10)
     };
+  }
+
+  /* ── check user view & edit permissions ────────────────────────────── */
+  function checkPermission(container, action) {
+    var m = meta(container);
+    var userRole = (window.nuUserRole || '').toLowerCase();
+    var isAd = userRole === 'admin' || userRole === 'globeadmin';
+
+    if (action === 'view') {
+      if (!m.viewRoles) return true; // Empty view roles defaults to allowed
+      var allowed = m.viewRoles.split(',').map(function(r) { return r.trim().toLowerCase(); });
+      if (allowed.indexOf('*') !== -1) return true;
+      if (isAd) return true;
+      return allowed.indexOf(userRole) !== -1;
+    }
+
+    if (action === 'edit') {
+      if (window.NuPerms && typeof window.NuPerms.canEdit === 'function') {
+        if (!window.NuPerms.canEdit() && !window.NuPerms.canAdd()) return false;
+      }
+      if (!m.editRoles) return true; // Empty edit roles defaults to allowed
+      var allowed = m.editRoles.split(',').map(function(r) { return r.trim().toLowerCase(); });
+      if (allowed.indexOf('*') !== -1) return true;
+      if (isAd) return true;
+      return allowed.indexOf(userRole) !== -1;
+    }
+    return true;
+  }
+
+  /* ── ensure toolbar ────────────────────────────────────────────────── */
+  function ensureToolbar(container) {
+    var tb = container.querySelector('.nu-subform-toolbar');
+    if (!tb) {
+      tb = document.createElement('div');
+      tb.className = 'nu-subform-toolbar';
+      tb.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-elevated,#f8f9fa);border-bottom:1px solid #ddd;';
+      container.insertBefore(tb, container.firstChild);
+    }
+    updateToolbar(container);
+  }
+
+  function updateToolbar(container) {
+    var tb = container.querySelector('.nu-subform-toolbar');
+    if (!tb) return;
+
+    var m = meta(container);
+    var labelText = container.getAttribute('data-subform-label') || m.code;
+
+    tb.innerHTML = '';
+
+    var lblSpan = document.createElement('span');
+    lblSpan.style.cssText = 'font-weight:600;font-size:13px;';
+    lblSpan.textContent = labelText;
+    tb.appendChild(lblSpan);
+
+    var rightSection = document.createElement('div');
+    rightSection.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    // Search Box
+    if (m.searchable && m.parentId) {
+      var searchInp = document.createElement('input');
+      searchInp.type = 'text';
+      searchInp.className = 'nu-input nu-subform-search-input';
+      searchInp.placeholder = 'Search subform...';
+      searchInp.value = m.q || '';
+      searchInp.style.cssText = 'width:160px;padding:3px 8px;font-size:12px;display:inline-block;margin:0;';
+
+      var searchTimeout;
+      searchInp.addEventListener('input', function () {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(function () {
+          container.dataset.subformQ = searchInp.value;
+          container.dataset.subformPage = '1';
+          load(container);
+        }, 300);
+      });
+      searchInp.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') e.preventDefault();
+      });
+
+      rightSection.appendChild(searchInp);
+    }
+
+    // Add Row
+    if (checkPermission(container, 'edit')) {
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
+      addBtn.textContent = '+ Add Row';
+      addBtn.onclick = function () {
+        nuSubform.addRow(addBtn);
+      };
+      rightSection.appendChild(addBtn);
+    }
+
+    tb.appendChild(rightSection);
+  }
+
+  /* ── ensure pagination footer ───────────────────────────────────────── */
+  function ensureFooter(container, totalRecords) {
+    var footer = container.querySelector('.nu-subform-footer');
+    if (!footer) {
+      footer = document.createElement('div');
+      footer.className = 'nu-subform-footer';
+      footer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-elevated,#f8f9fa);border-top:1px solid #ddd;font-size:12px;';
+      container.appendChild(footer);
+    }
+    updateFooter(container, totalRecords);
+  }
+
+  function updateFooter(container, totalRecords) {
+    var footer = container.querySelector('.nu-subform-footer');
+    if (!footer) return;
+
+    var m = meta(container);
+    if (!m.parentId) {
+      footer.style.display = 'none';
+      return;
+    }
+    footer.style.display = 'flex';
+
+    var page = m.page || 1;
+    var pageSize = m.pageSize || 10;
+    var totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+
+    footer.innerHTML = '';
+
+    var infoSpan = document.createElement('span');
+    infoSpan.style.color = '#666';
+    infoSpan.textContent = 'Showing page ' + page + ' of ' + totalPages + ' (Total ' + totalRecords + ' rows)';
+    footer.appendChild(infoSpan);
+
+    var navDiv = document.createElement('div');
+    navDiv.style.cssText = 'display:flex;gap:4px;';
+
+    var prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    prevBtn.textContent = '← Prev';
+    prevBtn.disabled = page <= 1;
+    prevBtn.onclick = function () {
+      if (page > 1) {
+        container.dataset.subformPage = String(page - 1);
+        load(container);
+      }
+    };
+    navDiv.appendChild(prevBtn);
+
+    var nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    nextBtn.textContent = 'Next →';
+    nextBtn.disabled = page >= totalPages;
+    nextBtn.onclick = function () {
+      if (page < totalPages) {
+        container.dataset.subformPage = String(page + 1);
+        load(container);
+      }
+    };
+    navDiv.appendChild(nextBtn);
+
+    footer.appendChild(navDiv);
   }
 
   /* ── load & render rows ───────────────────────────────────────────── */
   function load(container) {
+    if (!checkPermission(container, 'view')) {
+      container.style.display = 'none';
+      return;
+    } else {
+      container.style.display = '';
+    }
+
+    ensureToolbar(container);
+
     var m    = meta(container);
     var body = container.querySelector('.nu-subform-body');
     if (!body) return;
 
     /* No parent_id yet (new unsaved parent) — show pending rows only */
     if (!m.parentId) {
+      var footer = container.querySelector('.nu-subform-footer');
+      if (footer) footer.style.display = 'none';
+
       var fieldsUrl = 'api/form.php?action=subform_fields&code=' + encodeURIComponent(m.code);
       apiJson(fieldsUrl)
         .then(function (json) {
@@ -95,7 +277,11 @@
 
     var listUrl = 'api/form.php?action=subform_list&code=' + encodeURIComponent(m.code)
       + '&fk='        + encodeURIComponent(m.fk)
-      + '&parent_id=' + encodeURIComponent(m.parentId);
+      + '&parent_id=' + encodeURIComponent(m.parentId)
+      + '&parent_form_code=' + encodeURIComponent(m.parentFormCode)
+      + '&q='         + encodeURIComponent(m.q || '')
+      + '&page='      + encodeURIComponent(m.page || 1)
+      + '&page_size=' + encodeURIComponent(m.pageSize || 10);
 
     apiJson(listUrl)
     .then(function (json) {
@@ -108,11 +294,13 @@
       var allFields  = data.all_fields || gridFields;
       var records    = data.records    || [];
       var pk         = data.pk || 'id';
+      var total      = data.total || 0;
 
       container._sfAllFields  = allFields;
       container._sfGridFields = gridFields;
 
       renderWithPending(container, gridFields, allFields, records, pk);
+      ensureFooter(container, total);
     })
     .catch(function (e) {
       body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>';
@@ -141,14 +329,16 @@
     var displayCols = gridFields.filter(function (f) {
       var t = f.type || f.fieldtype || 'text';
       if (['html','heading','divider','fieldset','subform','button'].indexOf(t) !== -1) return false;
-      if (f.hide_in_grid || f.hideingrid) return false;
+      if (m.selectedFieldsOnly && (f.hide_in_grid || f.hideingrid)) return false;
       if (isFkField(f)) return false;
       return true;
     });
 
-    if (m.view === 'grid')        body.innerHTML = renderGrid(displayCols, records, pk, m);
-    else if (m.view === 'inline') body.innerHTML = renderInline(displayCols, records, pk, m);
-    else                          body.innerHTML = renderFormList(displayCols, records, pk, m);
+    var hasEditPermission = checkPermission(container, 'edit');
+
+    if (m.view === 'grid')        body.innerHTML = renderGrid(displayCols, records, pk, m, hasEditPermission);
+    else if (m.view === 'inline') body.innerHTML = renderInline(displayCols, records, pk, m, hasEditPermission);
+    else                          body.innerHTML = renderFormList(displayCols, records, pk, m, hasEditPermission);
 
     /* ── bind delete buttons ── */
     body.querySelectorAll('[data-sf-delete]').forEach(function (btn) {
@@ -186,17 +376,20 @@
   }
 
   /* ── grid view ────────────────────────────────────────────────────── */
-  function renderGrid(displayCols, records, pk, m) {
+  function renderGrid(displayCols, records, pk, m, hasEditPermission) {
     var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
     html += '<thead><tr style="background:var(--bg-elevated,#f8f9fa);">';
     displayCols.forEach(function (f) {
       html += '<th style="padding:8px 10px;text-align:left;font-weight:600;border-bottom:1px solid #ddd;">'
         + esc(f.label || f.fieldlabel || f.name || f.fieldname || '') + '</th>';
     });
-    html += '<th style="padding:8px 10px;width:100px;">Actions</th></tr></thead><tbody>';
+    if (hasEditPermission) {
+      html += '<th style="padding:8px 10px;width:100px;">Actions</th>';
+    }
+    html += '</tr></thead><tbody>';
 
     if (!records.length) {
-      html += '<tr><td colspan="' + (displayCols.length + 1)
+      html += '<tr><td colspan="' + (displayCols.length + (hasEditPermission ? 1 : 0))
         + '" style="padding:20px;text-align:center;color:#999;">No rows yet</td></tr>';
     } else {
       records.forEach(function (row) {
@@ -215,10 +408,13 @@
           html += '<td style="padding:8px 10px;">' + cellDisplay(type, val)
             + (pending ? ' <em style="color:#999;font-size:10px;">(pending)</em>' : '') + '</td>';
         });
-        html += '<td style="padding:8px 10px;white-space:nowrap;">';
-        html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-edit="' + esc(id) + '" style="margin-right:4px;">Edit</button>';
-        html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-delete="' + esc(id) + '" style="color:#c00;">Del</button>';
-        html += '</td></tr>';
+        if (hasEditPermission) {
+          html += '<td style="padding:8px 10px;white-space:nowrap;">';
+          html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-edit="' + esc(id) + '" style="margin-right:4px;">Edit</button>';
+          html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-delete="' + esc(id) + '" style="color:#c00;">Del</button>';
+          html += '</td>';
+        }
+        html += '</tr>';
       });
     }
     html += '</tbody></table>';
@@ -226,7 +422,7 @@
   }
 
   /* ── form-card list view ──────────────────────────────────────────── */
-  function renderFormList(displayCols, records, pk, m) {
+  function renderFormList(displayCols, records, pk, m, hasEditPermission) {
     if (!records.length)
       return '<div style="padding:20px;text-align:center;color:#999;font-size:13px;">No rows yet</div>';
     var html = '<div style="display:grid;gap:8px;padding:8px;">';
@@ -240,17 +436,20 @@
           : (row[fname] || '');
         html += '<div style="font-size:12px;"><strong>' + esc(f.label || f.fieldlabel || fname) + ':</strong> ' + esc(val) + '</div>';
       });
-      html += '<div style="display:flex;gap:8px;margin-top:8px;">';
-      html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-edit="' + esc(id) + '">Edit</button>';
-      html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-delete="' + esc(id) + '" style="color:#c00;">Delete</button>';
-      html += '</div></div>';
+      if (hasEditPermission) {
+        html += '<div style="display:flex;gap:8px;margin-top:8px;">';
+        html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-edit="' + esc(id) + '">Edit</button>';
+        html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-delete="' + esc(id) + '" style="color:#c00;">Delete</button>';
+        html += '</div>';
+      }
+      html += '</div>';
     });
     html += '</div>';
     return html;
   }
 
   /* ── inline editable view ────────────────────────────────────────── */
-  function renderInline(displayCols, records, pk, m) {
+  function renderInline(displayCols, records, pk, m, hasEditPermission) {
     var html = '<div style="padding:8px;">';
     if (!records.length) {
       html += '<div style="padding:12px;text-align:center;color:#999;font-size:13px;">No rows yet</div>';
@@ -267,21 +466,25 @@
         html += '<div style="flex:1;min-width:120px;">';
         html += '<label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">'
           + esc(f.label || f.fieldlabel || fname) + '</label>';
-        html += buildInlineInput(type, fname, val, f);
+        html += buildInlineInput(type, fname, val, f, !hasEditPermission);
         html += '</div>';
       });
       html += '</div>';
-      html += '<div style="display:flex;gap:6px;margin-top:4px;">';
-      html += '<button type="button" class="nu-btn nu-btn-primary nu-btn-sm" data-sf-inline-save="' + esc(id) + '">Save</button>';
-      html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-delete="' + esc(id) + '" style="color:#c00;">Delete</button>';
-      html += '</div></div>';
+      if (hasEditPermission) {
+        html += '<div style="display:flex;gap:6px;margin-top:4px;">';
+        html += '<button type="button" class="nu-btn nu-btn-primary nu-btn-sm" data-sf-inline-save="' + esc(id) + '">Save</button>';
+        html += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" data-sf-delete="' + esc(id) + '" style="color:#c00;">Delete</button>';
+        html += '</div>';
+      }
+      html += '</div>';
     });
     html += '</div>';
     return html;
   }
 
-  function buildInlineInput(type, name, value, field) {
-    var base = 'class="nu-input" name="' + esc(name) + '" style="width:100%;"';
+  function buildInlineInput(type, name, value, field, disabled) {
+    var disAttr = disabled ? ' disabled' : '';
+    var base = 'class="nu-input" name="' + esc(name) + '" style="width:100%;"' + disAttr;
     if (type === 'textarea')      return '<textarea ' + base + ' rows="2">' + esc(value) + '</textarea>';
     if (type === 'select') {
       var opts = '<option value="">—</option>';
@@ -291,7 +494,7 @@
       });
       return '<select ' + base + '>' + opts + '</select>';
     }
-    if (type === 'checkbox')  return '<input type="checkbox" name="' + esc(name) + '" value="1"' + (value ? ' checked' : '') + '>';
+    if (type === 'checkbox')  return '<input type="checkbox" name="' + esc(name) + '" value="1"' + (value ? ' checked' : '') + disAttr + '>';
     if (type === 'date')      return '<input type="date" '            + base + ' value="' + esc(value) + '">';
     if (type === 'time')      return '<input type="time" '            + base + ' value="' + esc(value) + '">';
     if (type === 'datetime') {
@@ -330,7 +533,7 @@
     var headerEl = document.createElement('div');
     headerEl.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
     headerEl.innerHTML = '<h3 style="margin:0;">' + title + '</h3>'
-      + '<button type="button" style="background:none;border:none;font-size:22px;cursor:pointer;line-height:1;" onclick="this.closest(\'[data-sf-overlay]\').remove()">&times;</button>';
+      + '<button type="button" style="background:none;border:none;font-size:22px;cursor:pointer;line-height:1;" onclick="this.closest(\'\[data-sf-overlay]\').remove()">&times;</button>';
     box.appendChild(headerEl);
 
     var fieldsEl = document.createElement('div');
@@ -422,6 +625,7 @@
         + '&code='      + encodeURIComponent(m.code)
         + '&fk='        + encodeURIComponent(m.fk)
         + '&parent_id=' + encodeURIComponent(m.parentId)
+        + '&parent_form_code=' + encodeURIComponent(m.parentFormCode)
         + (rowId ? '&id=' + encodeURIComponent(rowId) : '');
 
       saveBtn.disabled = true;
@@ -463,6 +667,8 @@
     var m = meta(container);
     apiJson(
       'api/form.php?action=subform_delete&code=' + encodeURIComponent(m.code)
+      + '&fk=' + encodeURIComponent(m.fk)
+      + '&parent_form_code=' + encodeURIComponent(m.parentFormCode)
       + '&id=' + encodeURIComponent(rowId),
       { method: 'DELETE' }
     )
@@ -492,6 +698,7 @@
       + '&code='      + encodeURIComponent(m.code)
       + '&fk='        + encodeURIComponent(m.fk)
       + '&parent_id=' + encodeURIComponent(m.parentId)
+      + '&parent_form_code=' + encodeURIComponent(m.parentFormCode)
       + (rowId ? '&id=' + encodeURIComponent(rowId) : ''),
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }
     )
@@ -517,6 +724,7 @@
         var url = 'api/form.php?action=subform_save'
           + '&code='      + encodeURIComponent(m.code)
           + '&fk='        + encodeURIComponent(m.fk)
+          + '&parent_form_code=' + encodeURIComponent(m.parentFormCode)
           + '&parent_id=' + encodeURIComponent(parentId);
         return apiJson(url, {
           method: 'POST',
@@ -619,11 +827,7 @@
     nuSubform.onParentSaved(detail.id, detail.scope || document);
   });
 
-  /* ── (merged from nusubform-patch.js)
-     Intercept NuApp.apiJson to dispatch nu:parent:saved automatically
-     after a successful parent-form save (api/form.php?action=save).
-     URL regex avoids matching action=subform_save.
-  ── */
+  /* ── Intercept NuApp.apiJson to dispatch nu:parent:saved automatically ── */
   var PARENT_SAVE_RE = /[?&]action=save(&|$)/;
 
   function installParentSavePatch() {
