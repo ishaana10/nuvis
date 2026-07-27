@@ -1756,7 +1756,7 @@ if (canvasType === 'subform' && sfData) {
       var me = this;
       _closePropsPanel(); me._clearForm();
       var _set = function (id, val) { var e = document.getElementById(id); if (e) e.value = val || ''; };
-      var _chk = function (id, val) { var e = document.getElementById(id); if (e) e.checked = !!val; };
+      var _chk = function (id, val) { var e = document.getElementById(id); if (e) e.checked = (val !== undefined && val !== null && val !== 0 && val !== '0' && !!val); };
       _set('builderFormName', formData.form_name || formData.name || '');
       _set('builderFormCode', formData.form_code || formData.code || '');
       _set('builderFormTable', formData.form_table || formData.table_name || '');
@@ -1812,8 +1812,12 @@ if (canvasType === 'subform' && sfData) {
         });
       }
 
-      if (formData.browse_conditions && Array.isArray(formData.browse_conditions)) {
-        formData.browse_conditions.forEach(function(cond) { me.addBrowseCondition(cond); });
+      var conds = formData.browse_conditions;
+      if (conds && typeof conds === 'string') {
+        try { conds = JSON.parse(conds); } catch (e) { conds = []; }
+      }
+      if (conds && Array.isArray(conds)) {
+        conds.forEach(function(cond) { me.addBrowseCondition(cond); });
       }
 
       var layout = [];
