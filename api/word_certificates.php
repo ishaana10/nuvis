@@ -207,6 +207,12 @@ switch ($action) {
             $replacements = [];
             foreach ($record as $key => $val) {
                 $replacements[$key] = $val ?? '';
+
+                // Add helper checkbox placeholders:
+                // If the value is truthy (e.g. 1, '1', true, 'yes', 'on'), use ☑ / Yes. Otherwise ☐ / No.
+                $isTruthy = ($val === 1 || $val === '1' || $val === true || strtolower((string)$val) === 'yes' || strtolower((string)$val) === 'on');
+                $replacements[$key . '_box'] = $isTruthy ? '☑' : '☐';
+                $replacements[$key . '_yesno'] = $isTruthy ? 'Yes' : 'No';
             }
 
             // Standard metadata variables
@@ -286,12 +292,45 @@ switch ($action) {
                 // PDF mode
                 $html = $template['cert_html_template'] ?? '';
                 if (empty(trim($html))) {
-                    $html = NuPdfGenerator::getCertificateTemplate();
-                }
+                    // Generate a beautiful, custom dynamic table listing all the fields and values of the active record!
+                    $html = '<div style="font-family: Helvetica, Arial, sans-serif; padding: 20px; color: #333;">';
+                    $html .= '<h1 style="color: #4f6bed; border-bottom: 2px solid #4f6bed; padding-bottom: 8px; font-size: 24px; font-weight: bold;">' . htmlspecialchars($template['cert_title']) . '</h1>';
+                    $html .= '<p style="color: #666; font-size: 12px; margin-bottom: 20px;">Generated on: ' . date('Y-m-d H:i') . '</p>';
+                    $html .= '<table cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 10px;">';
 
-                // Render placeholders in HTML
-                foreach ($replacements as $key => $val) {
-                    $html = str_replace('{{' . $key . '}}', htmlspecialchars((string)($val ?? '')), $html);
+                    $rowIdx = 0;
+                    foreach ($record as $key => $val) {
+                        if (in_array($key, ['password', 'pwd_hash', 'deleted_at'], true)) continue;
+
+                        $label = ucwords(str_replace('_', ' ', $key));
+                        $bgColor = ($rowIdx % 2 === 0) ? '#f9f9f9' : '#ffffff';
+
+                        // Treat checkbox / yes-no friendly value formatting for readability
+                        $displayVal = (string)($val ?? '-');
+                        if ($val === 1 || $val === '1' || $val === true) {
+                            $displayVal = '☑ Yes';
+                        } elseif ($val === 0 || $val === '0' || $val === false) {
+                            $displayVal = '☐ No';
+                        }
+
+                        $html .= '<tr style="background-color: ' . $bgColor . ';">';
+                        $html .= '<td style="width: 30%; font-weight: bold; border-bottom: 1px solid #eee; font-size: 12px; color: #555;">' . htmlspecialchars($label) . '</td>';
+                        $html .= '<td style="width: 70%; border-bottom: 1px solid #eee; font-size: 12px; color: #111;">' . htmlspecialchars($displayVal) . '</td>';
+                        $html .= '</tr>';
+
+                        $rowIdx++;
+                    }
+
+                    $html .= '</table>';
+                    $html .= '<div style="margin-top: 40px; text-align: center; color: #888; font-size: 11px;">';
+                    $html .= 'nuvis Certificates System — Verified Secure';
+                    $html .= '</div>';
+                    $html .= '</div>';
+                } else {
+                    // Render placeholders in HTML
+                    foreach ($replacements as $key => $val) {
+                        $html = str_replace('{{' . $key . '}}', htmlspecialchars((string)($val ?? '')), $html);
+                    }
                 }
 
                 // Wrap or generate using PdfGenerator wrapper structure
