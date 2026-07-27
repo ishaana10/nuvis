@@ -437,60 +437,131 @@ function convertDocxXmlToHtml(string $xmlContent, array $replacements): string {
     $dom = new DOMDocument();
     @$dom->loadXML($xmlContent);
 
-    $html = '<div style="font-family: \'Times New Roman\', Times, Georgia, serif; line-height: 1.6; color: #111; padding: 20px;">';
+    $body = $dom->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'body')->item(0);
+    if (!$body) return '';
 
-    $paragraphs = $dom->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'p');
-    foreach ($paragraphs as $p) {
-        $align = 'left';
-        // Check alignment
-        $jcNodes = $p->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'jc');
-        if ($jcNodes->length > 0) {
-            $val = $jcNodes->item(0)->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
-            if (in_array($val, ['center', 'right', 'justify'])) {
-                $align = $val;
-            }
-        }
+    return parseNodeChildren($body, $replacements);
+}
 
-        $pStyle = 'text-align: ' . $align . '; margin-bottom: 12px; font-size: 14px;';
-        $pContent = '';
+function parseNodeChildren($parentNode, array $replacements): string {
+    $html = '';
+    foreach ($parentNode->childNodes as $node) {
+        if ($node->nodeType !== XML_ELEMENT_NODE) continue;
 
-        $runs = $p->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
-        foreach ($runs as $r) {
-            $isBold = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'b')->length > 0;
-            $isItalic = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'i')->length > 0;
-            $isUnderline = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'u')->length > 0;
-
-            $textNodes = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
-            $runText = '';
-            foreach ($textNodes as $t) {
-                $runText .= $t->nodeValue;
-            }
-
-            if ($runText === '') continue;
-
-            // Replaces placeholders inside this text run
-            foreach ($replacements as $key => $val) {
-                $runText = str_replace('{{' . $key . '}}', (string)$val, $runText);
-                $runText = str_replace('{' . $key . '}', (string)$val, $runText);
-            }
-
-            // Format HTML tags
-            $formatted = htmlspecialchars($runText, ENT_QUOTES, 'UTF-8');
-            if ($isBold)      $formatted = '<strong>' . $formatted . '</strong>';
-            if ($isItalic)    $formatted = '<em>' . $formatted . '</em>';
-            if ($isUnderline) $formatted = '<u>' . $formatted . '</u>';
-
-            $pContent .= $formatted;
-        }
-
-        if ($pContent !== '') {
-            $html .= '<p style="' . $pStyle . '">' . $pContent . '</p>';
+        $localName = $node->localName;
+        if ($localName === 'p') {
+            $html .= parseParagraphNode($node, $replacements);
+        } elseif ($localName === 'tbl') {
+            $html .= parseTableNode($node, $replacements);
         } else {
-            $html .= '<br/>';
+            // Recursively parse any other containers to ensure we do not miss nested nodes
+            $html .= parseNodeChildren($node, $replacements);
+        }
+    }
+    return $html;
+}
+
+function parseParagraphNode($pNode, array $replacements): string {
+    $align = 'left';
+    $jcNodes = $pNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'jc');
+    if ($jcNodes->length > 0) {
+        $val = $jcNodes->item(0)->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+        if (in_array($val, ['center', 'right', 'justify'])) {
+            $align = $val;
         }
     }
 
-    $html .= '</div>';
+    $pStyle = 'text-align: ' . $align . '; margin-bottom: 8px; font-size: 13px;';
+    $pContent = '';
+
+    $runs = $pNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
+    foreach ($runs as $r) {
+        $isBold = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'b')->length > 0;
+        $isItalic = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'i')->length > 0;
+        $isUnderline = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'u')->length > 0;
+
+        $textNodes = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
+        $runText = '';
+        foreach ($textNodes as $t) {
+            $runText .= $t->nodeValue;
+        }
+
+        if ($runText === '') continue;
+
+        // Replaces placeholders inside this text run
+        foreach ($replacements as $key => $val) {
+            $runText = str_replace('{{' . $key . '}}', (string)$val, $runText);
+            $runText = str_replace('{' . $key . '}', (string)$val, $runText);
+        }
+
+        // Format HTML tags
+        $formatted = htmlspecialchars($runText, ENT_QUOTES, 'UTF-8');
+        if ($isBold)      $formatted = '<strong>' . $formatted . '</strong>';
+        if ($isItalic)    $formatted = '<em>' . $formatted . '</em>';
+        if ($isUnderline) $formatted = '<u>' . $formatted . '</u>';
+
+        $pContent .= $formatted;
+    }
+
+    if ($pContent !== '') {
+        return '<p style="' . $pStyle . '">' . $pContent . '</p>';
+    }
+    return '';
+}
+
+function parseTableNode($tblNode, array $replacements): string {
+    $html = '<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 1px solid #111;">';
+
+    $rows = $tblNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tr');
+    foreach ($rows as $row) {
+        $html .= '<tr>';
+
+        $cells = [];
+        foreach ($row->childNodes as $child) {
+            if ($child->nodeType === XML_ELEMENT_NODE && $child->localName === 'tc') {
+                $cells[] = $child;
+            }
+        }
+
+        foreach ($cells as $cell) {
+            // Read cell background shading
+            $bgColorAttr = '';
+            $shdNodes = $cell->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'shd');
+            if ($shdNodes->length > 0) {
+                $fill = $shdNodes->item(0)->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'fill');
+                if ($fill && $fill !== 'auto') {
+                    $bgColorAttr = ' background-color: #' . $fill . ';';
+                }
+            }
+
+            // Read cell gridSpan (colspan)
+            $colspanAttr = '';
+            $spanNodes = $cell->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'gridSpan');
+            if ($spanNodes->length > 0) {
+                $spanVal = $spanNodes->item(0)->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+                if ($spanVal) {
+                    $colspanAttr = ' colspan="' . intval($spanVal) . '"';
+                }
+            }
+
+            $cellStyle = 'border: 1px solid #111;' . $bgColorAttr;
+            $html .= '<td' . $colspanAttr . ' style="' . $cellStyle . '">';
+
+            foreach ($cell->childNodes as $tcChild) {
+                if ($tcChild->nodeType === XML_ELEMENT_NODE && $tcChild->localName === 'p') {
+                    $html .= parseParagraphNode($tcChild, $replacements);
+                } elseif ($tcChild->nodeType === XML_ELEMENT_NODE && $tcChild->localName === 'tbl') {
+                    $html .= parseTableNode($tcChild, $replacements);
+                }
+            }
+
+            $html .= '</td>';
+        }
+
+        $html .= '</tr>';
+    }
+
+    $html .= '</table>';
     return $html;
 }
 ?>
