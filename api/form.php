@@ -1688,6 +1688,51 @@ function nu_handle_subform_save() {
         $save[$fk] = $parentId;
     }
 
+    // Automatically populate system columns
+    $tableColumns = nu_get_table_columns($table);
+    $currentUserId = $_SESSION['nu_user_id'] ?? $_SESSION['user_id'] ?? null;
+    $now = date('Y-m-d H:i:s');
+
+    // Get location
+    $locationVal = $_SESSION['nu_user_meta']['location'] ?? $_SESSION['location'] ?? null;
+    if ($locationVal === null && $currentUserId !== null) {
+        try {
+            $stmtLocation = nu_db()->prepare("SELECT usr_custom_fields FROM nu_users WHERE usr_id = ?");
+            $stmtLocation->execute([$currentUserId]);
+            $rowLocation = $stmtLocation->fetch(PDO::FETCH_ASSOC);
+            if ($rowLocation && !empty($rowLocation['usr_custom_fields'])) {
+                $customLocation = json_decode($rowLocation['usr_custom_fields'], true);
+                if (is_array($customLocation) && isset($customLocation['location'])) {
+                    $locationVal = $customLocation['location'];
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
+    if (!$id) {
+        // INSERT
+        if (isset($tableColumns['created_at'])) $save['created_at'] = $now;
+        if (isset($tableColumns['updated_at'])) $save['updated_at'] = $now;
+        if ($currentUserId !== null) {
+            if (isset($tableColumns['created_by'])) $save['created_by'] = $currentUserId;
+            if (isset($tableColumns['updated_by'])) $save['updated_by'] = $currentUserId;
+            if (isset($tableColumns['user_id']))    $save['user_id']    = $currentUserId;
+        }
+        if ($locationVal !== null && isset($tableColumns['location'])) {
+            $save['location'] = $locationVal;
+        }
+    } else {
+        // UPDATE
+        unset($save['created_at']);
+        unset($save['created_by']);
+        unset($save['user_id']);
+        unset($save['location']);
+        if (isset($tableColumns['updated_at'])) $save['updated_at'] = $now;
+        if ($currentUserId !== null && isset($tableColumns['updated_by'])) {
+            $save['updated_by'] = $currentUserId;
+        }
+    }
+
     $save = nu_filter_save_to_columns($save, $table, $pk);
 
     $saveWithoutPk = array_filter($save, function ($v, $k) use ($pk) { return $k !== $pk; }, ARRAY_FILTER_USE_BOTH);
@@ -2054,6 +2099,51 @@ function nu_handle_save() {
             $save[$name] = !empty($data[$name]) ? 1 : 0;
         } else {
             $save[$name] = nu_coerce_save_value($data[$name] ?? null);
+        }
+    }
+
+    // Automatically populate system columns
+    $tableColumns = nu_get_table_columns($table);
+    $currentUserId = $_SESSION['nu_user_id'] ?? $_SESSION['user_id'] ?? null;
+    $now = date('Y-m-d H:i:s');
+
+    // Get location
+    $locationVal = $_SESSION['nu_user_meta']['location'] ?? $_SESSION['location'] ?? null;
+    if ($locationVal === null && $currentUserId !== null) {
+        try {
+            $stmtLocation = nu_db()->prepare("SELECT usr_custom_fields FROM nu_users WHERE usr_id = ?");
+            $stmtLocation->execute([$currentUserId]);
+            $rowLocation = $stmtLocation->fetch(PDO::FETCH_ASSOC);
+            if ($rowLocation && !empty($rowLocation['usr_custom_fields'])) {
+                $customLocation = json_decode($rowLocation['usr_custom_fields'], true);
+                if (is_array($customLocation) && isset($customLocation['location'])) {
+                    $locationVal = $customLocation['location'];
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
+    if (!$id) {
+        // INSERT
+        if (isset($tableColumns['created_at'])) $save['created_at'] = $now;
+        if (isset($tableColumns['updated_at'])) $save['updated_at'] = $now;
+        if ($currentUserId !== null) {
+            if (isset($tableColumns['created_by'])) $save['created_by'] = $currentUserId;
+            if (isset($tableColumns['updated_by'])) $save['updated_by'] = $currentUserId;
+            if (isset($tableColumns['user_id']))    $save['user_id']    = $currentUserId;
+        }
+        if ($locationVal !== null && isset($tableColumns['location'])) {
+            $save['location'] = $locationVal;
+        }
+    } else {
+        // UPDATE
+        unset($save['created_at']);
+        unset($save['created_by']);
+        unset($save['user_id']);
+        unset($save['location']);
+        if (isset($tableColumns['updated_at'])) $save['updated_at'] = $now;
+        if ($currentUserId !== null && isset($tableColumns['updated_by'])) {
+            $save['updated_by'] = $currentUserId;
         }
     }
 

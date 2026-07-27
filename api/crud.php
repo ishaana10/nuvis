@@ -120,11 +120,59 @@ function nu_list_records($table, $whereRaw, $extraFilters, $page, $perPage) {
     return ['records' => $rows, 'page' => $page, 'pages' => $pages, 'total' => $total];
 }
 
+function nu_get_table_columns_local($table) {
+    try {
+        $stmt = nu_db()->prepare("DESCRIBE `{$table}`");
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $cols = [];
+        foreach ($rows as $row) {
+            $cols[$row['Field']] = true;
+        }
+        return $cols;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 function nu_create_record($table, $data) {
     if (!$data || !is_array($data)) throw new Exception('No data provided');
     $clean = [];
     foreach ($data as $key => $value) $clean[nu_safe_column($key)] = $value;
     if (!$clean) throw new Exception('No valid fields provided');
+
+    // Automatically populate system columns if they exist in the table
+    $tableColumns = nu_get_table_columns_local($table);
+    $currentUserId = $_SESSION['nu_user_id'] ?? $_SESSION['user_id'] ?? null;
+    $now = date('Y-m-d H:i:s');
+
+    // Get location
+    $locationVal = $_SESSION['nu_user_meta']['location'] ?? $_SESSION['location'] ?? null;
+    if ($locationVal === null && $currentUserId !== null) {
+        try {
+            $stmtLocation = nu_db()->prepare("SELECT usr_custom_fields FROM nu_users WHERE usr_id = ?");
+            $stmtLocation->execute([$currentUserId]);
+            $rowLocation = $stmtLocation->fetch(PDO::FETCH_ASSOC);
+            if ($rowLocation && !empty($rowLocation['usr_custom_fields'])) {
+                $customLocation = json_decode($rowLocation['usr_custom_fields'], true);
+                if (is_array($customLocation) && isset($customLocation['location'])) {
+                    $locationVal = $customLocation['location'];
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
+    if (isset($tableColumns['created_at'])) $clean['created_at'] = $now;
+    if (isset($tableColumns['updated_at'])) $clean['updated_at'] = $now;
+    if ($currentUserId !== null) {
+        if (isset($tableColumns['created_by'])) $clean['created_by'] = $currentUserId;
+        if (isset($tableColumns['updated_by'])) $clean['updated_by'] = $currentUserId;
+        if (isset($tableColumns['user_id']))    $clean['user_id']    = $currentUserId;
+    }
+    if ($locationVal !== null && isset($tableColumns['location'])) {
+        $clean['location'] = $locationVal;
+    }
+
     $cols  = array_keys($clean);
     $sql   = "INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', array_fill(0, count($cols), '?')) . ")";
     nu_q($sql, array_values($clean));
@@ -145,9 +193,35 @@ function nu_create_record($table, $data) {
 function nu_update_record($table, $id, $data) {
     if (!$id) throw new Exception('ID required');
     if (!$data || !is_array($data)) throw new Exception('No data provided');
+
+    $tableColumns = nu_get_table_columns_local($table);
+    $currentUserId = $_SESSION['nu_user_id'] ?? $_SESSION['user_id'] ?? null;
+    $now = date('Y-m-d H:i:s');
+
+    $clean = [];
+    foreach ($data as $key => $value) {
+        $clean[nu_safe_column($key)] = $value;
+    }
+
+    // Preserve created_at, created_by, user_id, and location on update
+    unset($clean['created_at']);
+    unset($clean['created_by']);
+    unset($clean['user_id']);
+    unset($clean['location']);
+
+    if (isset($tableColumns['updated_at'])) {
+        $clean['updated_at'] = $now;
+    }
+    if ($currentUserId !== null && isset($tableColumns['updated_by'])) {
+        $clean['updated_by'] = $currentUserId;
+    }
+
     $pk     = nu_get_pk($table);
     $sets   = []; $params = [];
-    foreach ($data as $key => $value) { $sets[] = "`" . nu_safe_column($key) . "` = ?"; $params[] = $value; }
+    foreach ($clean as $key => $value) {
+        $sets[] = "`" . nu_safe_column($key) . "` = ?";
+        $params[] = $value;
+    }
     if (!$sets) throw new Exception('No valid fields provided');
     $params[] = $id;
     nu_q("UPDATE `{$table}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
@@ -156,7 +230,7 @@ function nu_update_record($table, $id, $data) {
         NuWebhookSender::trigger('form_update', [
             'table'     => $table,
             'record_id' => $id,
-            'data'      => array_merge($data, ['id' => $id])
+            'data'      => array_merge($clean, ['id' => $id])
         ]);
     } catch (\Throwable $whe) {
         error_log('[Webhook API Update Trigger Error] ' . $whe->getMessage());

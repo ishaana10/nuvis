@@ -268,7 +268,7 @@ function handleSave($db, $formCode) {
     }
 
     // ✅ Get current logged-in user ID from session/auth
-    $currentUserId = $_SESSION['user_id'] ?? null;
+    $currentUserId = $_SESSION['nu_user_id'] ?? $_SESSION['user_id'] ?? null;
 
     try {
         $now = date('Y-m-d H:i:s');
@@ -285,6 +285,20 @@ function handleSave($db, $formCode) {
             }
         }
 
+        // Get location
+        $locationVal = $_SESSION['nu_user_meta']['location'] ?? $_SESSION['location'] ?? null;
+        if ($locationVal === null && $currentUserId !== null) {
+            try {
+                $stmtLocation = $db->fetchOne("SELECT usr_custom_fields FROM nu_users WHERE usr_id = ?", [$currentUserId]);
+                if ($stmtLocation && !empty($stmtLocation['usr_custom_fields'])) {
+                    $customLocation = json_decode($stmtLocation['usr_custom_fields'], true);
+                    if (is_array($customLocation) && isset($customLocation['location'])) {
+                        $locationVal = $customLocation['location'];
+                    }
+                }
+            } catch (Throwable $e) {}
+        }
+
         if ($isNew) {
             if (isset($tableColumns['created_at'])) $safeInput['created_at'] = $now;
             if (isset($tableColumns['updated_at'])) $safeInput['updated_at'] = $now;
@@ -293,6 +307,9 @@ function handleSave($db, $formCode) {
                 if (isset($tableColumns['created_by'])) $safeInput['created_by'] = $currentUserId;
                 if (isset($tableColumns['updated_by'])) $safeInput['updated_by'] = $currentUserId;
                 if (isset($tableColumns['user_id'])) $safeInput['user_id'] = $currentUserId;
+            }
+            if ($locationVal !== null && isset($tableColumns['location'])) {
+                $safeInput['location'] = $locationVal;
             }
             unset($safeInput['id']);
             $db->insert($form['form_table'], $safeInput);
@@ -328,6 +345,8 @@ function handleSave($db, $formCode) {
         } else {
             unset($safeInput['created_at']);
             unset($safeInput['created_by']); // ✅ Never overwrite original creator
+            unset($safeInput['user_id']);    // ✅ Never overwrite original creator
+            unset($safeInput['location']);   // ✅ Never overwrite original creator location
             unset($safeInput['id']);
             if (isset($tableColumns['updated_at'])) $safeInput['updated_at'] = $now;
             // ✅ Set updated_by on update
