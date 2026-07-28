@@ -254,9 +254,6 @@ switch ($action) {
 
                 // Run ZipArchive to manipulate word/document.xml
                 $zip = new ZipArchive();
-                if ($zip->open($tempFile) === ZipArchive::CHECKCONS) {
-                    // Check consistency
-                }
                 if ($zip->open($tempFile) === true) {
                     $xmlContent = $zip->getFromName('word/document.xml');
                     if ($xmlContent) {
@@ -347,6 +344,10 @@ switch ($action) {
                         $html = str_replace('{{' . $key . '}}', htmlspecialchars((string)($val ?? '')), $html);
                     }
                 }
+
+                // Wrap all unicode checkboxes to render beautifully in dejavusans font face (solving the "?" problem in TCPDF)
+                $html = str_replace('☑', '<font face="dejavusans">☑</font>', $html);
+                $html = str_replace('☐', '<font face="dejavusans">☐</font>', $html);
 
                 // Wrap or generate using PdfGenerator wrapper structure
                 $reportMock = [
@@ -466,7 +467,7 @@ function parseParagraphNode($pNode, array $replacements): string {
     $jcNodes = $pNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'jc');
     if ($jcNodes->length > 0) {
         $val = $jcNodes->item(0)->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
-        if (in_array($val, ['center', 'right', 'justify'])) {
+        if (in_array($val, ['center', 'right', 'justify', 'left'])) {
             $align = $val;
         }
     }
@@ -476,9 +477,72 @@ function parseParagraphNode($pNode, array $replacements): string {
 
     $runs = $pNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'r');
     foreach ($runs as $r) {
-        $isBold = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'b')->length > 0;
-        $isItalic = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'i')->length > 0;
-        $isUnderline = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'u')->length > 0;
+        $rPr = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'rPr')->item(0);
+
+        $styles = [];
+        $isBold = false;
+        $isItalic = false;
+        $isUnderline = false;
+
+        if ($rPr) {
+            // Bold
+            if ($rPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'b')->length > 0) {
+                $isBold = true;
+            }
+            // Italic
+            if ($rPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'i')->length > 0) {
+                $isItalic = true;
+            }
+            // Underline
+            if ($rPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'u')->length > 0) {
+                $isUnderline = true;
+            }
+
+            // Text color: <w:color w:val="1F497D"/>
+            $colorNode = $rPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'color')->item(0);
+            if ($colorNode) {
+                $colorVal = $colorNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+                if ($colorVal && $colorVal !== 'auto') {
+                    if (preg_match('/^[0-9A-Fa-f]{6}$/', $colorVal)) {
+                        $styles[] = 'color: #' . $colorVal . ';';
+                    } else {
+                        $styles[] = 'color: ' . $colorVal . ';';
+                    }
+                }
+            }
+
+            // Font size: <w:sz w:val="22"/>
+            $szNode = $rPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'sz')->item(0);
+            if ($szNode) {
+                $szVal = $szNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+                if ($szVal) {
+                    $ptSize = intval($szVal) / 2;
+                    $styles[] = 'font-size: ' . $ptSize . 'pt;';
+                }
+            }
+
+            // Highlight: <w:highlight w:val="yellow"/>
+            $highlightNode = $rPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'highlight')->item(0);
+            if ($highlightNode) {
+                $highlightVal = $highlightNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+                if ($highlightVal && $highlightVal !== 'none') {
+                    $styles[] = 'background-color: ' . $highlightVal . ';';
+                }
+            }
+
+            // Run shading (background): <w:shd w:fill="FFFF00"/>
+            $shdNode = $rPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'shd')->item(0);
+            if ($shdNode) {
+                $fillVal = $shdNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'fill');
+                if ($fillVal && $fillVal !== 'auto' && $fillVal !== 'none') {
+                    if (preg_match('/^[0-9A-Fa-f]{6}$/', $fillVal)) {
+                        $styles[] = 'background-color: #' . $fillVal . ';';
+                    } else {
+                        $styles[] = 'background-color: ' . $fillVal . ';';
+                    }
+                }
+            }
+        }
 
         $textNodes = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
         $runText = '';
@@ -486,7 +550,10 @@ function parseParagraphNode($pNode, array $replacements): string {
             $runText .= $t->nodeValue;
         }
 
-        if ($runText === '') continue;
+        // Check for line breaks in the run
+        $hasBr = $r->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'br')->length > 0;
+
+        if ($runText === '' && !$hasBr) continue;
 
         // Replaces placeholders inside this text run
         foreach ($replacements as $key => $val) {
@@ -500,6 +567,14 @@ function parseParagraphNode($pNode, array $replacements): string {
         if ($isItalic)    $formatted = '<em>' . $formatted . '</em>';
         if ($isUnderline) $formatted = '<u>' . $formatted . '</u>';
 
+        if ($hasBr) {
+            $formatted .= '<br/>';
+        }
+
+        if (!empty($styles)) {
+            $formatted = '<span style="' . implode(' ', $styles) . '">' . $formatted . '</span>';
+        }
+
         $pContent .= $formatted;
     }
 
@@ -510,10 +585,61 @@ function parseParagraphNode($pNode, array $replacements): string {
 }
 
 function parseTableNode($tblNode, array $replacements): string {
-    $html = '<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 1px solid #111;">';
+    // 1. Determine table borders from table properties
+    $tblBorders = [
+        'top' => '1px solid #111111',
+        'bottom' => '1px solid #111111',
+        'left' => '1px solid #111111',
+        'right' => '1px solid #111111',
+        'insideH' => '1px solid #111111',
+        'insideV' => '1px solid #111111'
+    ];
 
-    $rows = $tblNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tr');
-    foreach ($rows as $row) {
+    $tblPrNode = $tblNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tblPr')->item(0);
+    if ($tblPrNode) {
+        $tblBordersNode = $tblPrNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tblBorders')->item(0);
+        if ($tblBordersNode) {
+            $dirs = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'];
+            foreach ($dirs as $dir) {
+                $dirNode = $tblBordersNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', $dir)->item(0);
+                if ($dirNode) {
+                    $val = $dirNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+                    if ($val === 'none' || $val === 'nil') {
+                        $tblBorders[$dir] = 'none';
+                    } else {
+                        $color = $dirNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'color');
+                        $sz = $dirNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'sz');
+
+                        $borderColor = '#111111';
+                        if ($color && $color !== 'auto') {
+                            $borderColor = (preg_match('/^[0-9A-Fa-f]{6}$/', $color)) ? '#' . $color : $color;
+                        }
+
+                        $borderWidth = '1px';
+                        if ($sz) {
+                            $pt = intval($sz) / 8;
+                            $borderWidth = max(1, round($pt)) . 'px';
+                        }
+                        $tblBorders[$dir] = "{$borderWidth} solid {$borderColor}";
+                    }
+                }
+            }
+        }
+    }
+
+    $html = '<table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">';
+
+    // 2. Get all row nodes
+    $rows = [];
+    foreach ($tblNode->childNodes as $child) {
+        if ($child->nodeType === XML_ELEMENT_NODE && $child->localName === 'tr') {
+            $rows[] = $child;
+        }
+    }
+
+    $totalRows = count($rows);
+
+    foreach ($rows as $rIdx => $row) {
         $html .= '<tr>';
 
         $cells = [];
@@ -523,13 +649,38 @@ function parseTableNode($tblNode, array $replacements): string {
             }
         }
 
+        $totalCells = count($cells);
+
+        // Calculate exact cell widths to preserve proportions
+        $cellWidths = [];
+        $totalRowWidth = 0;
         foreach ($cells as $cell) {
+            $w = 0;
+            $tcPr = $cell->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tcPr')->item(0);
+            if ($tcPr) {
+                $tcWNode = $tcPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tcW')->item(0);
+                if ($tcWNode) {
+                    $w = intval($tcWNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w'));
+                }
+            }
+            $cellWidths[] = $w;
+            $totalRowWidth += $w;
+        }
+
+        if ($totalRowWidth <= 0) {
+            $totalRowWidth = $totalCells;
+            foreach ($cellWidths as $i => $w) {
+                $cellWidths[$i] = 1;
+            }
+        }
+
+        foreach ($cells as $cIdx => $cell) {
             // Read cell background shading
             $bgColorAttr = '';
             $shdNodes = $cell->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'shd');
             if ($shdNodes->length > 0) {
                 $fill = $shdNodes->item(0)->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'fill');
-                if ($fill && $fill !== 'auto') {
+                if ($fill && $fill !== 'auto' && $fill !== 'none') {
                     $bgColorAttr = ' background-color: #' . $fill . ';';
                 }
             }
@@ -544,7 +695,58 @@ function parseTableNode($tblNode, array $replacements): string {
                 }
             }
 
-            $cellStyle = 'border: 1px solid #111;' . $bgColorAttr;
+            // Calculate width percentage
+            $percentage = ($cellWidths[$cIdx] / $totalRowWidth) * 100;
+            $widthStyle = "width: " . number_format($percentage, 2) . "%;";
+
+            // Calculate cell borders inheriting from table defaults
+            $cellBorders = [
+                'top' => $rIdx === 0 ? $tblBorders['top'] : $tblBorders['insideH'],
+                'bottom' => $rIdx === $totalRows - 1 ? $tblBorders['bottom'] : $tblBorders['insideH'],
+                'left' => $cIdx === 0 ? $tblBorders['left'] : $tblBorders['insideV'],
+                'right' => $cIdx === $totalCells - 1 ? $tblBorders['right'] : $tblBorders['insideV']
+            ];
+
+            // Override with explicit cell borders if specified
+            $tcPr = $cell->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tcPr')->item(0);
+            if ($tcPr) {
+                $tcBordersNode = $tcPr->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'tcBorders')->item(0);
+                if ($tcBordersNode) {
+                    $borderDirs = ['top', 'left', 'bottom', 'right'];
+                    foreach ($borderDirs as $dir) {
+                        $dirNode = $tcBordersNode->getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', $dir)->item(0);
+                        if ($dirNode) {
+                            $val = $dirNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'val');
+                            if ($val === 'none' || $val === 'nil') {
+                                $cellBorders[$dir] = 'none';
+                            } else {
+                                $color = $dirNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'color');
+                                $sz = $dirNode->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'sz');
+
+                                $borderColor = '#111111';
+                                if ($color && $color !== 'auto') {
+                                    $borderColor = (preg_match('/^[0-9A-Fa-f]{6}$/', $color)) ? '#' . $color : $color;
+                                }
+
+                                $borderWidth = '1px';
+                                if ($sz) {
+                                    $pt = intval($sz) / 8;
+                                    $borderWidth = max(1, round($pt)) . 'px';
+                                }
+                                $cellBorders[$dir] = "{$borderWidth} solid {$borderColor}";
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Construct cell inline styles
+            $borderStyles = [];
+            foreach ($cellBorders as $dir => $borderVal) {
+                $borderStyles[] = "border-{$dir}: {$borderVal};";
+            }
+
+            $cellStyle = implode(' ', $borderStyles) . $widthStyle . $bgColorAttr;
             $html .= '<td' . $colspanAttr . ' style="' . $cellStyle . '">';
 
             foreach ($cell->childNodes as $tcChild) {
