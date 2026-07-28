@@ -1663,6 +1663,35 @@ function nu_handle_subform_fields() {
     $allFields  = nu_flatten_layout($layout);
     $gridFields = nu_flatten_layout_for_grid($layout);
 
+    // Decorate fields with formatters & conditional formatting rules from child form's browse layout
+    $bLayoutJson = $form[$c['browse_layout']] ?? '';
+    $bCols = [];
+    if (is_string($bLayoutJson) && $bLayoutJson !== '') {
+        $bCols = json_decode($bLayoutJson, true) ?: [];
+    }
+    $bMap = [];
+    foreach ($bCols as $bCol) {
+        $fn = strtolower($bCol['fieldname'] ?? '');
+        if ($fn !== '') {
+            $bMap[$fn] = $bCol;
+        }
+    }
+
+    $decorateField = function(&$field) use ($bMap) {
+        $fn = strtolower(nu_field_name($field));
+        if (isset($bMap[$fn])) {
+            $bCol = $bMap[$fn];
+            foreach (['formatter', 'rules', 'cond_op', 'cond_val', 'cond_fg', 'cond_bg', 'btn_label', 'btn_class', 'btn_js', 'btn_has_lookup', 'btn_table', 'btn_id', 'btn_disp', 'btn_where'] as $prop) {
+                if (isset($bCol[$prop])) {
+                    $field[$prop] = $bCol[$prop];
+                }
+            }
+        }
+    };
+
+    foreach ($allFields as &$f) { $decorateField($f); } unset($f);
+    foreach ($gridFields as &$f) { $decorateField($f); } unset($f);
+
     nu_json(['success' => true, 'data' => [
         'layout'     => $gridFields,
         'all_fields' => $allFields,
@@ -1717,6 +1746,35 @@ function nu_handle_subform_list() {
             return true;
         }));
     }
+
+    // Decorate fields with formatters & conditional formatting rules from child form's browse layout
+    $bLayoutJson = $form[$c['browse_layout']] ?? '';
+    $bCols = [];
+    if (is_string($bLayoutJson) && $bLayoutJson !== '') {
+        $bCols = json_decode($bLayoutJson, true) ?: [];
+    }
+    $bMap = [];
+    foreach ($bCols as $bCol) {
+        $fn = strtolower($bCol['fieldname'] ?? '');
+        if ($fn !== '') {
+            $bMap[$fn] = $bCol;
+        }
+    }
+
+    $decorateField = function(&$field) use ($bMap) {
+        $fn = strtolower(nu_field_name($field));
+        if (isset($bMap[$fn])) {
+            $bCol = $bMap[$fn];
+            foreach (['formatter', 'rules', 'cond_op', 'cond_val', 'cond_fg', 'cond_bg', 'btn_label', 'btn_class', 'btn_js', 'btn_has_lookup', 'btn_table', 'btn_id', 'btn_disp', 'btn_where'] as $prop) {
+                if (isset($bCol[$prop])) {
+                    $field[$prop] = $bCol[$prop];
+                }
+            }
+        }
+    };
+
+    foreach ($allFields as &$f) { $decorateField($f); } unset($f);
+    foreach ($gridFields as &$f) { $decorateField($f); } unset($f);
 
     if ($table === '') nu_json(['success' => false, 'error' => 'No table for child form'], 400);
 
