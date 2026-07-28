@@ -127,27 +127,39 @@
 
     // Search Box
     if (m.searchable && m.parentId) {
+      var searchGroup = document.createElement('div');
+      searchGroup.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
       var searchInp = document.createElement('input');
       searchInp.type = 'text';
       searchInp.className = 'nu-input nu-subform-search-input';
-      searchInp.placeholder = 'Search subform...';
+      searchInp.placeholder = 'Search...';
       searchInp.value = m.q || '';
-      searchInp.style.cssText = 'width:160px;padding:3px 8px;font-size:12px;display:inline-block;margin:0;';
+      searchInp.style.cssText = 'width:130px;padding:3px 8px;font-size:12px;display:inline-block;margin:0;height:28px;';
 
-      var searchTimeout;
-      searchInp.addEventListener('input', function () {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(function () {
-          container.dataset.subformQ = searchInp.value;
-          container.dataset.subformPage = '1';
-          load(container);
-        }, 300);
-      });
+      var triggerSearch = function () {
+        container.dataset.subformQ = searchInp.value;
+        container.dataset.subformPage = '1';
+        load(container);
+      };
+
       searchInp.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') e.preventDefault();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          triggerSearch();
+        }
       });
 
-      rightSection.appendChild(searchInp);
+      var searchBtn = document.createElement('button');
+      searchBtn.type = 'button';
+      searchBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+      searchBtn.style.cssText = 'height:28px;padding:0 8px;display:flex;align-items:center;justify-content:center;';
+      searchBtn.innerHTML = '🔍';
+      searchBtn.onclick = triggerSearch;
+
+      searchGroup.appendChild(searchInp);
+      searchGroup.appendChild(searchBtn);
+      rightSection.appendChild(searchGroup);
     }
 
     // Add Row
@@ -405,7 +417,7 @@
           var val   = row[fname + '_display'] !== undefined
             ? row[fname + '_display']
             : (row[fname] !== undefined ? row[fname] : '');
-          html += '<td style="padding:8px 10px;">' + cellDisplay(type, val)
+          html += '<td style="padding:8px 10px;">' + cellDisplay(type, val, f)
             + (pending ? ' <em style="color:#999;font-size:10px;">(pending)</em>' : '') + '</td>';
         });
         if (hasEditPermission) {
@@ -505,9 +517,84 @@
     return '<input type="text" ' + base + ' value="' + esc(value) + '">';
   }
 
-  function cellDisplay(type, val) {
+  function formatSubformCell(col, val, type) {
     if (type === 'checkbox') return val ? '&#10003;' : '&mdash;';
-    return esc(val == null ? '' : val);
+    if (val == null || val === '') return '';
+
+    if (!col) {
+      var str = String(val).toLowerCase().trim();
+      var badgeColors = {
+        'active': 'background:#dcfce7;color:#15803d;border:1px solid #15803d33;',
+        'inactive': 'background:#fee2e2;color:#b91c1c;border:1px solid #b91c1c33;',
+        'pending': 'background:#fef3c7;color:#b45309;border:1px solid #b4530933;',
+        'approved': 'background:#dbeafe;color:#1d4ed8;border:1px solid #1d4ed833;',
+        'rejected': 'background:#f3f4f6;color:#374151;border:1px solid #37415133;'
+      };
+      if (badgeColors[str]) {
+        return '<span class="nu-badge" style="padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-block;' + badgeColors[str] + '">' + esc(val) + '</span>';
+      }
+      return esc(val);
+    }
+
+    var rules = col.rules || [];
+    if (rules.length === 0 && col.cond_op) {
+      rules = [{ op: col.cond_op, val: col.cond_val, fg: col.cond_fg, bg: col.cond_bg }];
+    }
+
+    if (rules.length > 0) {
+      var vStr = String(val).toLowerCase().trim();
+      var vNum = parseFloat(val);
+
+      for (var i = 0; i < rules.length; i++) {
+        var rule = rules[i];
+        var matched = false;
+        var rStr = String(rule.val).toLowerCase().trim();
+        var rNum = parseFloat(rule.val);
+
+        switch (rule.op) {
+          case '=':
+            matched = (vStr === rStr);
+            break;
+          case '!=':
+            matched = (vStr !== rStr);
+            break;
+          case '>':
+            if (!isNaN(vNum) && !isNaN(rNum)) matched = (vNum > rNum);
+            break;
+          case '<':
+            if (!isNaN(vNum) && !isNaN(rNum)) matched = (vNum < rNum);
+            break;
+          case 'contains':
+            matched = (vStr.indexOf(rStr) !== -1);
+            break;
+        }
+
+        if (matched) {
+          var fg = rule.fg || '#15803d';
+          var bg = rule.bg || '#dcfce7';
+          return '<span class="nu-badge-pill" style="padding:4px 10px;border-radius:12px;font-size:11.5px;font-weight:600;display:inline-block;color:' + fg + ';background:' + bg + ';border:1px solid ' + fg + '33;">' + esc(val) + '</span>';
+        }
+      }
+    }
+
+    if (col.formatter === 'badge') {
+      var badgeColors = {
+        'active': 'background:#dcfce7;color:#15803d;border:1px solid #15803d33;',
+        'inactive': 'background:#fee2e2;color:#b91c1c;border:1px solid #b91c1c33;',
+        'pending': 'background:#fef3c7;color:#b45309;border:1px solid #b4530933;',
+        'approved': 'background:#dbeafe;color:#1d4ed8;border:1px solid #1d4ed833;',
+        'rejected': 'background:#f3f4f6;color:#374151;border:1px solid #37415133;'
+      };
+      var key = String(val).toLowerCase().trim();
+      var colorStyle = badgeColors[key] || 'background:var(--bg-offset,#f3f4f6);color:var(--text-secondary,#374151);';
+      return '<span class="nu-badge" style="padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-block;' + colorStyle + '">' + esc(val) + '</span>';
+    }
+
+    return esc(val);
+  }
+
+  function cellDisplay(type, val, col) {
+    return formatSubformCell(col, val, type);
   }
 
   /* ── modal for add/edit ───────────────────────────────────────────── */
