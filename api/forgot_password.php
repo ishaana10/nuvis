@@ -17,13 +17,19 @@ try {
     if (!$tableExists) {
         $db->exec("CREATE TABLE `nu_password_resets` (
             `reset_id` INT AUTO_INCREMENT PRIMARY KEY,
-            `user_id` INT NOT NULL,
+            `user_id` VARCHAR(50) NOT NULL,
             `token_hash` VARCHAR(64) NOT NULL,
             `expires_at` DATETIME NOT NULL,
             `used` TINYINT(1) DEFAULT 0,
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX `idx_token_hash` (`token_hash`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } else {
+        // Upgrade existing table's user_id column if it is an INT
+        $colInfo = $db->fetchOne("SHOW COLUMNS FROM `nu_password_resets` LIKE 'user_id'");
+        if ($colInfo && stripos($colInfo['Type'], 'varchar') === false) {
+            $db->exec("ALTER TABLE `nu_password_resets` MODIFY `user_id` VARCHAR(50) NOT NULL");
+        }
     }
 } catch (Throwable $e) {
     error_log('[forgot_password.php self-healing] ' . $e->getMessage());
@@ -71,7 +77,7 @@ function forgot_validatePassword(string $password, array $policy, string $userna
 }
 
 // ─── Helper: check password history ─────────────────────────────────────────
-function forgot_isPasswordReused(NuDatabase $db, int $userId, string $newPassword, int $historyCount): bool {
+function forgot_isPasswordReused(NuDatabase $db, $userId, string $newPassword, int $historyCount): bool {
     if ($historyCount <= 0) return false;
     $rows = $db->fetchAll(
         "SELECT ph_hash FROM nu_password_history WHERE ph_user_id = :uid ORDER BY ph_created_at DESC LIMIT " . (int)$historyCount,
@@ -84,7 +90,7 @@ function forgot_isPasswordReused(NuDatabase $db, int $userId, string $newPasswor
 }
 
 // ─── Helper: record password history ─────────────────────────────────────────
-function forgot_recordPasswordHistory(NuDatabase $db, int $userId, string $hash, int $historyCount): void {
+function forgot_recordPasswordHistory(NuDatabase $db, $userId, string $hash, int $historyCount): void {
     if ($historyCount <= 0) return;
     $db->query(
         "INSERT INTO nu_password_history (ph_user_id, ph_hash) VALUES (:uid, :hash)",
@@ -135,11 +141,9 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'forgot_password.php') {
                 );
 
                 if (!$user) {
-                    // Security practice: Don't explicitly reveal if email/username exists,
-                    // but return success with a vague message. "If a matching account is found..."
                     echo json_encode([
-                        'success' => true,
-                        'message' => 'If a matching account is found, a secure password reset link will be sent to the registered email address.'
+                        'success' => false,
+                        'error' => 'Account not found or is currently inactive.'
                     ]);
                     exit;
                 }
@@ -162,7 +166,7 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'forgot_password.php') {
 
                 // Save reset token in DB
                 $db->insert('nu_password_resets', [
-                    'user_id'    => (int)$user['usr_id'],
+                    'user_id'    => $user['usr_id'],
                     'token_hash' => $tokenHash,
                     'expires_at' => $expiresAt,
                     'used'       => 0
@@ -255,7 +259,7 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'forgot_password.php') {
                     exit;
                 }
 
-                $userId = (int)$resetRecord['user_id'];
+                $userId = $resetRecord['user_id'];
                 $user = $db->fetchOne("SELECT * FROM nu_users WHERE usr_id = :id AND usr_active = 1", [':id' => $userId]);
 
                 if (!$user) {
