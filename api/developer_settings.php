@@ -59,6 +59,15 @@ switch ($action) {
             if (isset($input['app_logo'])) {
                 $db->update('nu_system_settings', ['setting_value' => trim((string)$input['app_logo'])], "setting_key = 'app_logo'");
             }
+            if (isset($input['forgot_password_enabled'])) {
+                // Ensure field exists before updating, or use insert-or-update
+                $existing = $db->fetchOne("SELECT setting_key FROM nu_system_settings WHERE setting_key = 'forgot_password_enabled'");
+                if ($existing) {
+                    $db->update('nu_system_settings', ['setting_value' => trim((string)$input['forgot_password_enabled'])], "setting_key = 'forgot_password_enabled'");
+                } else {
+                    $db->insert('nu_system_settings', ['setting_key' => 'forgot_password_enabled', 'setting_value' => trim((string)$input['forgot_password_enabled'])]);
+                }
+            }
             if (isset($input['system_fields_def'])) {
                 $fieldsJson = json_encode($input['system_fields_def']);
                 $db->update('nu_system_settings', ['setting_value' => $fieldsJson], "setting_key = 'system_fields_def'");
