@@ -551,6 +551,7 @@ async function testWebhook(id) {
 
         // Build alert overlay dynamically
         const overlay = document.createElement('div');
+        overlay.className = 'nu-webhook-test-overlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
 
         const box = document.createElement('div');
@@ -560,7 +561,7 @@ async function testWebhook(id) {
             <h4 style="margin:0 0 16px; font-size:16px; font-weight:600;">Webhook Dispatch Test details</h4>
             <div>${alertHtml}</div>
             <div style="text-align:right; margin-top:20px;">
-                <button class="nu-btn nu-btn-primary" onclick="this.closest('.nu-form-overlay, div[style*=\"z-index:2000\"]').remove()">Done</button>
+                <button class="nu-btn nu-btn-primary" onclick="this.closest('.nu-webhook-test-overlay').remove()">Done</button>
             </div>
         `;
 
