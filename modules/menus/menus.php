@@ -389,12 +389,40 @@ function nu_menu_mode_label(array $m): string {
         <label id="menuTargetLabel">Form</label>
         <select id="menuTargetSelect" class="nu-input">
           <option value="">-- select --</option>
-          <?php foreach ($forms as $f): ?>
-          <option value="<?= htmlspecialchars($f['form_code'], ENT_QUOTES) ?>"
-                  data-type="<?= htmlspecialchars($f['form_type'] ?? 'form', ENT_QUOTES) ?>">
-            <?= htmlspecialchars($f['form_name']) ?> (<?= htmlspecialchars($f['form_code']) ?>)
-          </option>
-          <?php endforeach; ?>
+          <optgroup label="System Modules">
+            <option value="dashboard" data-type="form">Dashboard (dashboard)</option>
+            <option value="forms" data-type="form">Forms Manager (forms)</option>
+            <option value="reports" data-type="form">Reports Manager (reports)</option>
+            <option value="queries" data-type="form">Queries Manager (queries)</option>
+            <option value="calendar" data-type="form">Calendar &amp; Scheduler (calendar)</option>
+            <option value="ai" data-type="form">AI Assistant (ai)</option>
+            <option value="integrations" data-type="form">Webhooks Manager (integrations)</option>
+            <option value="menus" data-type="form">Menu Builder (menus)</option>
+            <option value="users" data-type="form">Users Manager (users)</option>
+            <option value="roles" data-type="form">Roles &amp; Permissions (roles)</option>
+            <option value="audit" data-type="form">Audit Trail (audit)</option>
+            <option value="files" data-type="form">File Manager (files)</option>
+            <option value="workflow" data-type="form">Workflow Engines (workflow)</option>
+            <option value="inspector" data-type="form">DB &amp; Server Inspector (inspector)</option>
+            <option value="errorlog" data-type="form">Error Logs (errorlog)</option>
+            <option value="password_policy" data-type="form">Password Policy (password_policy)</option>
+            <option value="appcloner" data-type="form">App Cloner (appcloner)</option>
+            <option value="password" data-type="form">Change Password (password)</option>
+            <option value="report_dashboards" data-type="form">Reports Dashboard (report_dashboards)</option>
+            <option value="email_settings" data-type="form">Email Settings (email_settings)</option>
+            <option value="updater" data-type="form">System Updater (updater)</option>
+            <option value="import_export" data-type="form">Import / Export (import_export)</option>
+            <option value="developer_settings" data-type="form">Developer Settings (developer_settings)</option>
+            <option value="word_certificates" data-type="form">Word Certificates (word_certificates)</option>
+          </optgroup>
+          <optgroup label="Custom Forms">
+            <?php foreach ($forms as $f): ?>
+            <option value="<?= htmlspecialchars($f['form_code'], ENT_QUOTES) ?>"
+                    data-type="<?= htmlspecialchars($f['form_type'] ?? 'form', ENT_QUOTES) ?>">
+              <?= htmlspecialchars($f['form_name']) ?> (<?= htmlspecialchars($f['form_code']) ?>)
+            </option>
+            <?php endforeach; ?>
+          </optgroup>
         </select>
         <input type="text" id="menuTargetUrl"  class="nu-input" placeholder="https://example.com" style="display:none;">
         <input type="text" id="menuTargetCode" class="nu-input" placeholder="query_code" style="display:none;">

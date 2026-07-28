@@ -817,10 +817,12 @@ INSERT INTO nu_reports (report_code, report_name, report_type, report_sql, repor
  '[]', 1)
 ON DUPLICATE KEY UPDATE report_name=VALUES(report_name), report_sql=VALUES(report_sql), report_columns=VALUES(report_columns);
 
-INSERT INTO nu_menus (menu_parent_id, menu_label, menu_type, menu_target, menu_icon, menu_order) VALUES
-(0, 'report_dashboards', 'form', 'report_dashboards', 'pie-chart', 5),
- (0, 'email_settings', 'form', 'email_settings', 'email_settings', 14)   
-ON DUPLICATE KEY UPDATE menu_label=VALUES(menu_label);
+-- Seed system modules menus with correct parent_id, label, target, and icons
+-- Since @main_group is already resolved above, we can insert them into @main_group
+INSERT INTO nu_menus (menu_parent_id, menu_label, menu_type, menu_target, menu_icon, menu_order, menu_open_mode, menu_browse_mode, menu_preview_mode, menu_default_view) VALUES
+(@main_group, 'report_dashboards', 'form', 'report_dashboards', 'pie-chart', 100, 'inline|browse', 'inline', 'inline', 'browse'),
+(@main_group, 'email_settings', 'form', 'email_settings', 'clipboard', 80, 'inline|browse', 'inline', 'inline', 'browse')
+ON DUPLICATE KEY UPDATE menu_parent_id=VALUES(menu_parent_id), menu_order=VALUES(menu_order), menu_target=VALUES(menu_target);
 
 
 SET FOREIGN_KEY_CHECKS = 1;
