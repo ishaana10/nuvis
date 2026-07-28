@@ -123,6 +123,7 @@ if ($isLoggedIn && $currentUser) {
 // ─── Retrieve Custom System Settings ──────────────────────────────────────────
 $customAppName = $nuConfig['siteTitle'] ?? 'NuBuilder 5';
 $customAppLogo = '';
+$forgotPasswordEnabled = true;
 try {
     $db = NuDatabase::getInstance();
     $appNameRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'app_name'");
@@ -132,6 +133,10 @@ try {
     $appLogoRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'app_logo'");
     if ($appLogoRow && trim((string)$appLogoRow['setting_value']) !== '') {
         $customAppLogo = trim((string)$appLogoRow['setting_value']);
+    }
+    $forgotPasswordRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'forgot_password_enabled'");
+    if ($forgotPasswordRow) {
+        $forgotPasswordEnabled = ($forgotPasswordRow['setting_value'] === '1');
     }
 } catch (Throwable $e) {
     error_log('[index.php settings load] ' . $e->getMessage());
@@ -190,24 +195,84 @@ try {
             </div>
         <?php endif; ?>
 
-        <form method="post" action="index.php" autocomplete="off" novalidate>
-            <input type="hidden" name="nu_csrf" value="<?= h($csrfToken) ?>">
-            <div class="nu-field">
-                <label for="nu_username">Username</label>
-                <input id="nu_username" name="username" type="text"
-                       class="nu-input" autocomplete="username"
-                       value="" required autofocus spellcheck="false">
-            </div>
-            <div class="nu-field">
-                <label for="nu_password">Password</label>
-                <input id="nu_password" name="password" type="password"
-                       class="nu-input" autocomplete="current-password" required>
-            </div>
-            <button type="submit" name="login_submit" value="1"
-                    class="nu-btn nu-btn-primary nu-btn-block">
-                Sign In
-            </button>
-        </form>
+        <!-- ── Reset Password View (if token in URL) ── -->
+        <?php if (isset($_GET['action']) && $_GET['action'] === 'reset_password' && isset($_GET['token'])): ?>
+        <div id="reset-password-view" class="transition-opacity duration-300">
+            <h2 class="text-xl font-bold mb-2 text-center" style="color: var(--text-primary, #fff);">Set New Password</h2>
+            <p class="text-sm text-center mb-6" style="color: var(--text-secondary, #888);">Secure your account with a strong password conforming to security guidelines.</p>
+
+            <div id="reset-alert" class="hidden mb-4 p-3 rounded text-sm"></div>
+
+            <form id="reset-pwd-form" onsubmit="handlePasswordResetSubmit(event)" novalidate>
+                <input type="hidden" id="reset-token" value="<?= h($_GET['token']) ?>">
+                <div class="nu-field mb-4">
+                    <label for="new_password">New Password</label>
+                    <input id="new_password" type="password" class="nu-input" required>
+                </div>
+                <div class="nu-field mb-4">
+                    <label for="confirm_password">Confirm New Password</label>
+                    <input id="confirm_password" type="password" class="nu-input" required>
+                </div>
+                <button type="submit" id="reset-submit-btn" class="nu-btn nu-btn-primary nu-btn-block">
+                    Update Password
+                </button>
+                <div class="text-center mt-4">
+                    <a href="index.php" class="text-xs font-semibold hover:underline" style="color: var(--accent, #4f6bed);">Back to Sign In</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- ── Standard Login and Forgot Password togglable container ── -->
+        <?php else: ?>
+        <div id="login-form-view" class="transition-all duration-300">
+            <form method="post" action="index.php" autocomplete="off" novalidate>
+                <input type="hidden" name="nu_csrf" value="<?= h($csrfToken) ?>">
+                <div class="nu-field">
+                    <label for="nu_username">Username</label>
+                    <input id="nu_username" name="username" type="text"
+                           class="nu-input" autocomplete="username"
+                           value="" required autofocus spellcheck="false">
+                </div>
+                <div class="nu-field">
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="nu_password" style="margin-bottom: 0;">Password</label>
+                        <?php if ($forgotPasswordEnabled): ?>
+                            <a href="#" onclick="toggleForgotView(true); return false;" class="text-xs font-semibold hover:underline" style="color: var(--accent, #4f6bed);">Forgot Password?</a>
+                        <?php endif; ?>
+                    </div>
+                    <input id="nu_password" name="password" type="password"
+                           class="nu-input" autocomplete="current-password" required>
+                </div>
+                <button type="submit" name="login_submit" value="1"
+                        class="nu-btn nu-btn-primary nu-btn-block">
+                    Sign In
+                </button>
+            </form>
+        </div>
+
+        <?php if ($forgotPasswordEnabled): ?>
+        <div id="forgot-form-view" class="hidden transition-all duration-300">
+            <h2 class="text-xl font-bold mb-2 text-center" style="color: var(--text-primary, #fff);">Reset Password</h2>
+            <p class="text-sm text-center mb-6" style="color: var(--text-secondary, #888);">Enter your registered username or email to receive a password reset link.</p>
+
+            <div id="forgot-alert" class="hidden mb-4 p-3 rounded text-sm"></div>
+
+            <form id="forgot-submit-form" onsubmit="handleForgotSubmit(event)" novalidate>
+                <div class="nu-field mb-4">
+                    <label for="reset_identity">Username or Email Address</label>
+                    <input id="reset_identity" type="text" class="nu-input" required placeholder="e.g. globeadmin">
+                </div>
+                <button type="submit" id="forgot-submit-btn" class="nu-btn nu-btn-primary nu-btn-block">
+                    Send Reset Link
+                </button>
+                <div class="text-center mt-4">
+                    <a href="#" onclick="toggleForgotView(false); return false;" class="text-xs font-semibold hover:underline" style="color: var(--accent, #4f6bed);">Back to Sign In</a>
+                </div>
+            </form>
+        </div>
+        <?php endif; ?>
+
+        <?php endif; ?>
     </div>
 </div>
 
@@ -576,6 +641,129 @@ try {
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+
+// ─── Forgot Password Client-Side View Logic ─────────────────────────────────
+function toggleForgotView(showForgot) {
+    const loginView = document.getElementById('login-form-view');
+    const forgotView = document.getElementById('forgot-form-view');
+    if (!loginView || !forgotView) return;
+
+    if (showForgot) {
+        loginView.classList.add('hidden');
+        forgotView.classList.remove('hidden');
+        const input = document.getElementById('reset_identity');
+        if (input) input.focus();
+    } else {
+        forgotView.classList.add('hidden');
+        loginView.classList.remove('hidden');
+        const input = document.getElementById('nu_username');
+        if (input) input.focus();
+    }
+}
+
+// ─── Handle Forgot Password Request ─────────────────────────────────────────
+async function handleForgotSubmit(e) {
+    e.preventDefault();
+    const identityInput = document.getElementById('reset_identity');
+    const alertEl = document.getElementById('forgot-alert');
+    const btn = document.getElementById('forgot-submit-btn');
+    if (!identityInput || !alertEl || !btn) return;
+
+    const identity = identityInput.value.trim();
+    if (identity === '') {
+        showCardAlert(alertEl, 'Please enter your username or email address.', 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    try {
+        const res = await fetch('api/forgot_password.php?action=send_reset_link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identity: identity })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showCardAlert(alertEl, data.message, 'success');
+            identityInput.value = '';
+        } else {
+            showCardAlert(alertEl, data.error || 'An error occurred. Please try again.', 'error');
+        }
+    } catch (err) {
+        showCardAlert(alertEl, 'Network error. Please try again later.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Reset Link';
+    }
+}
+
+// ─── Handle Password Reset Execution ────────────────────────────────────────
+async function handlePasswordResetSubmit(e) {
+    e.preventDefault();
+    const token = document.getElementById('reset-token')?.value || '';
+    const newPwdInput = document.getElementById('new_password');
+    const confirmPwdInput = document.getElementById('confirm_password');
+    const alertEl = document.getElementById('reset-alert');
+    const btn = document.getElementById('reset-submit-btn');
+
+    if (!newPwdInput || !confirmPwdInput || !alertEl || !btn) return;
+
+    const newPwd = newPwdInput.value.trim();
+    const confirmPwd = confirmPwdInput.value.trim();
+
+    if (newPwd === '' || confirmPwd === '') {
+        showCardAlert(alertEl, 'Please fill in all password fields.', 'error');
+        return;
+    }
+
+    if (newPwd !== confirmPwd) {
+        showCardAlert(alertEl, 'Passwords do not match.', 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Resetting...';
+
+    try {
+        const res = await fetch('api/forgot_password.php?action=reset_password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: token,
+                new_password: newPwd,
+                confirm_password: confirmPwd
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showCardAlert(alertEl, data.message, 'success');
+            newPwdInput.value = '';
+            confirmPwdInput.value = '';
+            setTimeout(() => {
+                window.location.href = 'index.php';
+            }, 3000);
+        } else {
+            showCardAlert(alertEl, data.error || 'An error occurred. Please try again.', 'error');
+        }
+    } catch (err) {
+        showCardAlert(alertEl, 'Network error. Please try again later.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Update Password';
+    }
+}
+
+function showCardAlert(el, message, type) {
+    el.classList.remove('hidden', 'bg-red-900/40', 'border-red-500', 'text-red-200', 'bg-emerald-900/40', 'border-emerald-500', 'text-emerald-200');
+    if (type === 'success') {
+        el.classList.add('bg-emerald-900/40', 'border', 'border-emerald-500', 'text-emerald-200');
+    } else {
+        el.classList.add('bg-red-900/40', 'border', 'border-red-500', 'text-red-200');
+    }
+    el.textContent = message;
 }
 </script>
 <?php endif; ?>

@@ -116,6 +116,13 @@ class NuDatabase {
                               ->execute(['system_fields_def', '[]']);
                 }
 
+                // forgot_password_enabled
+                $stmt->execute(['forgot_password_enabled']);
+                if ((int)$stmt->fetchColumn() === 0) {
+                    $this->pdo->prepare("INSERT INTO `nu_system_settings` (`setting_key`, `setting_value`) VALUES (?, ?)")
+                              ->execute(['forgot_password_enabled', '1']);
+                }
+
                 if ($sessionActive) {
                     $_SESSION['_nu_system_settings_ensured'] = true;
                 }

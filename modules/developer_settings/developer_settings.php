@@ -25,6 +25,14 @@ if (!$currentUser || strtolower((string)$currentUser['usr_role']) !== 'globeadmi
                 <span class="nu-field-desc">Used in browser tabs, navigation title, and login cards.</span>
             </div>
 
+            <div class="nu-field" style="display: flex; align-items: center; margin-top: 10px;">
+                <input id="devForgotPasswordEnabled" type="checkbox" style="width: 18px; height: 18px; margin-right: 8px; cursor: pointer;">
+                <div>
+                    <label for="devForgotPasswordEnabled" class="nu-label" style="display: inline-block; margin-bottom: 0; cursor: pointer; font-weight: 500;">Enable Forgot Password module</label>
+                    <span class="nu-field-desc" style="margin-top: 2px;">When enabled, a "Forgot Password?" link is visible on the login screen.</span>
+                </div>
+            </div>
+
             <div class="nu-field">
                 <label class="nu-label">Application Logo</label>
                 <div class="logo-preview-container" style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
@@ -129,6 +137,9 @@ var DevSettings = (function() {
             var settings = json.settings || {};
             document.getElementById('devAppName').value = settings.app_name || '';
             document.getElementById('devLogoUrl').value = settings.app_logo || '';
+            if (document.getElementById('devForgotPasswordEnabled')) {
+                document.getElementById('devForgotPasswordEnabled').checked = (settings.forgot_password_enabled === '1');
+            }
             updateLogoPreview(settings.app_logo || '');
 
             rows = settings.system_fields_def || [];
@@ -285,6 +296,7 @@ var DevSettings = (function() {
         var payload = {
             app_name: document.getElementById('devAppName').value,
             app_logo: document.getElementById('devLogoUrl').value,
+            forgot_password_enabled: document.getElementById('devForgotPasswordEnabled')?.checked ? '1' : '0',
             system_fields_def: rows
         };
 
