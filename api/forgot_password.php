@@ -211,7 +211,7 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'forgot_password.php') {
                 if ($result['success']) {
                     echo json_encode([
                         'success' => true,
-                        'message' => 'If a matching account is found, a secure password reset link will be sent to the registered email address.'
+                        'message' => 'A secure password reset link has been sent to the registered email address.'
                     ]);
                 } else {
                     echo json_encode([
