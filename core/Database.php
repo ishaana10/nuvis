@@ -121,6 +121,50 @@ class NuDatabase {
                 }
             } catch (Exception $ignored) {}
         }
+
+        // Self-healing: Ensure API Manager (nu_api_endpoints and nu_api_logs) tables exist
+        if (!$sessionActive || empty($_SESSION['_nu_api_manager_tables_ensured'])) {
+            try {
+                $hasEndpoints = $this->pdo->query("SHOW TABLES LIKE 'nu_api_endpoints'")->fetch();
+                if (!$hasEndpoints) {
+                    $this->pdo->exec("CREATE TABLE `nu_api_endpoints` (
+                        `endpoint_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `endpoint_name` VARCHAR(150) NOT NULL,
+                        `endpoint_route` VARCHAR(250) NOT NULL UNIQUE,
+                        `endpoint_method` VARCHAR(10) NOT NULL DEFAULT 'GET',
+                        `endpoint_type` VARCHAR(20) NOT NULL DEFAULT 'form',
+                        `endpoint_target` VARCHAR(200) NOT NULL,
+                        `endpoint_active` TINYINT(1) NOT NULL DEFAULT 1,
+                        `endpoint_config` TEXT DEFAULT NULL,
+                        `endpoint_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        INDEX `idx_api_route` (`endpoint_route`),
+                        INDEX `idx_api_active` (`endpoint_active`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                }
+
+                $hasLogs = $this->pdo->query("SHOW TABLES LIKE 'nu_api_logs'")->fetch();
+                if (!$hasLogs) {
+                    $this->pdo->exec("CREATE TABLE `nu_api_logs` (
+                        `log_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `log_route` VARCHAR(250) NOT NULL,
+                        `log_method` VARCHAR(10) NOT NULL,
+                        `log_token_name` VARCHAR(100) DEFAULT NULL,
+                        `log_user_id` VARCHAR(64) DEFAULT NULL,
+                        `log_request_payload` TEXT DEFAULT NULL,
+                        `log_response_code` INT NOT NULL,
+                        `log_response_payload` TEXT DEFAULT NULL,
+                        `log_duration` DOUBLE DEFAULT NULL,
+                        `log_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        INDEX `idx_log_route` (`log_route`),
+                        INDEX `idx_log_created` (`log_created_at`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                }
+
+                if ($sessionActive) {
+                    $_SESSION['_nu_api_manager_tables_ensured'] = true;
+                }
+            } catch (Exception $ignored) {}
+        }
     }
 
     public function getPdo() {
