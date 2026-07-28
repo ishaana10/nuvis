@@ -1206,6 +1206,24 @@ fields.forEach(function (f) {
   _prepCard(card); rb.appendChild(card);
   window.nbFormBuilder._applyColSpan(card, parseInt(f.col, 10) || 6);
   _restoreFieldState(card, f);
+  if ((f.type === 'subform' || card.dataset.type === 'subform') && f.subform) {
+    var sfObj = (f.subform && typeof f.subform === 'object') ? f.subform : {};
+    var sfInst = {
+      form_code:            sfObj.form_code            || f.sf_form_code || '',
+      fk_field:             sfObj.fk_field             || f.sf_fk_field  || '',
+      subform_view:         f.subform_view             || sfObj.subform_view || 'grid',
+      help_text:            f.help_text                || f.field_help_text || '',
+      is_fk:                sfObj.is_fk !== undefined ? !!sfObj.is_fk : !!f.is_fk,
+      hide_in_grid:         sfObj.hide_in_grid !== undefined ? !!sfObj.hide_in_grid : !!f.hide_in_grid,
+      server_readonly:      sfObj.server_readonly !== undefined ? !!sfObj.server_readonly : !!f.server_readonly,
+      searchable:           sfObj.searchable !== undefined ? !!sfObj.searchable : (f.searchable !== undefined ? !!f.searchable : true),
+      selected_fields_only: sfObj.selected_fields_only !== undefined ? !!sfObj.selected_fields_only : !!f.selected_fields_only,
+      view_roles:           sfObj.view_roles || f.view_roles || '',
+      edit_roles:           sfObj.edit_roles || f.edit_roles || ''
+    };
+    _nbSfData.write(card, sfInst);
+    _attachSubformPanelEvents(card, sfInst);
+  }
 });
     }
     return row;
@@ -1987,7 +2005,19 @@ entry.fields.forEach(function (f) {
             _restoreFieldState(card, f);
             if ((f.type === 'subform' || card.dataset.type === 'subform') && f.subform) {
               var sfObj = (f.subform && typeof f.subform === 'object') ? f.subform : {};
-              var sfInst = { form_code: sfObj.form_code || f.sf_form_code || '', fk_field: sfObj.fk_field || f.sf_fk_field || '', subform_view: f.subform_view || sfObj.subform_view || 'grid', help_text: f.help_text || f.field_help_text || '', is_fk: !!sfObj.is_fk, hide_in_grid: !!sfObj.hide_in_grid, server_readonly: !!sfObj.server_readonly };
+              var sfInst = {
+                form_code:            sfObj.form_code            || f.sf_form_code || '',
+                fk_field:             sfObj.fk_field             || f.sf_fk_field  || '',
+                subform_view:         f.subform_view             || sfObj.subform_view || 'grid',
+                help_text:            f.help_text                || f.field_help_text || '',
+                is_fk:                sfObj.is_fk !== undefined ? !!sfObj.is_fk : !!f.is_fk,
+                hide_in_grid:         sfObj.hide_in_grid !== undefined ? !!sfObj.hide_in_grid : !!f.hide_in_grid,
+                server_readonly:      sfObj.server_readonly !== undefined ? !!sfObj.server_readonly : !!f.server_readonly,
+                searchable:           sfObj.searchable !== undefined ? !!sfObj.searchable : (f.searchable !== undefined ? !!f.searchable : true),
+                selected_fields_only: sfObj.selected_fields_only !== undefined ? !!sfObj.selected_fields_only : !!f.selected_fields_only,
+                view_roles:           sfObj.view_roles || f.view_roles || '',
+                edit_roles:           sfObj.edit_roles || f.edit_roles || ''
+              };
               _nbSfData.write(card, sfInst); _attachSubformPanelEvents(card, sfInst);
             }
           });
@@ -2485,22 +2515,41 @@ entry.fields.forEach(function (f) {
   var dsIsFk = card.dataset.sfIsFk        === '1';
   var dsHide = card.dataset.sfHideInGrid  === '1';
   var dsSrv  = card.dataset.sfServerReadonly === '1';
+  var dsSearchable = card.dataset.sfSearchable !== '0';
+  var dsSelectedOnly = card.dataset.sfSelectedFieldsOnly === '1';
+  var dsViewRoles = card.dataset.sfViewRoles || '';
+  var dsEditRoles = card.dataset.sfEditRoles || '';
 
   /* If dataset populated, use it — avoids reading unpopulated hidden selects */
   if (dsCode) {
     return {
-      form_code: dsCode, fk_field: dsFk, subform_view: dsView,
-      help_text: dsHelp, is_fk: dsIsFk, hide_in_grid: dsHide, server_readonly: dsSrv
+      form_code: dsCode,
+      fk_field: dsFk,
+      subform_view: dsView,
+      help_text: dsHelp,
+      is_fk: dsIsFk,
+      hide_in_grid: dsHide,
+      server_readonly: dsSrv,
+      searchable: dsSearchable,
+      selected_fields_only: dsSelectedOnly,
+      view_roles: dsViewRoles,
+      edit_roles: dsEditRoles
     };
   }
 
   /* Fallback: read from hidden body panel selects */
   var panel = card.querySelector('.nb-sf-fk-panel');
-  if (!panel) return { form_code:'', fk_field:'', subform_view:'grid', help_text:'', is_fk:false, hide_in_grid:false, server_readonly:false };
+  if (!panel) return { form_code:'', fk_field:'', subform_view:'grid', help_text:'', is_fk:false, hide_in_grid:false, server_readonly:false, searchable:true, selected_fields_only:false, view_roles:'', edit_roles:'' };
   var fc   = panel.querySelector('.nb-sf-form-code');
   var fk   = panel.querySelector('.nb-sf-fk-field');
   var view = panel.querySelector('.nb-sf-view');
   var ht   = card.querySelector('.nu-field-help');
+
+  var viewRoles = [];
+  panel.querySelectorAll('.nb-sf-view-role-chk:checked').forEach(function (chk) { viewRoles.push(chk.value); });
+  var editRoles = [];
+  panel.querySelectorAll('.nb-sf-edit-role-chk:checked').forEach(function (chk) { editRoles.push(chk.value); });
+
   return {
     form_code:       fc   ? fc.value   : '',
     fk_field:        fk   ? fk.value   : '',
@@ -2508,7 +2557,11 @@ entry.fields.forEach(function (f) {
     help_text:       ht   ? ht.value   : '',
     is_fk:           !!(panel.querySelector('.nb-sf-is-fk')          && panel.querySelector('.nb-sf-is-fk').checked),
     hide_in_grid:    !!(panel.querySelector('.nb-sf-hide-in-grid')    && panel.querySelector('.nb-sf-hide-in-grid').checked),
-    server_readonly: !!(panel.querySelector('.nb-sf-server-readonly') && panel.querySelector('.nb-sf-server-readonly').checked)
+    server_readonly: !!(panel.querySelector('.nb-sf-server-readonly') && panel.querySelector('.nb-sf-server-readonly').checked),
+    searchable:      !(panel.querySelector('.nb-sf-searchable')      && !panel.querySelector('.nb-sf-searchable').checked),
+    selected_fields_only: !!(panel.querySelector('.nb-sf-selected-fields-only') && panel.querySelector('.nb-sf-selected-fields-only').checked),
+    view_roles:      viewRoles.join(','),
+    edit_roles:      editRoles.join(',')
   };
 }
 
