@@ -70,6 +70,29 @@ function mu_roles_to_json($raw): ?string {
 }
 
 /**
+ * Convert roles raw value to a comma-separated string (for legacy menu_roles column).
+ */
+function mu_roles_to_csv($raw): string {
+    if ($raw === null || $raw === '' || $raw === '[]') return '';
+    if (is_array($raw)) {
+        $clean = array_values(array_filter(array_map('trim', $raw)));
+        return implode(',', $clean);
+    }
+    if (is_string($raw)) {
+        if (substr(trim($raw), 0, 1) === '[') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $clean = array_values(array_filter(array_map('trim', $decoded)));
+                return implode(',', $clean);
+            }
+        }
+        $parts = array_values(array_filter(array_map('trim', explode(',', $raw))));
+        return implode(',', $parts);
+    }
+    return '';
+}
+
+/**
  * Decode a stored roles value back to an array for the API response.
  * Handles JSON array, comma-separated string, or NULL.
  */
@@ -149,6 +172,7 @@ if ($action === 'create') {
     $parent      = (int)($body['parent'] ?? 0);
     $order       = (int)($body['order']  ?? 0);
     $rolesJson   = mu_roles_to_json($body['roles'] ?? null);
+    $rolesCsv    = mu_roles_to_csv($body['roles'] ?? null);
     $active      = isset($body['active']) ? (int)$body['active'] : 1;
     $browseMode  = mu_sanitise_display((string)($body['browse_mode']  ?? 'inline'));
     $previewMode = mu_sanitise_display((string)($body['preview_mode'] ?? 'inline'));
@@ -170,7 +194,7 @@ if ($action === 'create') {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $code, $label, $type, $target, $icon, $order,
-                $parent ?: null, $rolesJson, $rolesJson ?? '', $active,
+                $parent ?: null, $rolesJson, $rolesCsv, $active,
                 $openMode, $browseMode, $previewMode, $defaultView
             ]
         );
@@ -191,6 +215,7 @@ if ($action === 'update') {
     $parent      = (int)($body['parent'] ?? 0);
     $order       = (int)($body['order']  ?? 0);
     $rolesJson   = mu_roles_to_json($body['roles'] ?? null);
+    $rolesCsv    = mu_roles_to_csv($body['roles'] ?? null);
     $active      = isset($body['active']) ? (int)$body['active'] : 1;
     $browseMode  = mu_sanitise_display((string)($body['browse_mode']  ?? 'inline'));
     $previewMode = mu_sanitise_display((string)($body['preview_mode'] ?? 'inline'));
@@ -218,7 +243,7 @@ if ($action === 'update') {
              WHERE menu_id = ?",
             [
                 $label, $type, $target, $icon, $order,
-                $parent ?: null, $rolesJson, $rolesJson ?? '', $active,
+                $parent ?: null, $rolesJson, $rolesCsv, $active,
                 $openMode, $browseMode, $previewMode, $defaultView,
                 $id
             ]

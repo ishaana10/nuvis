@@ -50,11 +50,12 @@ class NuMenuRenderer
     {
         if ($isAdmin) return true;
 
-        $raw = isset($item['menu_role_access']) ? $item['menu_role_access'] : '';
+        // Standardize on menu_role_access as the single canonical source of truth.
+        // If menu_role_access is missing or blank, we fall back to menu_roles.
+        $raw = isset($item['menu_role_access']) ? trim((string)$item['menu_role_access']) : '';
         if ($raw === '') {
-            $raw = isset($item['menu_roles']) ? $item['menu_roles'] : '';
+            $raw = isset($item['menu_roles']) ? trim((string)$item['menu_roles']) : '';
         }
-        $raw = trim((string)$raw);
 
         if ($raw === '' || $raw === '[]' || $raw === 'null') return true;
 
@@ -148,6 +149,12 @@ class NuMenuRenderer
             } catch (Exception $e) {
                 // Fail silently if nu_menus table doesn't exist yet
             }
+
+            // Self-healing: Fix missing/blank targets for email_settings and report_dashboards menu items
+            try {
+                $db->query("UPDATE nu_menus SET menu_target = 'email_settings' WHERE menu_label = 'email_settings' AND (menu_target IS NULL OR menu_target = '')");
+                $db->query("UPDATE nu_menus SET menu_target = 'report_dashboards' WHERE menu_label = 'report_dashboards' AND (menu_target IS NULL OR menu_target = '')");
+            } catch (Exception $ignored) {}
 
             $raw = $db->fetchAll(
                 "SELECT * FROM nu_menus

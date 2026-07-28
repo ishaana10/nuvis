@@ -83,6 +83,13 @@ try {
         $results[] = 'All columns already present — nothing to alter.';
     }
 
+    // ── Self-healing: Ensure targets for email_settings and report_dashboards are set ──
+    try {
+        $db->query("UPDATE nu_menus SET menu_target = 'email_settings' WHERE menu_label = 'email_settings' AND (menu_target IS NULL OR menu_target = '')");
+        $db->query("UPDATE nu_menus SET menu_target = 'report_dashboards' WHERE menu_label = 'report_dashboards' AND (menu_target IS NULL OR menu_target = '')");
+        $results[] = 'Self-healed targets for email_settings and report_dashboards';
+    } catch (Throwable $ignored) {}
+
     // ── Step 3: ensure indexes exist (harmless if already present) ────────
     $indexes = [];
     $idxStmt = $pdo->query("SHOW INDEX FROM `nu_menus`");

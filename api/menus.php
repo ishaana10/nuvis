@@ -70,6 +70,26 @@ function normaliseRoles($raw)
     return $arr ? json_encode($arr) : '';
 }
 
+// ── Normalise roles input → CSV string (or '' for "all roles") ─────────
+function normaliseRolesCsv($raw)
+{
+    if (is_array($raw)) {
+        $arr = array_values(array_filter(array_map('trim', $raw), 'strlen'));
+        return implode(',', $arr);
+    }
+    $raw = trim((string)$raw);
+    if ($raw === '' || $raw === '[]' || $raw === 'null') return '';
+    if (isset($raw[0]) && $raw[0] === '[') {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $arr = array_values(array_filter(array_map('trim', $decoded), 'strlen'));
+            return implode(',', $arr);
+        }
+    }
+    $arr = array_values(array_filter(array_map('trim', explode(',', $raw)), 'strlen'));
+    return implode(',', $arr);
+}
+
 // ── GET single ────────────────────────────────────────────────────────────────
 function actionGet($db, $auth) {
     if (!$auth->hasPermission('menus.view')) {
@@ -126,6 +146,8 @@ function actionCreate($db, $auth) {
         }
     }
 
+    $rolesCsv = normaliseRolesCsv($data['roles'] ?? '');
+
     $row = [
         'menu_label'       => $label,
         'menu_type'        => $type,
@@ -133,7 +155,7 @@ function actionCreate($db, $auth) {
         'menu_parent_id'   => $parent,
         'menu_order'       => $order,
         'menu_role_access' => $roles,   // canonical column
-        'menu_roles'       => $roles,   // legacy column kept in sync
+        'menu_roles'       => $rolesCsv,   // legacy column kept in sync
         'menu_active'      => $active,
         'menu_icon'        => $icon,
     ];
@@ -164,6 +186,7 @@ function actionUpdate($db, $auth) {
     $parent = (int)($data['parent'] ?? 0);
     $order  = (int)($data['order']  ?? 0);
     $roles  = normaliseRoles($data['roles'] ?? '');
+    $rolesCsv = normaliseRolesCsv($data['roles'] ?? '');
     $active = isset($data['active']) ? (int)$data['active'] : 1;
     $icon   = trim($data['icon']    ?? '☰');
 
@@ -197,7 +220,7 @@ function actionUpdate($db, $auth) {
         'menu_parent_id'   => $parent,
         'menu_order'       => $order,
         'menu_role_access' => $roles,   // canonical column
-        'menu_roles'       => $roles,   // legacy column kept in sync
+        'menu_roles'       => $rolesCsv,   // legacy column kept in sync
         'menu_active'      => $active,
         'menu_icon'        => $icon,
     ];
