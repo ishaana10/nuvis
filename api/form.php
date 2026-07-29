@@ -125,7 +125,7 @@ function nu_form_columns() {
     if ($table === 'nuforms') {
         return ['id'=>'id','name'=>'formname','code'=>'formcode','table'=>'formtable',
             'layout'=>'formlayout','active'=>'formactive','custom_js'=>'formcustomjs',
-            'custom_php'=>'formcustomphp','custom_css'=>'formcustomcss','browse_sql'=>'browsesql',
+            'custom_php'=>'formcustomphp','custom_php_after'=>'formcustomphpafter','custom_css'=>'formcustomcss','browse_sql'=>'browsesql',
             'browse_columns'=>'browsecolumns','browse_search_enabled'=>'browsesearchenabled',
             'browse_search_placeholder'=>'browsesearchplaceholder','browse_search_fields'=>'browsesearchfields',
             'browse_page_size'=>'browsepagesize','browse_default_sort'=>'browsedefaultsort',
@@ -137,7 +137,7 @@ function nu_form_columns() {
     }
     return ['id'=>'form_id','name'=>'form_name','code'=>'form_code','table'=>'form_table',
         'layout'=>'form_layout','active'=>'form_active','custom_js'=>'form_custom_js',
-        'custom_php'=>'form_custom_php','custom_css'=>'form_custom_css','browse_sql'=>'browse_sql',
+        'custom_php'=>'form_custom_php','custom_php_after'=>'form_custom_php_after','custom_css'=>'form_custom_css','browse_sql'=>'browse_sql',
         'browse_columns'=>'browse_columns','browse_search_enabled'=>'browse_search_enabled',
         'browse_search_placeholder'=>'browse_search_placeholder','browse_search_fields'=>'browse_search_fields',
         'browse_page_size'=>'browse_page_size','browse_default_sort'=>'browse_default_sort',
@@ -1978,6 +1978,7 @@ function nu_handle_subform_save() {
         nu_json(['success' => false, 'error' => 'No fields to save'], 400);
     }
 
+    $finalId = $id;
     if ($id) {
         $sets = []; $params = [];
         foreach ($save as $col => $val) {
@@ -2432,28 +2433,55 @@ function nu_handle_save() {
         } catch (\Throwable $whe) {
             error_log('[Webhook Dynamic Form Update Trigger Error] ' . $whe->getMessage());
         }
-
-        nu_json(['success' => true, 'id' => $id]);
     } else {
         $cols = array_keys($save);
         $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
-        $newId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
+        $finalId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
 
         // Trigger Outgoing Webhooks for form_insert
         try {
             require_once __DIR__ . '/../core/WebhookSender.php';
             NuWebhookSender::trigger('form_insert', [
                 'table'     => $table,
-                'record_id' => $newId,
-                'data'      => array_merge($save, ['id' => $newId])
+                'record_id' => $finalId,
+                'data'      => array_merge($save, ['id' => $finalId])
             ]);
         } catch (\Throwable $whe) {
             error_log('[Webhook Dynamic Form Insert Trigger Error] ' . $whe->getMessage());
         }
-
-        nu_json(['success' => true, 'id' => $newId]);
     }
+
+    // Run Custom PHP After Save if configured
+    $customPhpAfter = trim((string)($form[$c['custom_php_after']] ?? ''));
+    if ($customPhpAfter !== '') {
+        try {
+            // Prepare record values map
+            $record = array_merge($save, ['id' => $finalId]);
+            $record['record_id'] = $finalId;
+
+            // Populate variables for each field name
+            foreach ($record as $k => $v) {
+                if (preg_match('/^[a-zA-Z0-9_]+$/', $k)) {
+                    $$k = $v;
+                }
+            }
+
+            // Also replace #field_name# in code
+            $codeToEval = preg_replace_callback('/#([a-zA-Z0-9_]+)#/', function($matches) use ($record) {
+                $fieldName = $matches[1];
+                $val = $record[$fieldName] ?? '';
+                return addslashes((string)$val);
+            }, $customPhpAfter);
+
+            // Execute the code
+            eval($codeToEval);
+        } catch (Throwable $e) {
+            nu_log('custom_php_after error in form ' . $code . ': ' . $e->getMessage(), 'save');
+        }
+    }
+
+    nu_json(['success' => true, 'id' => $finalId]);
 }
 
 function nu_handle_save_form() {

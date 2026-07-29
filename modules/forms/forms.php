@@ -1748,6 +1748,26 @@ foreach ($forms as $f) {
 
         <div>
           <label class="nu-label" style="margin-bottom:6px;display:block;">
+            PHP After Save
+            <span style="font-weight:400;color:var(--text-tertiary);">— runs server-side after a record is saved. Use variables like <code>$field_name</code> or <code>#field_name#</code> for field values.</span>
+          </label>
+          <div class="nb-ace-wrap" id="wrapCustomPhpAfter">
+            <div class="nb-ace-topbar">
+              <span class="nb-ace-lang-badge php">PHP</span>
+              <span class="nb-ace-hint">Ctrl+Space autocomplete · Ctrl+Z undo · drag handle to resize</span>
+              <button type="button" class="nb-ace-action-btn" onclick="nbAce.beautify('aceCustomPhpAfter')" title="Beautify Code">✨ beautify</button>
+              <button type="button" class="nb-ace-action-btn" onclick="nbAce.openFullView('aceCustomPhpAfter')" title="Fullscreen Edit">↕ full view</button>
+              <button type="button" class="nb-ace-action-btn" onclick="nbAce.openInTab('aceCustomPhpAfter')" title="Open in New Tab">⧉ new tab</button>
+              <button type="button" class="nb-ace-theme-btn" onclick="nbAce.toggleTheme('aceCustomPhpAfter')">☀ theme</button>
+            </div>
+            <div id="aceCustomPhpAfter" class="nb-ace-editor" style="height:200px;"></div>
+            <div class="nb-ace-resize-handle" data-ace="aceCustomPhpAfter"></div>
+          </div>
+          <textarea id="formCustomPhpAfter" class="nb-ace-hidden"></textarea>
+        </div>
+
+        <div>
+          <label class="nu-label" style="margin-bottom:6px;display:block;">
             Custom CSS
             <span style="font-weight:400;color:var(--text-tertiary);">— scoped to this form</span>
           </label>
@@ -3101,7 +3121,7 @@ nbFormBuilder._makeDefaultField = function(type) {
     nbFormBuilder.open = function() {
       if (typeof _rawOpen === 'function') _rawOpen.call(nbFormBuilder);
       requestAnimationFrame(function() {
-        ['aceCustomJs','aceJsBeforeSave','aceJsAfterSave','aceCustomPhp','aceCustomCss'].forEach(function(id) {
+        ['aceCustomJs','aceJsBeforeSave','aceJsAfterSave','aceCustomPhp','aceCustomPhpAfter','aceCustomCss'].forEach(function(id) {
           if (window.nbAce) nbAce.setValue(id, '');
         });
         if (window.nbAce) nbAce.resizeAll();
@@ -3120,6 +3140,7 @@ nbFormBuilder._makeDefaultField = function(type) {
         aceJsBeforeSave: 'formJsBeforeSave',
         aceJsAfterSave:  'formJsAfterSave',
         aceCustomPhp:    'formCustomPhp',
+        aceCustomPhpAfter: 'formCustomPhpAfter',
         aceCustomCss:    'formCustomCss',
         aceBrowsePhp:    'formBrowsePhp',
       };
@@ -3144,7 +3165,7 @@ nbFormBuilder._makeDefaultField = function(type) {
   setTimeout(function() {
     if (!window.ace) {
       console.warn('[nub5] Ace editor not loaded — falling back to plain textareas');
-      ['formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomCss'].forEach(function(id){
+      ['formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomPhpAfter','formCustomCss'].forEach(function(id){
         var el = document.getElementById(id);
         if (el) { el.classList.remove('nb-ace-hidden'); el.rows = 8; }
       });
@@ -3156,6 +3177,7 @@ nbFormBuilder._makeDefaultField = function(type) {
       nbAce.init('aceJsBeforeSave',  'formJsBeforeSave',  'javascript');
       nbAce.init('aceJsAfterSave',   'formJsAfterSave',   'javascript');
       nbAce.init('aceCustomPhp',     'formCustomPhp',     'php');
+      nbAce.init('aceCustomPhpAfter','formCustomPhpAfter', 'php');
       nbAce.init('aceCustomCss',     'formCustomCss',     'css');
       nbAce.init('aceBrowsePhp',     'formBrowsePhp',     'php');
     }
