@@ -1737,15 +1737,18 @@ function nu_handle_subform_list() {
     $allFields  = nu_flatten_layout($layout);
     $selectedFieldsOnly = $sfMeta['selected_fields_only'];
 
-    if ($selectedFieldsOnly) {
-        $gridFields = nu_flatten_layout_for_grid($layout);
-    } else {
-        $gridFields = array_values(array_filter($allFields, function($f) {
-            $type = nu_field_type($f);
-            if (in_array($type, ['html','heading','divider','fieldset','subform','button','uploadbutton','signaturepad','picturecanvas'], true)) return false;
-            return true;
-        }));
-    }
+    $isAdmin = nu_current_user_is_admin();
+    $gridFields = array_values(array_filter($allFields, function($f) use ($fk, $isAdmin) {
+        $type = nu_field_type($f);
+        if (in_array($type, ['html','heading','divider','fieldset','subform','button','uploadbutton','signaturepad','picturecanvas'], true)) return false;
+
+        $fname = strtolower(nu_field_name($f));
+        if ($fname === strtolower($fk)) return false;
+        if (nu_field_hide_in_grid($f)) return false;
+        if (nu_field_hidden($f)) return false;
+        if (nu_field_hidden_for_normal_users($f) && !$isAdmin) return false;
+        return true;
+    }));
 
     // Decorate fields with formatters & conditional formatting rules from child form's browse layout
     $bLayoutJson = $form[$c['browse_layout']] ?? '';

@@ -338,11 +338,24 @@
     if (!body) return;
 
     /* Grid columns: strip UI-only types AND FK fields */
+    var userRole = (window.nuUserRole || '').toLowerCase();
+    var isAdmin = userRole === 'admin' || userRole === 'globeadmin';
     var displayCols = gridFields.filter(function (f) {
       var t = f.type || f.fieldtype || 'text';
       if (['html','heading','divider','fieldset','subform','button'].indexOf(t) !== -1) return false;
-      if (m.selectedFieldsOnly && (f.hide_in_grid || f.hideingrid)) return false;
       if (isFkField(f)) return false;
+
+      var fname = (f.name || f.fieldname || '').toLowerCase();
+      if (fname === (m.fk || '').toLowerCase()) return false;
+
+      var hidden = f.hidden === true || f.hidden === '1' || f.hidden === 1 || f.hidden === 'true';
+      var hideInGrid = f.hide_in_grid === true || f.hide_in_grid === '1' || f.hide_in_grid === 1 || f.hide_in_grid === 'true' || f.hideingrid === true || f.hideingrid === '1' || f.hideingrid === 1 || f.hideingrid === 'true';
+      var hiddenForNormal = f.hidden_for_normal_users === true || f.hidden_for_normal_users === '1' || f.hidden_for_normal_users === 1 || f.hidden_for_normal_users === 'true' || f.hiddenfornormalusers === true || f.hiddenfornormalusers === '1' || f.hiddenfornormalusers === 1 || f.hiddenfornormalusers === 'true';
+
+      if (hidden) return false;
+      if (hideInGrid) return false;
+      if (hiddenForNormal && !isAdmin) return false;
+
       return true;
     });
 
