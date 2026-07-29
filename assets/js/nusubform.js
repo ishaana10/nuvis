@@ -647,7 +647,12 @@
 
       var val = row[fname] !== undefined ? row[fname] : (f.default_value || f.defaultvalue || '');
 
-      if (isFkField(f)) {
+      var m = meta(container);
+      var isParentFk = isFkField(f) || (fname.toLowerCase() === (m.fk || '').toLowerCase());
+      var isReadonly = f.readonly === true || f.readonly === '1' || f.readonly === 1 || f.readonly === 'true' || f.is_readonly === true || f.is_readonly === '1' || f.is_readonly === 1 || f.is_readonly === 'true';
+      var isHidden = f.hidden === true || f.hidden === '1' || f.hidden === 1 || f.hidden === 'true' || f.is_hidden === true || f.is_hidden === '1' || f.is_hidden === 1 || f.is_hidden === 'true';
+
+      if (isParentFk || isHidden) {
         var hiddenEl = document.createElement('input');
         hiddenEl.type  = 'hidden';
         hiddenEl.name  = fname;
@@ -666,7 +671,9 @@
         + (f.required ? ' <span style="color:red">*</span>' : '');
       fieldWr.appendChild(labelEl);
 
-      fieldWr.insertAdjacentHTML('beforeend', buildInlineInput(ftype, fname, val, f));
+      var hasEditPermission = checkPermission(container, 'edit');
+      var isDisabled = !hasEditPermission || isReadonly;
+      fieldWr.insertAdjacentHTML('beforeend', buildInlineInput(ftype, fname, val, f, isDisabled));
 
       if (f.help_text || f.helptext) {
         var helpEl = document.createElement('div');
