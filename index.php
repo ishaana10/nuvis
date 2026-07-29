@@ -593,6 +593,10 @@ try {
 <script src="<?= nu_asset('assets/js/select2.min.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nubuilder-next.js') ?>"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.43.3/ace.min.js" ></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.43.3/ext-language_tools.min.js" ></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify.min.js" ></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-css.min.js" ></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-html.min.js" ></script>
 <script src="<?= nu_asset('assets/js/nb-form-builder.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nusubform.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nu-errorlogger.js') ?>"></script>
