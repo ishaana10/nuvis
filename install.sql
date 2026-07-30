@@ -209,6 +209,20 @@ CREATE TABLE IF NOT EXISTS `nu_queries` (
     FOREIGN KEY (`query_created_by`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ─── 13b. PROCEDURES ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `nu_procedures` (
+    `procedure_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `procedure_name` VARCHAR(150) NOT NULL,
+    `procedure_code` VARCHAR(100) NOT NULL UNIQUE,
+    `procedure_description` VARCHAR(255) DEFAULT NULL,
+    `procedure_php` MEDIUMTEXT DEFAULT NULL,
+    `procedure_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `procedure_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `procedure_updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_proc_code` (`procedure_code`),
+    INDEX `idx_proc_active` (`procedure_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ─── 14. MENUS ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_menus` (
     `menu_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
