@@ -2,11 +2,11 @@
 /**
  * NuMenuRenderer
  * Renders the sidebar <nav> from nu_menus, filtered by the current user's role.
- * PHP 7.4 compatible — no typed class properties, no str_contains, no array_is_list.
+ * PHP 8.1+ compatible.
  */
 class NuMenuRenderer
 {
-    // No typed property declarations (PHP 8.0+ only) — use plain assignments
+    // No typed property declarations — use plain assignments
     private static $icons = array(
         'dashboard'  => '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
         'forms'      => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
@@ -40,12 +40,12 @@ class NuMenuRenderer
         'default'    => '<circle cx="12" cy="12" r="9"/>',
     );
 
-    // Types that support open-mode (no typed property — PHP 7.4 compatible)
+    // Types that support open-mode
     private static $openModeTypes = array('form', 'report', 'query');
 
     /**
      * Check whether a menu row is accessible by the given role.
-     * PHP 7.4 safe: no str_contains, no match expression.
+     * PHP 8.1+ safe.
      */
     private static function isAccessible(array $item, $userRole, $isAdmin)
     {
@@ -188,8 +188,6 @@ class NuMenuRenderer
                     ]);
                 }
 
-                }       
-                                
                 $existsProcedures = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'procedures'");
                 if (!$existsProcedures) {
                     $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");

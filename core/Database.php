@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * NuDatabase - PDO wrapper (singleton)
- * PHP 7.4 compatible
+ * PHP 8.1+ compatible
  * IMPORTANT: destructor must NOT touch session - it runs during PHP shutdown
  * after session_write_close() has already been called.
  */
@@ -234,7 +234,7 @@ class NuDatabase {
         return $this->query($sql, $params)->fetchAll();
     }
 
-    // PHP 7.4 compatible — no arrow functions
+    // PHP 8.1+ compatible
     public function insert($table, $data) {
         $cols         = implode(', ', array_keys($data));
         $placeholders = implode(', ', array_map(function($k) { return ":$k"; }, array_keys($data)));
@@ -247,7 +247,7 @@ class NuDatabase {
         return (int)$this->pdo->lastInsertId();
     }
 
-    // PHP 7.4 compatible — no arrow functions
+    // PHP 8.1+ compatible
     public function update($table, $data, $where, $whereParams = []) {
         $sets   = implode(', ', array_map(function($k) { return "{$k} = :set_{$k}"; }, array_keys($data)));
         $params = [];

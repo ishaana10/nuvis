@@ -65,7 +65,7 @@ function checkRequirement($name, $check, $required = true) {
         <div class="setup-step">
             <h3>System Requirements</h3>
             <div class="setup-checks">
-                <?php echo checkRequirement('PHP 7.4+', version_compare(PHP_VERSION, '7.4.0', '>=')); ?>
+                <?php echo checkRequirement('PHP 8.1+', version_compare(PHP_VERSION, '8.1.0', '>=')); ?>
                 <?php echo checkRequirement('PDO Extension', extension_loaded('pdo')); ?>
                 <?php echo checkRequirement('PDO MySQL', extension_loaded('pdo_mysql')); ?>
                 <?php echo checkRequirement('JSON Extension', extension_loaded('json')); ?>

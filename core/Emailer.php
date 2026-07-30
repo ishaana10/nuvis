@@ -1,5 +1,5 @@
 <?php
-// nuBuilder Next - Emailer (PHP 7.4 compatible)
+// nuBuilder Next - Emailer (PHP 8.1+ compatible)
 
 class NuEmailer {
     private $config;
