@@ -76,6 +76,12 @@ $_proc_result = [
         throw new Exception("run_procedure wrapper failed.");
     }
 
+    // 7. Test nuDebug and nu_debug helper functions
+    echo "Testing nuDebug...\n";
+    nuDebug(['user_id' => 42, 'status' => 'success'], 'Test Payload');
+    nu_debug('Another debug output', 'Test Simple');
+    echo "[PASS] nuDebug and nu_debug helpers executed successfully.\n";
+
     // Clean up
     $db->query("DELETE FROM nu_procedures WHERE procedure_code LIKE 'test_calc_%'");
     echo "\n[ALL TESTS COMPLETED SUCCESSFULLY!]\n";

@@ -302,3 +302,25 @@ class NuErrorLogger {
     private function __clone() {}
     public function __wakeup() { throw new \RuntimeException('Cannot unserialize NuErrorLogger.'); }
 }
+
+if (!function_exists('nuDebug')) {
+    /**
+     * Dumps the given value and sends it directly to the structured error log.
+     *
+     * @param mixed $value The value to debug.
+     * @param string $label Optional prefix label.
+     */
+    function nuDebug($value, string $label = ''): void {
+        $msg = ($label !== '' ? $label . ': ' : '') . print_r($value, true);
+        NuErrorLogger::logApp($msg, [], NuErrorLogger::SEV_DEBUG);
+    }
+}
+
+if (!function_exists('nu_debug')) {
+    /**
+     * Alias for nuDebug().
+     */
+    function nu_debug($value, string $label = ''): void {
+        nuDebug($value, $label);
+    }
+}
