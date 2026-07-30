@@ -371,7 +371,19 @@ function handleSave($db, $formCode) {
         // ✅ Missing: after-save event and response
         if (!empty($eventMap['php_aftersave'])) {
             $data = $safeInput;
-            eval($eventMap['php_aftersave']);
+            $record = array_merge($safeInput, ['id' => $recordId]);
+            $record['record_id'] = $recordId;
+            foreach ($record as $k => $v) {
+                if (preg_match('/^[a-zA-Z0-9_]+$/', $k)) {
+                    $$k = $v;
+                }
+            }
+            $codeToEval = preg_replace_callback('/#([a-zA-Z0-9_]+)#/', function($matches) use ($record) {
+                $fieldName = $matches[1];
+                $val = $record[$fieldName] ?? '';
+                return addslashes((string)$val);
+            }, $eventMap['php_aftersave']);
+            eval($codeToEval);
         }
 
         echo json_encode(['success' => true, 'id' => $recordId]);

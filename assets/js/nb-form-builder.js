@@ -1367,7 +1367,7 @@ fields.forEach(function (f) {
 
     _clearForm: function () {
       ['builderFormName','builderFormCode','builderFormTable','formBrowseSql','formBrowseColumns','formBrowseDefaultSort',
-       'formBrowseSearchPlaceholder','formBrowseSearchFields','formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomCss']
+       'formBrowseSearchPlaceholder','formBrowseSearchFields','formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomPhpAfter','formCustomCss']
         .forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
       var ps = document.getElementById('formBrowsePageSize'); if (ps) ps.value = '20';
       var srch = document.getElementById('formBrowseSearchEnabled'); if (srch) srch.checked = false;
@@ -1878,7 +1878,7 @@ if (canvasType === 'subform' && sfData) {
         browse_delete_enabled: _c('formBrowseDeleteEnabled') ? 1 : 0,
         form_custom_js: _v('formCustomJs'),
         form_js_before_save: _v('formJsBeforeSave'), form_js_after_save: _v('formJsAfterSave'),
-        form_custom_php: _v('formCustomPhp'), form_custom_css: _v('formCustomCss')
+        form_custom_php: _v('formCustomPhp'), form_custom_php_after: _v('formCustomPhpAfter'), form_custom_css: _v('formCustomCss')
       };
       if (editId) payload.form_id = editId;
       console.log('[saveForm] payload:', JSON.stringify(payload, null, 2));
@@ -1908,6 +1908,7 @@ if (canvasType === 'subform' && sfData) {
       _set('formBrowseSearchPlaceholder', formData.browse_search_placeholder || ''); _set('formBrowseSearchFields', formData.browse_search_fields || '');
       _set('formCustomJs', formData.form_custom_js || ''); _set('formJsBeforeSave', formData.form_js_before_save || '');
       _set('formJsAfterSave', formData.form_js_after_save || ''); _set('formCustomPhp', formData.form_custom_php || '');
+      _set('formCustomPhpAfter', formData.form_custom_php_after || '');
       _set('formCustomCss', formData.form_custom_css || ''); _chk('formBrowseSearchEnabled', formData.browse_search_enabled);
       _chk('formBrowseDeleteEnabled', formData.browse_delete_enabled !== undefined ? formData.browse_delete_enabled : 1);
       me.selectDisplayMode(formData.browse_display_mode || 'inline');
