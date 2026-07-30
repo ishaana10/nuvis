@@ -18,7 +18,7 @@ $builtinIcons = [
   'dashboard','forms','file-text','reports','pie-chart','queries','database',
   'menus','users','roles','shield','audit','clipboard','files','paperclip',
   'workflow','calendar','ai','link','password','lock','alert','copy',
-  'inspector','layout','group','default'
+  'inspector','layout','group','default','barcode'
 ];
 
 /**
@@ -414,6 +414,7 @@ function nu_menu_mode_label(array $m): string {
             <option value="import_export" data-type="form">Import / Export (import_export)</option>
             <option value="developer_settings" data-type="form">Developer Settings (developer_settings)</option>
             <option value="word_certificates" data-type="form">Word Certificates (word_certificates)</option>
+            <option value="barcode" data-type="form">Barcode Manager (barcode)</option>
           </optgroup>
           <optgroup label="Custom Forms">
             <?php foreach ($forms as $f): ?>

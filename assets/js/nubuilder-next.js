@@ -102,7 +102,8 @@ window.NuApp = {
     'dashboard','forms','reports','queries','calendar','ai','integrations',
     'menus','users','roles','audit','files','workflow','inspector','errorlog',
     'password_policy','appcloner','password','report_dashboards','email_settings',
-    'updater','import_export','developer_settings','word_certificates','api_manager'
+    'updater','import_export','developer_settings','word_certificates','api_manager',
+    'barcode'
   ]),
 
   init() {
