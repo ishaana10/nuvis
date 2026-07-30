@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * NuErrorLogger — captures PHP errors, uncaught exceptions, SQL errors, and JS errors.
- * PHP 7.4 compatible (no match expression, no str_contains, no str_starts_with).
+ * PHP 8.1+ compatible.
  *
  * Register AFTER NuDatabase and NuAuth are loaded in index.php bootstrap.
  * Falls back to logs/nuerror.log if DB is not yet ready.
@@ -240,7 +240,7 @@ class NuErrorLogger {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Helpers — all PHP 7.4 compatible, no match/str_contains/str_starts_with
+    // Helpers — all PHP 8.1+ compatible
     // ─────────────────────────────────────────────────────────────────────────
 
     private function buildTrace(array $frames): string {
@@ -264,7 +264,7 @@ class NuErrorLogger {
         return $path;
     }
 
-    /** PHP 7.4 — if/elseif instead of match() */
+    /** PHP 8.1+ — if/elseif instead of match() */
     private function phpErrnoToSeverity(int $errno): string {
         if (in_array($errno, [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE], true)) {
             return self::SEV_FATAL;

@@ -1,5 +1,5 @@
 <?php
-// nuBuilder Next - Plugin Manager (PHP 7.4 compatible)
+// nuBuilder Next - Plugin Manager (PHP 8.1+ compatible)
 
 class NuPluginManager {
     private $plugins = [];

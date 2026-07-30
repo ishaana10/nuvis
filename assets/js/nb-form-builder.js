@@ -1,5 +1,5 @@
 /**
- * nb-form-builder.js  — PATCHED v7.4
+ * nb-form-builder.js  — PATCHED v8.1
  *
  * v7 Fixes:
  *   FIX-J  Added nbFormBuilder.edit(formId) method (was missing — caused "not a function" error)

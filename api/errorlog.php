@@ -9,7 +9,7 @@
  *   POST ?action=clear           — truncate all logs (admin only)
  *   POST ?action=delete&id=123   — delete one entry (admin only)
  *
- * PHP 7.4 compatible.
+ * PHP 8.1+ compatible.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../config.php';

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * NuWebhookSender - Dispatcher class for outgoing webhooks in nuvis
- * PHP 7.4 - 8.3 compatible
+ * PHP 8.1+ compatible
  */
 class NuWebhookSender
 {
