@@ -186,6 +186,8 @@ class NuMenuRenderer
                         'menu_preview_mode' => 'inline',
                         'menu_default_view' => 'browse'
                     ]);
+                }
+
                 }       
                                 
                 $existsProcedures = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'procedures'");

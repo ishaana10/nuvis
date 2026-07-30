@@ -3130,11 +3130,11 @@ nbFormBuilder._makeDefaultField = function(type) {
     nbFormBuilder.open[STAMP] = true;
   }
 
-  // ── edit: restore Ace values after open()'s RAF clear ────────────
-  if (!nbFormBuilder.edit[STAMP]) {
-    var _rawEdit = nbFormBuilder.edit;
-    nbFormBuilder.edit = async function(formId) {
-      if (typeof _rawEdit === 'function') await _rawEdit.call(nbFormBuilder, formId);
+  // ── loadForm: set Ace values directly when form is loaded ────────
+  if (!nbFormBuilder.loadForm[STAMP]) {
+    var _rawLoadForm = nbFormBuilder.loadForm;
+    nbFormBuilder.loadForm = function(formData) {
+      if (typeof _rawLoadForm === 'function') _rawLoadForm.call(nbFormBuilder, formData);
       var aceMap = {
         aceCustomJs:     'formCustomJs',
         aceJsBeforeSave: 'formJsBeforeSave',
@@ -3144,21 +3144,17 @@ nbFormBuilder._makeDefaultField = function(type) {
         aceCustomCss:    'formCustomCss',
         aceBrowsePhp:    'formBrowsePhp',
       };
-      var snapshot = {};
-      Object.keys(aceMap).forEach(function(aceId) {
-        var hidden = document.getElementById(aceMap[aceId]);
-        snapshot[aceId] = hidden ? (hidden.value || '') : '';
-      });
       requestAnimationFrame(function() {
-        requestAnimationFrame(function() {
-          Object.keys(snapshot).forEach(function(aceId) {
-            if (window.nbAce) nbAce.setValue(aceId, snapshot[aceId]);
-          });
-          if (window.nbAce) nbAce.resizeAll();
+        Object.keys(aceMap).forEach(function(aceId) {
+          var hidden = document.getElementById(aceMap[aceId]);
+          if (hidden && window.nbAce) {
+            nbAce.setValue(aceId, hidden.value || '');
+          }
         });
+        if (window.nbAce) nbAce.resizeAll();
       });
     };
-    nbFormBuilder.edit[STAMP] = true;
+    nbFormBuilder.loadForm[STAMP] = true;
   }
 
   // ── Mount all Ace editors on every load ─────────────────────────
