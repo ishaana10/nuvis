@@ -181,6 +181,13 @@ class NuMenuRenderer
                         'menu_role_access'  => '[]',
                         'menu_active'       => 1,
                         'menu_icon'         => 'barcode',
+                        'menu_open_mode'    => 'inline|browse',
+                        'menu_browse_mode'  => 'inline',
+                        'menu_preview_mode' => 'inline',
+                        'menu_default_view' => 'browse'
+                    ]);
+                }       
+                                
                 $existsProcedures = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'procedures'");
                 if (!$existsProcedures) {
                     $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
