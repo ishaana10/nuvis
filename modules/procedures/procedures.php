@@ -296,7 +296,7 @@ window.Procedures = (function() {
     $('procBuilderPanel').style.display = 'block';
     $('procBuilderPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (window.nbAce) {
-      nbAce.setValue('aceProcedurePhp', '<?php\n// Write your PHP code here.\n// $_proc_params contains input arguments.\n// Return results in $_proc_result.\n\n');
+      nbAce.setValue('aceProcedurePhp', '<?' + 'php\n// Write your PHP code here.\n// $_proc_params contains input arguments.\n// Return results in $_proc_result.\n\n');
       nbAce.resizeAll();
     }
   }
