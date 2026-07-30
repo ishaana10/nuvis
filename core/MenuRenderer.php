@@ -188,6 +188,8 @@ class NuMenuRenderer
                     ]);
                 }
 
+                }       
+                                
                 $existsProcedures = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'procedures'");
                 if (!$existsProcedures) {
                     $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
