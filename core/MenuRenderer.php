@@ -36,6 +36,7 @@ class NuMenuRenderer
         'layout'     => '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
         'divider'    => '',
         'group'      => '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+        'barcode'    => '<path d="M3 5v14M6 5v14M8 5v14M11 5v14M14 5v14M17 5v14M19 5v14M21 5v14"/>',
         'default'    => '<circle cx="12" cy="12" r="9"/>',
     );
 
@@ -168,6 +169,18 @@ class NuMenuRenderer
                     ]);
                 }
 
+                $existsBarcode = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'barcode'");
+                if (!$existsBarcode) {
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'Barcode Manager',
+                        'menu_type'         => 'form',
+                        'menu_target'       => 'barcode',
+                        'menu_parent_id'    => 0,
+                        'menu_order'        => 35,
+                        'menu_roles'        => '',
+                        'menu_role_access'  => '[]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'barcode',
                 $existsProcedures = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'procedures'");
                 if (!$existsProcedures) {
                     $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
