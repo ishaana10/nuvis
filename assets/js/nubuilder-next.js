@@ -102,7 +102,8 @@ window.NuApp = {
     'dashboard','forms','reports','queries','calendar','ai','integrations',
     'menus','users','roles','audit','files','workflow','inspector','errorlog',
     'password_policy','appcloner','password','report_dashboards','email_settings',
-    'updater','import_export','developer_settings','word_certificates','api_manager'
+    'updater','import_export','developer_settings','word_certificates','api_manager',
+    'procedures'
   ]),
 
   init() {
@@ -194,6 +195,34 @@ window.NuApp = {
     toast.textContent = message;
     container.appendChild(toast);
     setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 4000);
+  },
+
+  callPHP(code, params, callback) {
+    return fetch('api/procedure.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code, params: params || {} }),
+      credentials: 'same-origin'
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (typeof callback === 'function') {
+        callback(data);
+      }
+      return data;
+    })
+    .catch(err => {
+      console.error('callPHP Error:', err);
+      const res = { success: false, error: err.message || String(err) };
+      if (typeof callback === 'function') {
+        callback(res);
+      }
+      return res;
+    });
+  },
+
+  runProcedure(code, params, callback) {
+    return this.callPHP(code, params, callback);
   },
 
   _execModuleScripts(container) {
@@ -2078,4 +2107,11 @@ NuApp.sendRecordCertEmail = function() {
     console.error(err);
     NuApp.toast('Connection error while sending email', 'error');
   });
+};
+
+window.callPHP = function(code, params, callback) {
+  return NuApp.callPHP(code, params, callback);
+};
+window.runProcedure = function(code, params, callback) {
+  return NuApp.runProcedure(code, params, callback);
 };
