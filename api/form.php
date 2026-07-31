@@ -2306,6 +2306,7 @@ function nu_handle_list() {
 function nu_handle_save() {
     $code = $_GET['code'] ?? '';
     $id   = $_GET['id']   ?? '';
+    $finalId = $id;
     $data = nu_request_json();
     if ($code === '') nu_json(['success' => false, 'error' => 'Missing code'], 400);
 
