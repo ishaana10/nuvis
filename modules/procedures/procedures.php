@@ -6,6 +6,75 @@ $db = NuDatabase::getInstance();
 $procedures = $db->fetchAll("SELECT * FROM nu_procedures ORDER BY procedure_updated_at DESC");
 ?>
 
+<style>
+/* ── Ace Editor wrappers ── */
+.nb-ace-wrap {
+  position:relative;
+  border:1px solid var(--border-color);
+  border-radius:8px;
+  overflow:hidden;
+  background:#1e1e2e;
+  display:flex;
+  flex-direction:column;
+}
+.nb-ace-topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:5px 10px;
+  background:#181825;
+  border-bottom:1px solid rgba(255,255,255,.07);
+  gap:8px;
+  flex-shrink:0;
+}
+.nb-ace-lang-badge {
+  font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  padding:2px 8px; border-radius:20px; flex-shrink:0;
+}
+.nb-ace-lang-badge.js  { background:rgba(247,223,30,.15); color:#f7df1e; }
+.nb-ace-lang-badge.php { background:rgba(119,123,180,.2);  color:#9b9fd4; }
+.nb-ace-lang-badge.css { background:rgba(38,198,218,.15);  color:#26c6da; }
+.nb-ace-hint {
+  font-size:10px; color:rgba(255,255,255,.3); flex:1; text-align:right;
+}
+.nb-ace-theme-btn, .nb-ace-action-btn {
+  font-size:10px; padding:2px 8px; border-radius:4px; cursor:pointer;
+  border:1px solid rgba(255,255,255,.15); background:none; color:rgba(255,255,255,.5);
+  transition:all .15s;
+}
+.nb-ace-theme-btn:hover, .nb-ace-action-btn:hover { background:rgba(255,255,255,.08); color:#fff; }
+.nb-ace-editor {
+  width:100%;
+  font-size:13px;
+  line-height:1.6;
+  flex-shrink:0;
+}
+/* ── Resize handle below each Ace editor ── */
+.nb-ace-resize-handle {
+  height:16px;
+  background:#181825;
+  border-top:1px solid rgba(255,255,255,.12);
+  cursor:ns-resize;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  user-select:none;
+  flex-shrink:0;
+  font-size:11px;
+  letter-spacing:2px;
+  color:rgba(255,255,255,.45);
+  line-height:1;
+  transition:background .15s, color .15s;
+}
+.nb-ace-resize-handle::after {
+  content: '— — —';
+}
+.nb-ace-resize-handle:hover {
+  background:#1f1f30;
+  color:rgba(255,255,255,.85);
+}
+/* Hidden textarea synced on save */
+.nb-ace-hidden { display:none !important; }
+</style>
+
 <div class="nu-procedures-module">
 
   <!-- ── HEADER ─────────────────────────────────────────────────────── -->
