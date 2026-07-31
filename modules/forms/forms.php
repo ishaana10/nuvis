@@ -1834,8 +1834,9 @@ if (!window._nbFormsModuleInit) {
   // ══════════════════════════════════════════════════════════════════
   //  Ace Editor manager
   // ══════════════════════════════════════════════════════════════════
-  window.nbAce = (function() {
-    var _editors = {};
+  if (!window.nbAce) {
+    window.nbAce = (function() {
+      var _editors = {};
     var _darkTheme  = 'ace/theme/one_dark';
     var _lightTheme = 'ace/theme/chrome';
 
@@ -2282,6 +2283,7 @@ if (!window._nbFormsModuleInit) {
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
+  }
 
   // ── Form type filter ─────────────────────────────────────────────
   window.nbFilterForms = function(filter, btn) {
