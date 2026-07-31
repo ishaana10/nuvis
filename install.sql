@@ -209,20 +209,6 @@ CREATE TABLE IF NOT EXISTS `nu_queries` (
     FOREIGN KEY (`query_created_by`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ─── 13b. PROCEDURES ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS `nu_procedures` (
-    `procedure_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `procedure_name` VARCHAR(150) NOT NULL,
-    `procedure_code` VARCHAR(100) NOT NULL UNIQUE,
-    `procedure_description` VARCHAR(255) DEFAULT NULL,
-    `procedure_php` MEDIUMTEXT DEFAULT NULL,
-    `procedure_active` TINYINT(1) NOT NULL DEFAULT 1,
-    `procedure_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `procedure_updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_proc_code` (`procedure_code`),
-    INDEX `idx_proc_active` (`procedure_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- ─── 14. MENUS ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_menus` (
     `menu_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -823,6 +809,29 @@ INSERT INTO nu_stations (station_name, station_code) VALUES
 ('East Station', 'STN_EAST'),
 ('West Station', 'STN_WEST')
 ON DUPLICATE KEY UPDATE station_name=VALUES(station_name);
+
+-- Create nu_products table and seed data
+CREATE TABLE IF NOT EXISTS `nu_products` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(150) NOT NULL,
+    `type` VARCHAR(50) NOT NULL DEFAULT 'product',
+    `barcode` VARCHAR(50) NOT NULL UNIQUE,
+    `description` TEXT DEFAULT NULL,
+    `price` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_product_barcode` (`barcode`),
+    INDEX `idx_product_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO `nu_products` (`name`, `type`, `barcode`, `description`, `price`) VALUES
+('Organic Coffee Beans (Dark Roast)', 'product', '7501031311309', 'Premium single-origin organic arabica coffee beans, slow-roasted to a rich dark finish. 500g bag.', 18.99),
+('Ergonomic Wireless Mouse', 'product', '074182285197', 'Rechargeable wireless ergonomic mouse with silent clicking, side-scroll wheel, and adjustable DPI settings up to 4000.', 45.50),
+('Eco-Friendly Bamboo Water Bottle', 'product', '8886367301031', 'Double-walled vacuum insulated water bottle made from stainless steel and covered with natural, sustainable bamboo. 750ml.', 24.99),
+('Heavy Duty Industrial Pallet', 'good', 'GD-WRH-PAL-02', 'High-density polyethylene structural foam plastic pallet. Ideal for warehouse storage and forklift transport. Rated up to 1500kg.', 79.95),
+('Ultra-Soft Microfiber Towel Set', 'good', 'GD-TOWEL-S4', 'Pack of 4 quick-drying, highly absorbent premium microfiber towels. Perfect for home, gym, or automotive detailing.', 15.49),
+('Web Application Development Consultation', 'service', 'SVC-WEB-DEV-01', 'One-hour professional architectural and consulting session with a Senior Software Engineer regarding web app stacks and cloud hosting.', 120.00),
+('Enterprise IT Security Audit', 'service', 'SVC-IT-SEC-05', 'Comprehensive end-to-end network penetration testing, software vulnerability scan, and infrastructure compliance audit report.', 1500.00);
 
 INSERT INTO nu_reports (report_code, report_name, report_type, report_sql, report_columns, report_filters, report_active) VALUES
 ('revenue_report', 'Revenue Report', 'table',

@@ -172,30 +172,6 @@ class NuDatabase {
                 }
             } catch (Exception $ignored) {}
         }
-
-        // Self-healing: Ensure nu_procedures table exists
-        if (!$sessionActive || empty($_SESSION['_nu_procedures_ensured'])) {
-            try {
-                $hasProcedures = $this->pdo->query("SHOW TABLES LIKE 'nu_procedures'")->fetch();
-                if (!$hasProcedures) {
-                    $this->pdo->exec("CREATE TABLE `nu_procedures` (
-                        `procedure_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                        `procedure_name` VARCHAR(150) NOT NULL,
-                        `procedure_code` VARCHAR(100) NOT NULL UNIQUE,
-                        `procedure_description` VARCHAR(255) DEFAULT NULL,
-                        `procedure_php` MEDIUMTEXT DEFAULT NULL,
-                        `procedure_active` TINYINT(1) NOT NULL DEFAULT 1,
-                        `procedure_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        `procedure_updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        INDEX `idx_proc_code` (`procedure_code`),
-                        INDEX `idx_proc_active` (`procedure_active`)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-                }
-                if ($sessionActive) {
-                    $_SESSION['_nu_procedures_ensured'] = true;
-                }
-            } catch (Exception $ignored) {}
-        }
     }
 
     public function getPdo() {
@@ -294,65 +270,4 @@ class NuDatabase {
 
 if (!class_exists('Database')) {
     class_alias('NuDatabase', 'Database');
-}
-
-/**
- * NuProcedure Helper Class
- * Allows executing saved custom PHP functions from other server-side contexts.
- */
-class NuProcedure {
-    /**
-     * Executes a saved custom PHP function (procedure) by its code.
-     *
-     * @param string $code
-     * @param array $params
-     * @param array $hashCookies
-     * @return array
-     */
-    public static function run($code, $params = [], $hashCookies = []) {
-        $db = NuDatabase::getInstance();
-        $proc = $db->fetchOne("SELECT * FROM nu_procedures WHERE procedure_code = ? AND procedure_active = 1", [$code]);
-        if (!$proc) {
-            return [
-                'success' => false,
-                'error' => "Procedure not found or is inactive: " . $code
-            ];
-        }
-
-        // Setup sandboxed execution variables
-        $_proc_params = $params;
-        $_proc_db     = $db;
-        $_proc_auth   = class_exists('NuAuth') ? NuAuth::getInstance() : null;
-        $_proc_hash   = $hashCookies;
-        $_proc_result = null;
-
-        ob_start();
-        try {
-            eval('?>' . $proc['procedure_php']);
-            $output = ob_get_clean();
-            return [
-                'success' => true,
-                'output'  => $output,
-                'data'    => $_proc_result
-            ];
-        } catch (Throwable $e) {
-            ob_end_clean();
-            return [
-                'success' => false,
-                'error'   => $e->getMessage()
-            ];
-        }
-    }
-}
-
-if (!function_exists('nu_run_procedure')) {
-    function nu_run_procedure($code, $params = [], $hashCookies = []) {
-        return NuProcedure::run($code, $params, $hashCookies);
-    }
-}
-
-if (!function_exists('run_procedure')) {
-    function run_procedure($code, $params = [], $hashCookies = []) {
-        return NuProcedure::run($code, $params, $hashCookies);
-    }
 }

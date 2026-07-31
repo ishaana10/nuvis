@@ -181,20 +181,6 @@ class NuMenuRenderer
                         'menu_role_access'  => '[]',
                         'menu_active'       => 1,
                         'menu_icon'         => 'barcode',
-                $existsProcedures = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'procedures'");
-                if (!$existsProcedures) {
-                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
-                    $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : 0;
-                    $db->insert('nu_menus', [
-                        'menu_label'        => 'Custom PHP Functions',
-                        'menu_type'         => 'form',
-                        'menu_target'       => 'procedures',
-                        'menu_parent_id'    => $parentId,
-                        'menu_order'        => 92,
-                        'menu_roles'        => 'globeadmin,admin',
-                        'menu_role_access'  => '["globeadmin","admin"]',
-                        'menu_active'       => 1,
-                        'menu_icon'         => 'shield',
                         'menu_open_mode'    => 'inline|browse',
                         'menu_browse_mode'  => 'inline',
                         'menu_preview_mode' => 'inline',
