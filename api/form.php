@@ -2421,14 +2421,15 @@ function nu_handle_save() {
         if (!$sets) nu_json(['success' => false, 'error' => 'No fields to update'], 400);
         $params[] = $id;
         nu_q("UPDATE `{$table}` SET " . implode(', ', $sets) . " WHERE `{$pk}` = ?", $params);
+        $finalId = $id;
 
         // Trigger Outgoing Webhooks for form_update
         try {
             require_once __DIR__ . '/../core/WebhookSender.php';
             NuWebhookSender::trigger('form_update', [
                 'table'     => $table,
-                'record_id' => $id,
-                'data'      => array_merge($save, ['id' => $id])
+                'record_id' => $finalId,
+                'data'      => array_merge($save, ['id' => $finalId])
             ]);
         } catch (\Throwable $whe) {
             error_log('[Webhook Dynamic Form Update Trigger Error] ' . $whe->getMessage());
