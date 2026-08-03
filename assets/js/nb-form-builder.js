@@ -905,15 +905,21 @@ function _openPropsPanel(card) {
     rowEl._nbRowDragWired = true;
     rowEl.setAttribute('draggable', 'true');
     rowEl.addEventListener('dragstart', function (e) {
-      if (!e.target.classList.contains('nb-row-drag')) return;
+      if (!e.target.classList.contains('nb-row-drag') && !e.target.closest('.nb-row-drag')) {
+        e.preventDefault();
+        return;
+      }
       e.stopPropagation();
-      e.dataTransfer.setData('text/nb-row-id', rowEl.id || (rowEl.id = 'nb-row-' + Date.now()));
+      var rId = rowEl.id || (rowEl.id = 'nb-row-' + Date.now() + '-' + Math.random().toString(36).slice(2,5));
+      e.dataTransfer.setData('text/nb-row-id', rId);
       e.dataTransfer.effectAllowed = 'move';
       rowEl.classList.add('drag-row-source');
+      window._nbDraggedRowOrContainer = rowEl;
     });
     rowEl.addEventListener('dragend', function () {
       rowEl.classList.remove('drag-row-source');
       document.querySelectorAll('.drag-row-over').forEach(function (el) { el.classList.remove('drag-row-over'); });
+      window._nbDraggedRowOrContainer = null;
     });
   }
 
@@ -952,6 +958,125 @@ function _openPropsPanel(card) {
     });
   }
 
+  /* ── Unified Row/Container Drag-and-Drop ── */
+  function _attachRowContainerDragAndDrop(container) {
+    if (!container) return;
+    if (container._nbRowDropWired) return;
+    container._nbRowDropWired = true;
+
+    container.addEventListener('dragover', function (e) {
+      var dragged = window._nbDraggedRowOrContainer;
+      if (!dragged) return;
+
+      // Group/Tab containers cannot be nested inside Group container bodies
+      if (dragged.classList.contains('nb-container') && container.classList.contains('nb-container-group-body')) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      var target = e.target;
+      while (target && target.parentNode !== container) {
+        target = target.parentNode;
+      }
+
+      document.querySelectorAll('.drag-row-over').forEach(function (el) {
+        if (el !== target) el.classList.remove('drag-row-over');
+      });
+
+      if (target && target !== dragged) {
+        target.classList.add('drag-row-over');
+      } else {
+        container.classList.add('drag-row-over');
+      }
+    });
+
+    container.addEventListener('dragleave', function (e) {
+      if (!container.contains(e.relatedTarget)) {
+        container.classList.remove('drag-row-over');
+        document.querySelectorAll('.drag-row-over').forEach(function (el) {
+          el.classList.remove('drag-row-over');
+        });
+      }
+    });
+
+    container.addEventListener('drop', function (e) {
+      var dragged = window._nbDraggedRowOrContainer;
+      if (!dragged) return;
+
+      if (dragged.classList.contains('nb-container') && container.classList.contains('nb-container-group-body')) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      container.classList.remove('drag-row-over');
+      document.querySelectorAll('.drag-row-over').forEach(function (el) {
+        el.classList.remove('drag-row-over');
+      });
+
+      var target = e.target;
+      while (target && target.parentNode !== container) {
+        target = target.parentNode;
+      }
+
+      // Keep track of the original parent to handle hints
+      var oldParent = dragged.parentNode;
+
+      // Update inner-row class based on whether destination is main canvas or container body
+      if (dragged.classList.contains('nb-row')) {
+        if (container.id === 'formCanvas') {
+          dragged.classList.remove('nb-inner-row');
+        } else {
+          dragged.classList.add('nb-inner-row');
+        }
+      }
+
+      // Remove hint from target container
+      var hint = container.querySelector(':scope > .nb-row-drop-hint');
+      if (hint) hint.remove();
+
+      if (target && target !== dragged) {
+        var rect = target.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+          container.insertBefore(dragged, target);
+        } else {
+          container.insertBefore(dragged, target.nextSibling);
+        }
+      } else {
+        container.appendChild(dragged);
+      }
+
+      // Restore hint to old parent if now empty
+      if (oldParent && oldParent !== container) {
+        if (oldParent.classList.contains('nb-container-group-body')) {
+          if (!oldParent.querySelector('.nb-row') && !oldParent.querySelector('.nb-inner-row')) {
+            if (!oldParent.querySelector('.nb-row-drop-hint')) {
+              var h = document.createElement('div');
+              h.className = 'nb-row-drop-hint';
+              h.textContent = 'Click "+ Row" to add a row, then drop fields in';
+              oldParent.appendChild(h);
+            }
+          }
+        } else if (oldParent.classList.contains('nb-tab-panel-rows')) {
+          if (!oldParent.querySelector('.nb-row') && !oldParent.querySelector('.nb-inner-row') && !oldParent.querySelector('.nb-container-group')) {
+            if (!oldParent.querySelector('.nb-row-drop-hint')) {
+              var h = document.createElement('div');
+              h.className = 'nb-row-drop-hint';
+              h.textContent = 'Click "+ Row" or "+ Group" to add content';
+              oldParent.appendChild(h);
+            }
+          }
+        }
+      }
+
+      window.nbFormBuilder._updateEmptyState();
+      window.nbFormBuilder._isDirty = true;
+    });
+  }
+
   /* ── Canvas drop ── */
   function _attachCanvasRowDrop(canvas) {
     if (canvas._nbCanvasRowDropWired) return;
@@ -962,22 +1087,17 @@ function _openPropsPanel(card) {
       var hasNbType = Array.prototype.indexOf.call(types, 'text/nb-type')    !== -1;
       var hasPlain  = Array.prototype.indexOf.call(types, 'text/plain')      !== -1;
       if (hasNbType || hasPlain) { e.preventDefault(); e.stopPropagation(); canvas.classList.add('nb-canvas-tool-over'); return; }
-      if (!hasRowId) return;
-      e.preventDefault(); e.stopPropagation(); canvas.classList.remove('nb-canvas-tool-over');
-      var target = e.target; while (target && target.parentNode !== canvas) target = target.parentNode;
-      if (!target || target === canvas || target.classList.contains('drag-row-source')) return;
-      document.querySelectorAll('.drag-row-over').forEach(function (el) { el.classList.remove('drag-row-over'); });
-      target.classList.add('drag-row-over');
+      if (hasRowId) return; // Let unified row drag-and-drop handle it
     });
     canvas.addEventListener('dragleave', function (e) {
       if (!canvas.contains(e.relatedTarget)) {
         canvas.classList.remove('nb-canvas-tool-over');
-        document.querySelectorAll('.drag-row-over').forEach(function (el) { el.classList.remove('drag-row-over'); });
       }
     });
     canvas.addEventListener('drop', function (e) {
+      var hasRowId = e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'text/nb-row-id') !== -1;
+      if (hasRowId) return; // Let unified row drag-and-drop handle it
       canvas.classList.remove('nb-canvas-tool-over');
-      document.querySelectorAll('.drag-row-over').forEach(function (el) { el.classList.remove('drag-row-over'); });
       var dtype = e.dataTransfer.getData('text/nb-type') || e.dataTransfer.getData('text/plain') || '';
       if (dtype) {
         if (dtype === 'group' || dtype === 'tab') { e.preventDefault(); e.stopPropagation(); window.nbFormBuilder.addField(dtype, {}); return; }
@@ -990,15 +1110,6 @@ function _openPropsPanel(card) {
         }
         window.nbFormBuilder._updateEmptyState(); return;
       }
-      var rowId = e.dataTransfer.getData('text/nb-row-id'); if (!rowId) return;
-      e.preventDefault(); e.stopPropagation();
-      var draggedRow = document.getElementById(rowId);
-      if (!draggedRow || draggedRow.parentNode !== canvas) return;
-      var target = e.target; while (target && target.parentNode !== canvas) target = target.parentNode;
-      if (!target || target === draggedRow) return;
-      var rect = target.getBoundingClientRect();
-      if (e.clientY < rect.top + rect.height / 2) canvas.insertBefore(draggedRow, target);
-      else canvas.insertBefore(draggedRow, target.nextSibling);
     });
   }
 
@@ -1027,6 +1138,7 @@ function _openPropsPanel(card) {
     });
     header.appendChild(dh); header.appendChild(badge); header.appendChild(li); header.appendChild(addRowBtn); header.appendChild(delBtn);
     var body = document.createElement('div'); body.className = 'nb-container-body nb-container-group-body';
+    _attachRowContainerDragAndDrop(body);
     var hint = document.createElement('div'); hint.className = 'nb-row-drop-hint'; hint.textContent = 'Click "+ Row" to add a row, then drop fields in';
     body.appendChild(hint); wrap.appendChild(header); wrap.appendChild(body);
     if (extra.rows && extra.rows.length) {
@@ -1113,6 +1225,7 @@ function _openPropsPanel(card) {
     var addGrpBtn = document.createElement('button'); addGrpBtn.type = 'button'; addGrpBtn.className = 'nb-row-btn'; addGrpBtn.textContent = '+ Group';
     toolbar.appendChild(addRowBtn); toolbar.appendChild(addGrpBtn);
     var rowsBody = document.createElement('div'); rowsBody.className = 'nb-tab-panel-rows';
+    _attachRowContainerDragAndDrop(rowsBody);
     panel.appendChild(toolbar); panel.appendChild(rowsBody); panels.appendChild(panel);
     addRowBtn.addEventListener('click', function () { _addRowToContainer(rowsBody, [], false); });
     addGrpBtn.addEventListener('click', function () {
@@ -2029,7 +2142,11 @@ entry.fields.forEach(function (f) {
 
     _initAfterLoad: function () {
       _attachAllRowDrops();
-      var canvas = document.getElementById('formCanvas'); if (canvas) _attachCanvasRowDrop(canvas);
+      var canvas = document.getElementById('formCanvas');
+      if (canvas) {
+        _attachCanvasRowDrop(canvas);
+        _attachRowContainerDragAndDrop(canvas);
+      }
     }
   };
 
@@ -3064,6 +3181,7 @@ entry.fields.forEach(function (f) {
     var canvas = document.getElementById('formCanvas');
     if (canvas) {
       _attachCanvasRowDrop(canvas);
+      _attachRowContainerDragAndDrop(canvas);
       canvas.querySelectorAll('.nb-row-body').forEach(_attachRowBodyDrop);
       canvas.querySelectorAll('.nb-row,.nb-container').forEach(_wireRowDrag);
       canvas.querySelectorAll('.nb-cfield').forEach(function (card) { _prepCard(card); });
