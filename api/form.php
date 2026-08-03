@@ -441,6 +441,7 @@ function nu_render_field($field, $value = '', $record = []) {
     $readonlyStyle = $isReadonly ? 'background:var(--bg-offset,#f5f5f5);color:#888;cursor:default;' : '';
 
     if ($type === 'uploadbutton') {
+        global $nuConfig;
         $buttonText = trim((string)($field['button_text'] ?? 'Upload'));
 
         // Dynamic Allowed Extensions Configuration
@@ -583,12 +584,6 @@ function nu_render_field($field, $value = '', $record = []) {
                   document.getElementById("wrap_' . $name . '").appendChild(notice);
                 }
               }
-            });
-
-            uppy.on("cancel-all", () => {
-              uppy.getPlugin("Dashboard").closeModal();
-              uppy.close();
-              modalContainer.remove();
             });
 
             uppy.on("dashboard:modal-closed", () => {
