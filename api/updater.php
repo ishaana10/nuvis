@@ -259,13 +259,13 @@ try {
             $res = (string)shell_exec($gitCmdPrefix . "fetch origin 2>&1");
             $output .= "git fetch:\n" . trim($res) . "\n\n";
 
-            // Track remote branch, checkout
+            // Track remote branch, checkout (using force -f to bypass overwrite errors for manually uploaded files)
             $branchEscaped = escapeshellarg($branch);
             $output .= "Checking out branch '{$branch}'...\n";
-            $res = (string)shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} --track origin/{$branchEscaped} 2>&1");
+            $res = (string)shell_exec($gitCmdPrefix . "checkout -f -B {$branchEscaped} --track origin/{$branchEscaped} 2>&1");
             if (stripos($res, 'fatal:') !== false) {
                 // Try checkout without track if remote tracking branch doesn't exist yet or if already tracked
-                $res = (string)shell_exec($gitCmdPrefix . "checkout -B {$branchEscaped} origin/{$branchEscaped} 2>&1");
+                $res = (string)shell_exec($gitCmdPrefix . "checkout -f -B {$branchEscaped} origin/{$branchEscaped} 2>&1");
             }
             $output .= "git checkout:\n" . trim($res) . "\n\n";
 
@@ -367,10 +367,26 @@ try {
             $gitCmdPrefix = escapeshellarg($git_path) . " -C " . escapeshellarg($git_repo_dir) . " -c safe.directory=* ";
             $selectedBranchEscaped = escapeshellarg($selectedBranch);
 
-            // Switch branch and pull
-            shell_exec($gitCmdPrefix . "checkout {$selectedBranchEscaped} 2>&1");
-            $output = shell_exec($gitCmdPrefix . "pull origin {$selectedBranchEscaped} 2>&1");
-            echo json_encode(['success' => true, 'output' => trim((string)$output), 'pulled_branch' => $selectedBranch]);
+            // Let's first fetch to have accurate remote state
+            shell_exec($gitCmdPrefix . "fetch origin {$selectedBranchEscaped} 2>&1");
+
+            // Capture the diff summary before we reset, to show the user what files changed
+            $diffOutput = (string)shell_exec($gitCmdPrefix . "diff --name-status HEAD origin/{$selectedBranchEscaped} 2>&1");
+
+            // Perform forced checkout to transition/switch cleanly
+            shell_exec($gitCmdPrefix . "checkout -f {$selectedBranchEscaped} 2>&1");
+
+            // Pull with force strategies or do a hard reset to remote to ensure local conflicts are cleanly overwritten
+            $pullOutput = (string)shell_exec($gitCmdPrefix . "pull origin {$selectedBranchEscaped} -X theirs --no-rebase 2>&1");
+            $resetOutput = (string)shell_exec($gitCmdPrefix . "reset --hard origin/{$selectedBranchEscaped} 2>&1");
+
+            // Construct rich output response
+            $output = "Git Pull:\n" . trim($pullOutput) . "\n\nGit Reset Hard:\n" . trim($resetOutput);
+            if (!empty($diffOutput) && stripos($diffOutput, 'fatal:') === false) {
+                $output .= "\n\nUpdated Files:\n" . trim($diffOutput);
+            }
+
+            echo json_encode(['success' => true, 'output' => trim($output), 'pulled_branch' => $selectedBranch]);
             break;
 
         case 'git_log':
