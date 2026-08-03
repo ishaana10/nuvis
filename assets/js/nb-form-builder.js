@@ -903,10 +903,23 @@ function _openPropsPanel(card) {
     var handle = rowEl.querySelector(':scope > .nb-row-header > .nb-row-drag, :scope > .nb-container-header > .nb-row-drag');
     if (!handle || rowEl._nbRowDragWired) return;
     rowEl._nbRowDragWired = true;
-    rowEl.setAttribute('draggable', 'true');
+
+    rowEl.setAttribute('draggable', 'false');
+
+    handle.addEventListener('mousedown', function () {
+      rowEl.setAttribute('draggable', 'true');
+    });
+
+    handle.addEventListener('mouseup', function () {
+      rowEl.setAttribute('draggable', 'false');
+    });
+
+    handle.addEventListener('mouseleave', function () {
+      rowEl.setAttribute('draggable', 'false');
+    });
+
     rowEl.addEventListener('dragstart', function (e) {
-      if (!e.target.classList.contains('nb-row-drag') && !e.target.closest('.nb-row-drag')) {
-        e.preventDefault();
+      if (e.target !== rowEl || rowEl.getAttribute('draggable') !== 'true') {
         return;
       }
       e.stopPropagation();
@@ -916,8 +929,10 @@ function _openPropsPanel(card) {
       rowEl.classList.add('drag-row-source');
       window._nbDraggedRowOrContainer = rowEl;
     });
+
     rowEl.addEventListener('dragend', function () {
       rowEl.classList.remove('drag-row-source');
+      rowEl.setAttribute('draggable', 'false');
       document.querySelectorAll('.drag-row-over').forEach(function (el) { el.classList.remove('drag-row-over'); });
       window._nbDraggedRowOrContainer = null;
     });
@@ -968,6 +983,11 @@ function _openPropsPanel(card) {
       var dragged = window._nbDraggedRowOrContainer;
       if (!dragged) return;
 
+      // Safety check: Avoid hierarchy DOM exception if trying to drag a container into its own descendant
+      if (dragged.contains(container)) {
+        return;
+      }
+
       // Group/Tab containers cannot be nested inside Group container bodies
       if (dragged.classList.contains('nb-container') && container.classList.contains('nb-container-group-body')) {
         return;
@@ -1004,6 +1024,11 @@ function _openPropsPanel(card) {
     container.addEventListener('drop', function (e) {
       var dragged = window._nbDraggedRowOrContainer;
       if (!dragged) return;
+
+      // Safety check: Avoid hierarchy DOM exception if trying to drag a container into its own descendant
+      if (dragged.contains(container)) {
+        return;
+      }
 
       if (dragged.classList.contains('nb-container') && container.classList.contains('nb-container-group-body')) {
         return;
@@ -1350,6 +1375,7 @@ fields.forEach(function (f) {
     card.setAttribute('draggable', 'true');
     card.addEventListener('dragstart', function (ev) {
       if (ev.target.classList.contains('nb-cfield-resize')) { ev.preventDefault(); return; }
+      ev.stopPropagation();
       ev.dataTransfer.setData('text/nb-card-id', card.id); card.classList.add('drag-source');
     });
     card.addEventListener('dragend', function () { card.classList.remove('drag-source'); });
