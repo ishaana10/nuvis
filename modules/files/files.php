@@ -9,19 +9,26 @@ if (!$auth->hasPermission('files.view')) {
 
 $db    = NuDatabase::getInstance();
 $files = $db->fetchAll("SELECT * FROM nu_files ORDER BY file_uploaded_at DESC LIMIT 50");
+
+// Parse global allowed file extensions and max upload size
+$allowedTypes = array_map(function($ext) {
+    return '.' . ltrim($ext, '.');
+}, $nuConfig['allowedFileTypes'] ?? []);
+$maxSize = $nuConfig['maxUploadSize'] ?? 10 * 1024 * 1024;
 ?>
 
 <div class="nu-files">
     <div class="nu-card">
-        <div class="nu-card-header">
-            <h3 class="nu-card-title">File Manager</h3>
+        <div class="nu-card-header" style="flex-direction:column; align-items:stretch; gap:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 class="nu-card-title">File Manager</h3>
+            </div>
+
             <?php if ($auth->hasPermission('files.upload')): ?>
-            <form id="uploadForm" style="display:flex;gap:8px;align-items:center;">
-                <input type="file" class="nu-input" id="fileInput" style="padding:6px 10px;font-size:13px;">
-                <button type="submit" class="nu-btn nu-btn-primary nu-btn-sm">Upload</button>
-            </form>
+            <div id="uppy-dashboard" style="max-width: 100%; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: var(--bg-offset);"></div>
             <?php endif; ?>
         </div>
+
         <div class="nu-table-wrap">
             <table class="nu-table">
                 <thead>
@@ -48,3 +55,65 @@ $files = $db->fetchAll("SELECT * FROM nu_files ORDER BY file_uploaded_at DESC LI
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    const dashboardEl = document.getElementById('uppy-dashboard');
+    if (!dashboardEl) return;
+
+    const allowedTypes = <?php echo json_encode($allowedTypes); ?>;
+    const maxFileSize = <?php echo json_encode($maxSize); ?>;
+
+    const uppy = new Uppy.Uppy({
+        autoProceed: false,
+        restrictions: {
+            maxFileSize: maxFileSize,
+            allowedFileTypes: allowedTypes
+        }
+    })
+    .use(Uppy.Dashboard, {
+        target: '#uppy-dashboard',
+        inline: true,
+        height: 260,
+        width: '100%',
+        showProgressDetails: true,
+        proudlyDisplayPoweredByUppy: false
+    })
+    .use(Uppy.XHRUpload, {
+        endpoint: 'api/upload.php',
+        fieldName: 'file',
+        formData: true
+    });
+
+    uppy.on('complete', (result) => {
+        if (result.successful.length > 0) {
+            NuApp.toast('Files uploaded successfully!', 'success');
+            setTimeout(() => {
+                uppy.close();
+                NuApp.loadModule('files');
+            }, 800);
+        }
+    });
+})();
+
+window.deleteFile = async function(id) {
+    if (!confirm('Are you sure you want to delete this file permanently?')) return;
+    try {
+        const res = await fetch('api/upload.php?action=delete&id=' + id, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': window.nuCsrfToken || ''
+            }
+        });
+        const json = await res.json();
+        if (json.success) {
+            NuApp.toast('File deleted successfully', 'success');
+            NuApp.loadModule('files');
+        } else {
+            NuApp.toast(json.error || 'Failed to delete file', 'error');
+        }
+    } catch (e) {
+        NuApp.toast('Error deleting file: ' + e.message, 'error');
+    }
+};
+</script>
