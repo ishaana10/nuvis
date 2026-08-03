@@ -2513,6 +2513,8 @@ if (!nbFormBuilder._groupTabPatched) {
   if (field.upload_path != null && extra.upload_path == null) extra.upload_path = field.upload_path;
   if (field.allowed_extensions != null && extra.allowed_extensions == null) extra.allowed_extensions = field.allowed_extensions;
   if (field.preview != null && extra.preview == null) extra.preview = field.preview;
+  if (field.upload_target != null && extra.upload_target == null) extra.upload_target = field.upload_target;
+  if (field.onedrive_client_id != null && extra.onedrive_client_id == null) extra.onedrive_client_id = field.onedrive_client_id;
 
   if (field.canvas_width != null && extra.canvas_width == null) extra.canvas_width = field.canvas_width;
   if (field.canvas_height != null && extra.canvas_height == null) extra.canvas_height = field.canvas_height;
@@ -2609,6 +2611,19 @@ if (!nbFormBuilder._groupTabPatched) {
               <option value="json" ${field.storage_mode === 'json' ? 'selected' : ''}>JSON metadata</option>
               <option value="base64" ${field.storage_mode === 'base64' ? 'selected' : ''}>Base64</option>
             </select>
+          </div>
+
+          <div class="nb-fp">
+            <label>Upload Target</label>
+            <select class="nu-input nb-adv-prop" data-prop="upload_target" onchange="this.closest('.nb-fp-grid').querySelector('#fp_onedrive_client_id').style.display = (this.value === 'onedrive' ? 'block' : 'none')">
+              <option value="local" ${field.upload_target === 'local' || !field.upload_target ? 'selected' : ''}>Local Server</option>
+              <option value="onedrive" ${field.upload_target === 'onedrive' ? 'selected' : ''}>OneDrive (Microsoft)</option>
+            </select>
+          </div>
+
+          <div class="nb-fp" id="fp_onedrive_client_id" style="display: ${field.upload_target === 'onedrive' ? 'block' : 'none'};">
+            <label>OneDrive Client ID</label>
+            <input type="text" class="nu-input nb-adv-prop" data-prop="onedrive_client_id" value="${esc(field.onedrive_client_id || '')}" placeholder="Client / App ID">
           </div>
 
           <div class="nb-fp">
@@ -3004,6 +3019,8 @@ nbFormBuilder._makeDefaultField = function(type) {
         made.storage_mode = made.storage_mode || 'file';
         made.upload_path = made.upload_path || 'uploads/';
         made.allowed_extensions = made.allowed_extensions || '';
+        made.upload_target = made.upload_target || 'local';
+        made.onedrive_client_id = made.onedrive_client_id || '';
         made.preview = made.preview !== false;
         made.hide_in_grid = made.hide_in_grid !== undefined ? made.hide_in_grid : true;
         made.required = !!made.required;
@@ -3068,6 +3085,8 @@ nbFormBuilder._makeDefaultField = function(type) {
     base.storage_mode = 'file';
     base.upload_path = 'uploads/';
     base.allowed_extensions = '';
+    base.upload_target = 'local';
+    base.onedrive_client_id = '';
     base.preview = true;
     base.hide_in_grid = true;
     return base;

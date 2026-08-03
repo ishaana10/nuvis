@@ -444,6 +444,10 @@ function nu_render_field($field, $value = '', $record = []) {
         global $nuConfig;
         $buttonText = trim((string)($field['button_text'] ?? 'Upload'));
 
+        // Developer determined upload target & settings
+        $uploadTarget = trim((string)($field['upload_target'] ?? 'local'));
+        $onedriveClientId = trim((string)($field['onedrive_client_id'] ?? ''));
+
         // Dynamic Allowed Extensions Configuration
         $allowedExts = [];
         if (!empty($field['allowed_extensions'])) {
@@ -490,14 +494,29 @@ function nu_render_field($field, $value = '', $record = []) {
             $filesArray = array_map('trim', explode(',', $currentValue));
             foreach ($filesArray as $fName) {
                 if ($fName !== '') {
-                    $ext = strtolower(pathinfo($fName, PATHINFO_EXTENSION));
-                    if (in_array($ext, ['jpg','jpeg','png','gif','webp','svg'], true)) {
-                        $html .= '<div style="display:inline-block;text-align:center;">';
-                        $html .= '<img src="uploads/' . nu_html($fName) . '" style="max-height:80px;border-radius:4px;border:1px solid var(--border-color);cursor:pointer;" onclick="window._showImageLightbox(' . nu_attr(json_encode('uploads/' . $fName)) . ')">';
-                        $html .= '<div style="font-size:10px;color:var(--text-tertiary);margin-top:2px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' . nu_html(basename($fName)) . '</div>';
-                        $html .= '</div>';
+                    if (str_starts_with($fName, 'http://') || str_starts_with($fName, 'https://')) {
+                        // OneDrive/external cloud url preview
+                        $parsedUrl = parse_url($fName, PHP_URL_PATH) ?? '';
+                        $ext = strtolower(pathinfo($parsedUrl, PATHINFO_EXTENSION));
+                        if (in_array($ext, ['jpg','jpeg','png','gif','webp','svg'], true)) {
+                            $html .= '<div style="display:inline-block;text-align:center;">';
+                            $html .= '<img src="' . nu_attr($fName) . '" style="max-height:80px;border-radius:4px;border:1px solid var(--border-color);cursor:pointer;" onclick="window._showImageLightbox(' . nu_attr(json_encode($fName)) . ')">';
+                            $html .= '<div style="font-size:10px;color:var(--text-tertiary);margin-top:2px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Cloud Image</div>';
+                            $html .= '</div>';
+                        } else {
+                            $html .= '<div style="margin-top:4px;font-size:11px;color:var(--text-tertiary);">OneDrive: <a href="' . nu_attr($fName) . '" target="_blank" style="color:var(--color-primary);text-decoration:underline;">View Link</a></div>';
+                        }
                     } else {
-                        $html .= '<div style="margin-top:4px;font-size:11px;color:var(--text-tertiary);">Current: <a href="uploads/' . nu_html($fName) . '" target="_blank" style="color:var(--color-primary);text-decoration:underline;">' . nu_html(basename($fName)) . '</a></div>';
+                        // Local upload preview
+                        $ext = strtolower(pathinfo($fName, PATHINFO_EXTENSION));
+                        if (in_array($ext, ['jpg','jpeg','png','gif','webp','svg'], true)) {
+                            $html .= '<div style="display:inline-block;text-align:center;">';
+                            $html .= '<img src="uploads/' . nu_html($fName) . '" style="max-height:80px;border-radius:4px;border:1px solid var(--border-color);cursor:pointer;" onclick="window._showImageLightbox(' . nu_attr(json_encode('uploads/' . $fName)) . ')">';
+                            $html .= '<div style="font-size:10px;color:var(--text-tertiary);margin-top:2px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' . nu_html(basename($fName)) . '</div>';
+                            $html .= '</div>';
+                        } else {
+                            $html .= '<div style="margin-top:4px;font-size:11px;color:var(--text-tertiary);">Current: <a href="uploads/' . nu_html($fName) . '" target="_blank" style="color:var(--color-primary);text-decoration:underline;">' . nu_html(basename($fName)) . '</a></div>';
+                        }
                     }
                 }
             }
@@ -524,7 +543,65 @@ function nu_render_field($field, $value = '', $record = []) {
             });
           }
 
+          function launchOneDrivePicker() {
+            const clientId = ' . json_encode($onedriveClientId) . ';
+            if (!clientId) {
+              NuApp.toast("Error: OneDrive Client ID is not configured in properties panel!", "error");
+              return;
+            }
+            const isMultiple = ' . json_encode(!empty($multiple)) . ';
+            const odOptions = {
+              clientId: clientId,
+              action: "share",
+              multiSelect: isMultiple,
+              advanced: {},
+              success: function(response) {
+                if (response && response.value && response.value.length > 0) {
+                  const links = response.value.map(item => item.permissions[0].link.webUrl);
+                  if (t.value) {
+                    t.value = t.value + ", " + links.join(", ");
+                  } else {
+                    t.value = links.join(", ");
+                  }
+                  NuApp.toast("OneDrive link acquired!", "success");
+
+                  let notice = document.getElementById("notice_' . $name . '");
+                  if (!notice) {
+                    notice = document.createElement("div");
+                    notice.id = "notice_' . $name . '";
+                    notice.style.cssText = "margin-top:6px;font-size:11px;color:var(--warning,#f59e0b);font-weight:600;";
+                    notice.textContent = "⚠️ Save form to apply changes and view new file previews.";
+                    document.getElementById("wrap_' . $name . '").appendChild(notice);
+                  }
+                }
+              },
+              cancel: function() {
+                NuApp.toast("OneDrive selection canceled.", "info");
+              },
+              error: function(err) {
+                NuApp.toast("OneDrive Error: " + (err.message || String(err)), "error");
+                console.error("OneDrive error", err);
+              }
+            };
+            OneDrive.open(odOptions);
+          }
+
           btn.addEventListener("click", function(){
+            const targetMode = ' . json_encode($uploadTarget) . ';
+            if (targetMode === "onedrive") {
+              if (typeof OneDrive === "undefined") {
+                NuApp.toast("OneDrive Picker SDK is loading...", "info");
+                const script = document.createElement("script");
+                script.src = "https://js.live.net/v7.2/OneDrive.js";
+                script.onload = launchOneDrivePicker;
+                document.head.appendChild(script);
+              } else {
+                launchOneDrivePicker();
+              }
+              return;
+            }
+
+            // Local Server upload mode using Uppy
             let modalId = "uppy_modal_' . $name . '";
             let modalContainer = document.getElementById(modalId);
             if (!modalContainer) {
