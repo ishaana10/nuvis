@@ -586,12 +586,6 @@ function nu_render_field($field, $value = '', $record = []) {
               }
             });
 
-            uppy.on("cancel-all", () => {
-              uppy.getPlugin("Dashboard").closeModal();
-              uppy.close();
-              modalContainer.remove();
-            });
-
             uppy.on("dashboard:modal-closed", () => {
               uppy.close();
               modalContainer.remove();
