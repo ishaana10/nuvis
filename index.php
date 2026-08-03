@@ -153,6 +153,7 @@ try {
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="<?= nu_asset('assets/css/nubuilder-next.css') ?>">
     <link rel="stylesheet" href="<?= nu_asset('assets/css/select2.min.css') ?>">
+    <link rel="stylesheet" href="<?= nu_asset('lib/uppy/uppy.min.css') ?>">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b1020">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -591,6 +592,7 @@ try {
 <?php if ($isLoggedIn): ?>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="<?= nu_asset('assets/js/select2.min.js') ?>"></script>
+<script src="<?= nu_asset('lib/uppy/uppy.min.js') ?>"></script>
 <script src="<?= nu_asset('assets/js/nubuilder-next.js') ?>"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.43.3/ace.min.js" ></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.43.3/ext-language_tools.min.js" ></script>
@@ -607,6 +609,8 @@ try {
     window.nuUserRole  = <?= json_encode($_role) ?>;
     // ── Inject per-action permission flags derived from role's wildcard row ──
     window.nuUserPerms = <?= json_encode($_nuUserPerms) ?>;
+    // ── Inject global CSRF token for secure AJAX requests ────────────────────
+    window.nuCsrfToken = <?= json_encode($csrfToken) ?>;
 
     // Restore theme
     try {

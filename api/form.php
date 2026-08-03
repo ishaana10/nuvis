@@ -442,22 +442,65 @@ function nu_render_field($field, $value = '', $record = []) {
 
     if ($type === 'uploadbutton') {
         $buttonText = trim((string)($field['button_text'] ?? 'Upload'));
-        $accept = trim((string)($field['accept'] ?? ''));
+
+        // Dynamic Allowed Extensions Configuration
+        $allowedExts = [];
+        if (!empty($field['allowed_extensions'])) {
+            $exts = explode(',', $field['allowed_extensions']);
+            foreach ($exts as $e) {
+                $e = trim($e);
+                if ($e !== '') {
+                    $allowedExts[] = str_starts_with($e, '.') ? $e : '.' . $e;
+                }
+            }
+        } else {
+            // Fallback to global config limits
+            $allowedExts = array_map(function($ext) {
+                return '.' . ltrim($ext, '.');
+            }, $nuConfig['allowedFileTypes'] ?? []);
+        }
+
+        // Dynamic Max File Size Configuration
+        if (!empty($field['max_file_size_mb'])) {
+            $maxSize = (int)$field['max_file_size_mb'] * 1024 * 1024;
+        } else {
+            $maxSize = $nuConfig['maxUploadSize'] ?? 10 * 1024 * 1024;
+        }
+
         $multiple = !empty($field['multiple']) ? ' multiple' : '';
+        $maxFiles = !empty($multiple) ? (isset($field['max_files']) ? (int)$field['max_files'] : null) : 1;
+        if ($maxFiles !== null && $maxFiles <= 0) {
+            $maxFiles = null;
+        }
         $preview = !empty($field['preview']);
         $currentValue = is_string($value) ? $value : '';
-        $acceptAttr = $accept !== '' ? ' accept="' . nu_attr($accept) . '"' : '';
 
-        $html = '<div class="nu-field-wrap nu-field-uploadbutton">';
+        $html = '<div class="nu-field-wrap nu-field-uploadbutton" id="wrap_' . nu_attr($name) . '">';
         $html .= '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
-        $html .= '<label class="nu-btn nu-btn-ghost nu-btn-sm" style="margin:0;cursor:pointer;">' . nu_html($buttonText) .
-                 '<input type="file" name="' . nu_attr($name) . '__file" id="' . nu_attr($name) . '__file" style="display:none;"' .
-                 $acceptAttr . $multiple . $required . '></label>';
+        $html .= '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" id="btn_' . nu_attr($name) . '" style="margin:0;">' . nu_html($buttonText) . '</button>';
         $html .= '<input type="text" class="' . nu_attr($cssClass) . '" name="' . nu_attr($name) . '" id="' . nu_attr($name) . '" value="' . nu_attr($currentValue) . '"' . $placeholder . ' readonly>';
+        if ($currentValue !== '') {
+            $html .= '<button type="button" class="nu-btn nu-btn-danger nu-btn-sm" id="clear_' . nu_attr($name) . '" style="padding:4px 8px;">Clear</button>';
+        }
         $html .= '</div>';
 
         if ($preview && $currentValue !== '') {
-            $html .= '<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);">Current: ' . nu_html(basename($currentValue)) . '</div>';
+            $html .= '<div class="nu-upload-preview" style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">';
+            $filesArray = array_map('trim', explode(',', $currentValue));
+            foreach ($filesArray as $fName) {
+                if ($fName !== '') {
+                    $ext = strtolower(pathinfo($fName, PATHINFO_EXTENSION));
+                    if (in_array($ext, ['jpg','jpeg','png','gif','webp','svg'], true)) {
+                        $html .= '<div style="display:inline-block;text-align:center;">';
+                        $html .= '<img src="uploads/' . nu_html($fName) . '" style="max-height:80px;border-radius:4px;border:1px solid var(--border-color);cursor:pointer;" onclick="window._showImageLightbox(' . nu_attr(json_encode('uploads/' . $fName)) . ')">';
+                        $html .= '<div style="font-size:10px;color:var(--text-tertiary);margin-top:2px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' . nu_html(basename($fName)) . '</div>';
+                        $html .= '</div>';
+                    } else {
+                        $html .= '<div style="margin-top:4px;font-size:11px;color:var(--text-tertiary);">Current: <a href="uploads/' . nu_html($fName) . '" target="_blank" style="color:var(--color-primary);text-decoration:underline;">' . nu_html(basename($fName)) . '</a></div>';
+                    }
+                }
+            }
+            $html .= '</div>';
         }
 
         $html .= $helpHtml;
@@ -465,20 +508,93 @@ function nu_render_field($field, $value = '', $record = []) {
 
         $html .= '<script>
         (function(){
-          var f = document.getElementById(' . json_encode($name . '__file') . ');
-          var t = document.getElementById(' . json_encode($name) . ');
-          if(!f || !t || f.dataset.nbBound) return;
-          f.dataset.nbBound = "1";
-          f.addEventListener("change", function(){
-            if(!f.files || !f.files.length){
+          var btn = document.getElementById("btn_' . $name . '");
+          var t = document.getElementById("' . $name . '");
+          var clearBtn = document.getElementById("clear_' . $name . '");
+          if (!btn || !t || btn.dataset.uppyBound) return;
+          btn.dataset.uppyBound = "1";
+
+          if (clearBtn) {
+            clearBtn.addEventListener("click", function() {
               t.value = "";
-              return;
+              var prv = document.querySelector("#wrap_' . $name . ' .nu-upload-preview");
+              if (prv) prv.remove();
+              clearBtn.remove();
+            });
+          }
+
+          btn.addEventListener("click", function(){
+            let modalId = "uppy_modal_' . $name . '";
+            let modalContainer = document.getElementById(modalId);
+            if (!modalContainer) {
+              modalContainer = document.createElement("div");
+              modalContainer.id = modalId;
+              document.body.appendChild(modalContainer);
             }
-            if(f.hasAttribute("multiple")){
-              t.value = Array.prototype.map.call(f.files, function(x){ return x.name; }).join(", ");
-            } else {
-              t.value = f.files[0].name;
-            }
+
+            const allowedTypes = ' . json_encode($allowedExts) . ';
+            const maxFileSize = ' . json_encode($maxSize) . ';
+            const maxNumFiles = ' . json_encode($maxFiles) . ';
+
+            const uppy = new Uppy.Uppy({
+              autoProceed: false,
+              restrictions: {
+                maxFileSize: maxFileSize,
+                allowedFileTypes: allowedTypes,
+                maxNumberOfFiles: maxNumFiles
+              }
+            })
+            .use(Uppy.Dashboard, {
+              target: modalContainer,
+              inline: false,
+              trigger: "#btn_' . $name . '",
+              closeModalOnClickOutside: true,
+              showProgressDetails: true,
+              proudlyDisplayPoweredByUppy: false,
+              metaFields: []
+            })
+            .use(Uppy.XHRUpload, {
+              endpoint: "api/upload.php",
+              fieldName: "file",
+              formData: true
+            });
+
+            uppy.getPlugin("Dashboard").openModal();
+
+            uppy.on("complete", (result) => {
+              if (result.successful.length > 0) {
+                const names = result.successful.map(file => file.response.body.name);
+                if (t.value) {
+                  t.value = t.value + ", " + names.join(", ");
+                } else {
+                  t.value = names.join(", ");
+                }
+                NuApp.toast("Upload successful!", "success");
+                uppy.getPlugin("Dashboard").closeModal();
+                uppy.close();
+                modalContainer.remove();
+
+                let notice = document.getElementById("notice_' . $name . '");
+                if (!notice) {
+                  notice = document.createElement("div");
+                  notice.id = "notice_' . $name . '";
+                  notice.style.cssText = "margin-top:6px;font-size:11px;color:var(--warning,#f59e0b);font-weight:600;";
+                  notice.textContent = "⚠️ Save form to apply changes and view new file previews.";
+                  document.getElementById("wrap_' . $name . '").appendChild(notice);
+                }
+              }
+            });
+
+            uppy.on("cancel-all", () => {
+              uppy.getPlugin("Dashboard").closeModal();
+              uppy.close();
+              modalContainer.remove();
+            });
+
+            uppy.on("dashboard:modal-closed", () => {
+              uppy.close();
+              modalContainer.remove();
+            });
           });
         })();
         </script>';

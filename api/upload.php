@@ -19,6 +19,48 @@ if (!$auth->hasPermission('files.upload')) {
     exit;
 }
 
+// Secure Deletion Action
+if (isset($_GET['action']) && $_GET['action'] === 'delete') {
+    // Validate CSRF token to prevent CSRF attacks
+    $headers = function_exists('getallheaders') ? getallheaders() : [];
+    $token = $headers['X-CSRF-Token'] ?? $headers['x-csrf-token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_GET['csrf_token'] ?? '';
+    if (!$auth->verifyCsrfToken($token)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
+        exit;
+    }
+
+    $fileId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    if ($fileId <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Invalid file ID']);
+        exit;
+    }
+
+    $db = NuDatabase::getInstance();
+    $file = $db->fetch("SELECT * FROM nu_files WHERE file_id = :id", [':id' => $fileId]);
+    if (!$file) {
+        echo json_encode(['success' => false, 'error' => 'File not found']);
+        exit;
+    }
+
+    // Try to locate and remove physical file
+    $filePath = $file['file_path'];
+    if (file_exists($filePath)) {
+        @unlink($filePath);
+    } elseif (file_exists('../' . $filePath)) {
+        @unlink('../' . $filePath);
+    }
+
+    // Delete database entry
+    $db->delete('nu_files', 'file_id = :id', [':id' => $fileId]);
+
+    $audit = new NuAudit();
+    $audit->log('delete', 'nu_files', $fileId);
+
+    echo json_encode(['success' => true]);
+    exit;
+}
+
 if (!isset($_FILES['file'])) {
     echo json_encode(['success' => false, 'error' => 'No file provided']);
     exit;
