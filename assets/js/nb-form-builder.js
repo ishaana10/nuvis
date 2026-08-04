@@ -1154,6 +1154,12 @@ function _openPropsPanel(card) {
       wrap.style.backgroundColor = '';
     }
 
+    if (wrap.dataset.headerBgColor) {
+      if (header) header.style.backgroundColor = wrap.dataset.headerBgColor;
+    } else {
+      if (header) header.style.backgroundColor = '';
+    }
+
     if (wrap.dataset.textColor) {
       if (header) {
         header.style.color = wrap.dataset.textColor;
@@ -1233,6 +1239,13 @@ function _openPropsPanel(card) {
     var bgRow = createFieldRow('Background Color', bgInput);
     content.appendChild(bgRow);
 
+    var headerBgInput = document.createElement('input');
+    headerBgInput.type = 'color';
+    headerBgInput.value = wrap.dataset.headerBgColor && wrap.dataset.headerBgColor.indexOf('#') === 0 ? wrap.dataset.headerBgColor : '#f8f9fa';
+    headerBgInput.style.cssText = 'cursor:pointer;border:1px solid #ddd;border-radius:4px;width:60px;height:28px;padding:0;';
+    var headerBgRow = createFieldRow('Header Background Color', headerBgInput);
+    content.appendChild(headerBgRow);
+
     var borderInput = document.createElement('input');
     borderInput.type = 'color';
     borderInput.value = wrap.dataset.borderColor && wrap.dataset.borderColor.indexOf('#') === 0 ? wrap.dataset.borderColor : '#4f6bed';
@@ -1292,6 +1305,7 @@ function _openPropsPanel(card) {
       wrap.dataset.collapsible = collapsibleChk.checked ? 'true' : 'false';
       wrap.dataset.collapsedByDefault = collapsedChk.checked ? 'true' : 'false';
       wrap.dataset.bgColor = bgInput.value;
+      wrap.dataset.headerBgColor = headerBgInput.value;
       wrap.dataset.borderColor = borderInput.value;
       wrap.dataset.textColor = textColInput.value;
       wrap.dataset.borderStyle = borderStyleSel.value;
@@ -1318,9 +1332,10 @@ function _openPropsPanel(card) {
     wrap.className = 'nb-container nb-container-group'; wrap.id = id; wrap.dataset.containerType = 'group';
 
     wrap.dataset.groupName = extra.name || 'group_' + Date.now();
-    wrap.dataset.collapsible = extra.collapsible ? 'true' : 'false';
-    wrap.dataset.collapsedByDefault = extra.collapsed ? 'true' : (extra.collapsed_by_default ? 'true' : 'false');
+    wrap.dataset.collapsible = (extra.collapsible === true || extra.collapsible === 'true') ? 'true' : 'false';
+    wrap.dataset.collapsedByDefault = (extra.collapsed === true || extra.collapsed === 'true' || extra.collapsed_by_default === true || extra.collapsed_by_default === 'true') ? 'true' : 'false';
     wrap.dataset.bgColor = extra.bg_color || '';
+    wrap.dataset.headerBgColor = extra.header_bg_color || '';
     wrap.dataset.borderColor = extra.border_color || '';
     wrap.dataset.textColor = extra.text_color || '';
     wrap.dataset.borderStyle = extra.border_style || '';
@@ -2163,6 +2178,7 @@ if (canvasType === 'subform' && sfData) {
               collapsible: el.dataset.collapsible === 'true',
               collapsed: el.dataset.collapsedByDefault === 'true',
               bg_color: el.dataset.bgColor || '',
+              header_bg_color: el.dataset.headerBgColor || '',
               border_color: el.dataset.borderColor || '',
               text_color: el.dataset.textColor || '',
               border_style: el.dataset.borderStyle || '',
@@ -2443,6 +2459,7 @@ entry.fields.forEach(function (f) {
           collapsible: child.dataset.collapsible === 'true',
           collapsed: child.dataset.collapsedByDefault === 'true',
           bg_color: child.dataset.bgColor || '',
+          header_bg_color: child.dataset.headerBgColor || '',
           border_color: child.dataset.borderColor || '',
           text_color: child.dataset.textColor || '',
           border_style: child.dataset.borderStyle || '',

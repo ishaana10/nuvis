@@ -1181,6 +1181,99 @@ function nu_toggle_script() {
          . '</s' . 'cript>';
 }
 
+function nu_render_group_container($node, $record) {
+    static $grpCounter = 0;
+    $grpCounter++;
+
+    $id         = 'grp_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $node['id'] ?? ('g_' . $grpCounter . '_' . date("U") . '_' . rand(100,999)));
+    $label      = nu_html($node['label'] ?? 'Group');
+    $collapsible= !empty($node['collapsible']);
+    $collapsed  = !empty($node['collapsed']);
+    $bodyStyle  = $collapsed ? 'display:none;' : 'display:block;';
+
+    // Outer styling
+    $bStyle = !empty($node['border_style']) ? $node['border_style'] : 'solid';
+    $bWidth = !empty($node['border_width']) ? $node['border_width'] : '1px';
+    $bColor = !empty($node['border_color']) ? $node['border_color'] : '#ddd';
+
+    $outerStyle = 'border-radius:8px;margin-bottom:16px;overflow:hidden;';
+    if (!empty($node['border_color']) || !empty($node['border_style']) || !empty($node['border_width'])) {
+        $outerStyle .= 'border:' . $bWidth . ' ' . $bStyle . ' ' . $bColor . ';';
+    } else {
+        $outerStyle .= 'border:1px solid #ddd;';
+    }
+
+    if (!empty($node['bg_color'])) {
+        $outerStyle .= 'background-color:' . $node['bg_color'] . ';';
+    }
+
+    // Header styling
+    $headerStyle = 'display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 14px;user-select:none;';
+    if (!empty($node['border_color']) || !empty($node['border_style']) || !empty($node['border_width'])) {
+        $headerStyle .= 'border-bottom:' . $bWidth . ' ' . $bStyle . ' ' . $bColor . ';';
+    } else {
+        $headerStyle .= 'border-bottom:1px solid #ddd;';
+    }
+
+    if (!empty($node['text_color'])) {
+        $headerStyle .= 'color:' . $node['text_color'] . ';';
+    }
+
+    if (!empty($node['header_bg_color'])) {
+        $headerStyle .= 'background:' . $node['header_bg_color'] . ';';
+    } else if (!empty($node['bg_color'])) {
+        $headerStyle .= 'background:rgba(0,0,0,0.03);';
+    } else {
+        $headerStyle .= 'background:var(--bg-elevated,#f8f9fa);';
+    }
+
+    $html  = '<div class="nu-group" id="' . nu_attr($id) . '" style="' . $outerStyle . '">';
+    $html .= '<div class="nu-group-header" style="' . $headerStyle . ($collapsible ? 'cursor:pointer;' : '') . '"'
+               . ($collapsible ? ' onclick="nuToggleContainer(this.querySelector(\'.nu-group-toggle\'))"' : '') . '>';
+
+    $html .= '<span style="font-weight:600;font-size:13.5px;color:inherit;">' . $label . '</span>';
+
+    if ($collapsible) {
+        $toggleStyle = 'background:none;border:1px solid currentColor;border-radius:50%;cursor:pointer;font-size:12px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;flex-shrink:0;transition:all 0.2s;font-weight:bold;';
+        if (!empty($node['text_color'])) {
+            $toggleStyle .= 'color:' . $node['text_color'] . ';';
+        } else {
+            $toggleStyle .= 'color:#666;';
+        }
+        $html .= '<button type="button" class="nu-group-toggle"'
+               . ' data-target="' . nu_attr($id) . '-body"'
+               . ' onclick="event.stopPropagation();nuToggleContainer(this)"'
+               . ' style="' . $toggleStyle . '">'
+               . ($collapsed ? '+' : '&#8722;') . '</button>'; // &#8722; is HTML minus sign
+    }
+    $html .= '</div>';
+    $html .= '<div id="' . nu_attr($id) . '-body" class="nu-group-body" style="padding:12px 10px;' . $bodyStyle . '">';
+
+    if (isset($node['children'])) {
+        $gi = 0;
+        foreach ($node['children'] as $child) {
+            $html .= nu_render_layout_node($child, $record, $gi++);
+        }
+    }
+
+    // Render rows if present (from canvas-level Group container)
+    $ROW_STYLE = 'display:grid;grid-template-columns:repeat(12,1fr);gap:8px;margin-bottom:4px;align-items:start;';
+    if (isset($node['rows'])) {
+        foreach ($node['rows'] as $row) {
+            $fields = $row['fields'] ?? [];
+            if (empty($fields)) continue;
+            $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
+            foreach ($fields as $field) {
+                $html .= nu_render_field($field, nu_field_value($record, $field), $record);
+            }
+            $html .= '</div>';
+        }
+    }
+
+    $html .= '</div></div>';
+    return $html;
+}
+
 function nu_render_layout_node($node, $record, $sectionIndex = 0) {
     $type = $node['type'] ?? 'field';
     
@@ -1230,86 +1323,7 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
     }
 
     if ($type === 'group') {
-        $id         = 'grp_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $node['id'] ?? ('g' . $sectionIndex));
-        $label      = nu_html($node['label'] ?? 'Group');
-        $collapsible= !empty($node['collapsible']);
-        $collapsed  = !empty($node['collapsed']);
-        $bodyStyle  = $collapsed ? 'display:none;' : 'display:block;';
-
-        // Outer styling
-        $bStyle = !empty($node['border_style']) ? $node['border_style'] : 'solid';
-        $bWidth = !empty($node['border_width']) ? $node['border_width'] : '1px';
-        $bColor = !empty($node['border_color']) ? $node['border_color'] : '#ddd';
-
-        $outerStyle = 'border-radius:8px;margin-bottom:16px;overflow:hidden;';
-        if (!empty($node['border_color']) || !empty($node['border_style']) || !empty($node['border_width'])) {
-            $outerStyle .= 'border:' . $bWidth . ' ' . $bStyle . ' ' . $bColor . ';';
-        } else {
-            $outerStyle .= 'border:1px solid #ddd;';
-        }
-
-        if (!empty($node['bg_color'])) {
-            $outerStyle .= 'background-color:' . $node['bg_color'] . ';';
-        }
-
-        // Header styling (justify-content space-between to align toggle button on the right)
-        $headerStyle = 'display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 14px;user-select:none;';
-        if (!empty($node['border_color']) || !empty($node['border_style']) || !empty($node['border_width'])) {
-            $headerStyle .= 'border-bottom:' . $bWidth . ' ' . $bStyle . ' ' . $bColor . ';';
-        } else {
-            $headerStyle .= 'border-bottom:1px solid #ddd;';
-        }
-
-        if (!empty($node['text_color'])) {
-            $headerStyle .= 'color:' . $node['text_color'] . ';';
-        }
-
-        if (!empty($node['bg_color'])) {
-            $headerStyle .= 'background:rgba(0,0,0,0.03);';
-        } else {
-            $headerStyle .= 'background:var(--bg-elevated,#f8f9fa);';
-        }
-
-        $html  = '<div class="nu-group" id="' . nu_attr($id) . '" style="' . $outerStyle . '">';
-        $html .= '<div class="nu-group-header" style="' . $headerStyle . ($collapsible ? 'cursor:pointer;' : '') . '"'
-               . ($collapsible ? ' onclick="nuToggleContainer(this.querySelector(\'.nu-group-toggle\'))"' : '') . '>';
-
-        $html .= '<span style="font-weight:600;font-size:13.5px;color:inherit;">' . $label . '</span>';
-
-        if ($collapsible) {
-            $toggleStyle = 'background:none;border:1px solid currentColor;border-radius:50%;cursor:pointer;font-size:12px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;flex-shrink:0;transition:all 0.2s;font-weight:bold;';
-            if (!empty($node['text_color'])) {
-                $toggleStyle .= 'color:' . $node['text_color'] . ';';
-            } else {
-                $toggleStyle .= 'color:#666;';
-            }
-            $html .= '<button type="button" class="nu-group-toggle"'
-                   . ' data-target="' . nu_attr($id) . '-body"'
-                   . ' onclick="event.stopPropagation();nuToggleContainer(this)"'
-                   . ' style="' . $toggleStyle . '">'
-                   . ($collapsed ? '+' : '&#8722;') . '</button>'; // &#8722; is HTML minus sign
-        }
-        $html .= '</div>';
-        $html .= '<div id="' . nu_attr($id) . '-body" class="nu-group-body" style="padding:12px 10px;' . $bodyStyle . '">';
-        $gi = 0;
-        foreach (($node['children'] ?? []) as $child) {
-            $html .= nu_render_layout_node($child, $record, $gi++);
-        }
-
-        // Render rows if present (from canvas-level Group container)
-        $ROW_STYLE = 'display:grid;grid-template-columns:repeat(12,1fr);gap:8px;margin-bottom:4px;align-items:start;';
-        foreach (($node['rows'] ?? []) as $row) {
-            $fields = $row['fields'] ?? [];
-            if (empty($fields)) continue;
-            $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
-            foreach ($fields as $field) {
-                $html .= nu_render_field($field, nu_field_value($record, $field), $record);
-            }
-            $html .= '</div>';
-        }
-
-        $html .= '</div></div>';
-        return $html;
+        return nu_render_group_container($node, $record);
     }
 
     if ($type === 'row') {
@@ -1379,21 +1393,7 @@ function nu_render_tab_container(array $item, array $record) {
             $rowType = $row['type'] ?? 'row';
 
             if ($rowType === 'group') {
-                // Render as a group section
-                $groupLabel = $row['label'] ?? 'Group';
-                $html .= '<div style="border:1px solid #ddd;border-radius:8px;margin-bottom:12px;overflow:hidden;">';
-                $html .= '<div style="padding:8px 14px;background:var(--bg-elevated,#f8f9fa);border-bottom:1px solid #ddd;font-weight:600;font-size:13px;">' . nu_html($groupLabel) . '</div>';
-                $html .= '<div style="padding:10px 8px;">';
-                foreach (($row['rows'] ?? []) as $innerRow) {
-                    $innerFields = $innerRow['fields'] ?? [];
-                    if (empty($innerFields)) continue;
-                    $html .= '<div class="nu-form-row" style="' . $ROW_STYLE . '">';
-                    foreach ($innerFields as $field) {
-                        $html .= nu_render_field($field, nu_field_value($record, $field), $record);
-                    }
-                    $html .= '</div>';
-                }
-                $html .= '</div></div>';
+                $html .= nu_render_group_container($row, $record);
             } else {
                 // Plain row with fields
                 $fields = $row['fields'] ?? [];
