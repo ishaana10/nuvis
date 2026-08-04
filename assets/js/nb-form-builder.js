@@ -83,6 +83,8 @@
       '#nb-props-panel-body .nb-span-btn.active{background:var(--color-primary,#4f6bed);color:#fff;border-color:var(--color-primary,#4f6bed);}',
       '#nb-props-panel-body .nb-vis-flags{display:flex;flex-wrap:wrap;gap:8px 14px;padding:8px;background:var(--bg-offset,#f5f7ff);border:1px solid var(--border,#e0e4ef);border-radius:7px;grid-column:1/-1;}',
       '#nb-props-panel-body .nb-vis-flags label{font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;}',
+      '.nb-builder-fullscreen{position:fixed !important;top:0 !important;left:0 !important;width:100vw !important;height:100vh !important;z-index:99999 !important;margin:0 !important;border-radius:0 !important;overflow-y:auto !important;background:var(--bg-card,#fff) !important;padding:24px !important;}',
+      '.nb-builder-fullscreen .nb-builder-wrap{height:calc(100vh - 140px) !important;min-height:unset !important;}',
     ].join('');
     (document.head || document.documentElement).appendChild(s);
   }());
@@ -1682,6 +1684,21 @@ fields.forEach(function (f) {
           me._isDirty = false;
         })
         .catch(function (err) { NuApp.toast('Load error: ' + err.message, 'error'); });
+    },
+
+    toggleFullscreen: function () {
+      var card = document.getElementById('formBuilderCard');
+      var btn = document.getElementById('btnBuilderFullscreen');
+      if (!card) return;
+      var isFs = card.classList.toggle('nb-builder-fullscreen');
+      if (btn) {
+        btn.textContent = isFs ? '❐ Exit Fullscreen' : '⛶ Fullscreen';
+      }
+      if (isFs) {
+        document.body.style.overflow = 'hidden';
+      } else {
+        document.body.style.overflow = '';
+      }
     },
 
     open: function () {
@@ -3447,6 +3464,15 @@ entry.fields.forEach(function (f) {
       canvas.querySelectorAll('.nb-row,.nb-container').forEach(_wireRowDrag);
       canvas.querySelectorAll('.nb-cfield').forEach(function (card) { _prepCard(card); });
     }
+
+    document.addEventListener('keyup', function (e) {
+      if (e.key === 'Escape') {
+        var card = document.getElementById('formBuilderCard');
+        if (card && card.classList.contains('nb-builder-fullscreen')) {
+          window.nbFormBuilder.toggleFullscreen();
+        }
+      }
+    });
     _ensurePropsPanel();
 
     var builderCard = document.getElementById('formBuilderCard');
