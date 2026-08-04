@@ -1142,18 +1142,203 @@ function _openPropsPanel(card) {
   /* ════════════════════════════════════════════════════════════════════
      GROUP container
   ═══════════════════════════════════════════════════════════════════ */
+  function _applyGroupStyles(wrap) {
+    var body = wrap.querySelector('.nb-container-group-body');
+    var header = wrap.querySelector('.nb-container-header');
+
+    if (wrap.dataset.bgColor) {
+      if (body) body.style.backgroundColor = wrap.dataset.bgColor;
+      wrap.style.backgroundColor = wrap.dataset.bgColor;
+    } else {
+      if (body) body.style.backgroundColor = '';
+      wrap.style.backgroundColor = '';
+    }
+
+    if (wrap.dataset.textColor) {
+      if (header) {
+        header.style.color = wrap.dataset.textColor;
+        var li = header.querySelector('.nb-container-label-input');
+        if (li) li.style.color = wrap.dataset.textColor;
+      }
+    } else {
+      if (header) {
+        header.style.color = '';
+        var li = header.querySelector('.nb-container-label-input');
+        if (li) li.style.color = '';
+      }
+    }
+
+    var bStyle = wrap.dataset.borderStyle || 'solid';
+    var bColor = wrap.dataset.borderColor || 'var(--border,#e0e4ef)';
+    var bWidth = wrap.dataset.borderWidth || '1px';
+
+    if (wrap.dataset.borderColor || wrap.dataset.borderStyle || wrap.dataset.borderWidth) {
+      wrap.style.border = bWidth + ' ' + bStyle + ' ' + bColor;
+    } else {
+      wrap.style.border = '';
+    }
+  }
+
+  function _openGroupSettingsModal(wrap) {
+    var modal = document.createElement('div');
+    modal.className = 'nu-modal-overlay';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:sans-serif;';
+
+    var content = document.createElement('div');
+    content.style.cssText = 'background:#fff;padding:20px;border-radius:10px;width:380px;box-shadow:0 10px 25px rgba(0,0,0,0.15);display:flex;flex-direction:column;gap:12px;color:#333;';
+
+    var title = document.createElement('h4');
+    title.style.cssText = 'margin:0 0 8px;font-size:16px;border-bottom:1px solid #eee;padding-bottom:8px;font-weight:600;display:flex;justify-content:space-between;align-items:center;';
+    title.innerHTML = '<span>Group Settings</span>';
+    content.appendChild(title);
+
+    // Collapsible Checkbox
+    var isCollapsible = wrap.dataset.collapsible === 'true';
+    var collapsibleLabel = document.createElement('label');
+    collapsibleLabel.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;';
+    var collapsibleChk = document.createElement('input');
+    collapsibleChk.type = 'checkbox';
+    collapsibleChk.checked = isCollapsible;
+    collapsibleLabel.appendChild(collapsibleChk);
+    collapsibleLabel.appendChild(document.createTextNode('Enable Collapsible (Accordion)'));
+    content.appendChild(collapsibleLabel);
+
+    // Collapsed by Default Checkbox
+    var isCollapsedByDefault = wrap.dataset.collapsedByDefault === 'true';
+    var collapsedLabel = document.createElement('label');
+    collapsedLabel.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:8px;';
+    var collapsedChk = document.createElement('input');
+    collapsedChk.type = 'checkbox';
+    collapsedChk.checked = isCollapsedByDefault;
+    collapsedLabel.appendChild(collapsedChk);
+    collapsedLabel.appendChild(document.createTextNode('Collapsed by Default'));
+    content.appendChild(collapsedLabel);
+
+    function createFieldRow(labelText, inputEl) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;';
+      var lbl = document.createElement('span');
+      lbl.textContent = labelText;
+      lbl.style.fontWeight = '500';
+      row.appendChild(lbl);
+      row.appendChild(inputEl);
+      return row;
+    }
+
+    // Color Pickers
+    var bgInput = document.createElement('input');
+    bgInput.type = 'color';
+    bgInput.value = wrap.dataset.bgColor && wrap.dataset.bgColor.indexOf('#') === 0 ? wrap.dataset.bgColor : '#ffffff';
+    bgInput.style.cssText = 'cursor:pointer;border:1px solid #ddd;border-radius:4px;width:60px;height:28px;padding:0;';
+    var bgRow = createFieldRow('Background Color', bgInput);
+    content.appendChild(bgRow);
+
+    var borderInput = document.createElement('input');
+    borderInput.type = 'color';
+    borderInput.value = wrap.dataset.borderColor && wrap.dataset.borderColor.indexOf('#') === 0 ? wrap.dataset.borderColor : '#4f6bed';
+    borderInput.style.cssText = 'cursor:pointer;border:1px solid #ddd;border-radius:4px;width:60px;height:28px;padding:0;';
+    var borderColorRow = createFieldRow('Border/Outline Color', borderInput);
+    content.appendChild(borderColorRow);
+
+    var textColInput = document.createElement('input');
+    textColInput.type = 'color';
+    textColInput.value = wrap.dataset.textColor && wrap.dataset.textColor.indexOf('#') === 0 ? wrap.dataset.textColor : '#333333';
+    textColInput.style.cssText = 'cursor:pointer;border:1px solid #ddd;border-radius:4px;width:60px;height:28px;padding:0;';
+    var textColorRow = createFieldRow('Text/Header Color', textColInput);
+    content.appendChild(textColorRow);
+
+    // Border Style Dropdown
+    var borderStyleSel = document.createElement('select');
+    borderStyleSel.className = 'nu-input';
+    borderStyleSel.style.cssText = 'width:120px;padding:4px;font-size:13px;';
+    ['solid', 'dashed', 'dotted', 'double', 'none'].forEach(function (style) {
+      var opt = document.createElement('option');
+      opt.value = style;
+      opt.textContent = style;
+      if (wrap.dataset.borderStyle === style) opt.selected = true;
+      borderStyleSel.appendChild(opt);
+    });
+    var borderStyleRow = createFieldRow('Border Style', borderStyleSel);
+    content.appendChild(borderStyleRow);
+
+    // Border Width Dropdown
+    var borderWidthSel = document.createElement('select');
+    borderWidthSel.className = 'nu-input';
+    borderWidthSel.style.cssText = 'width:120px;padding:4px;font-size:13px;';
+    ['1px', '2px', '3px', '4px', '5px'].forEach(function (w) {
+      var opt = document.createElement('option');
+      opt.value = w;
+      opt.textContent = w;
+      if (wrap.dataset.borderWidth === w) opt.selected = true;
+      borderWidthSel.appendChild(opt);
+    });
+    var borderWidthRow = createFieldRow('Border Width', borderWidthSel);
+    content.appendChild(borderWidthRow);
+
+    var actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:10px;border-top:1px solid #eee;padding-top:12px;';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', function () { modal.remove(); });
+
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'nu-btn nu-btn-primary nu-btn-sm';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', function () {
+      wrap.dataset.collapsible = collapsibleChk.checked ? 'true' : 'false';
+      wrap.dataset.collapsedByDefault = collapsedChk.checked ? 'true' : 'false';
+      wrap.dataset.bgColor = bgInput.value;
+      wrap.dataset.borderColor = borderInput.value;
+      wrap.dataset.textColor = textColInput.value;
+      wrap.dataset.borderStyle = borderStyleSel.value;
+      wrap.dataset.borderWidth = borderWidthSel.value;
+
+      _applyGroupStyles(wrap);
+      window.nbFormBuilder._isDirty = true;
+      modal.remove();
+    });
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(saveBtn);
+    content.appendChild(actions);
+
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+  }
+
   function _makeGroupContainer(extra) {
     extra = extra || {};
     var label = extra.label || 'Group';
     var id = 'nb-group-' + Date.now() + '-' + Math.random().toString(36).slice(2,5);
     var wrap = document.createElement('div');
     wrap.className = 'nb-container nb-container-group'; wrap.id = id; wrap.dataset.containerType = 'group';
+
+    wrap.dataset.groupName = extra.name || 'group_' + Date.now();
+    wrap.dataset.collapsible = extra.collapsible ? 'true' : 'false';
+    wrap.dataset.collapsedByDefault = extra.collapsed ? 'true' : (extra.collapsed_by_default ? 'true' : 'false');
+    wrap.dataset.bgColor = extra.bg_color || '';
+    wrap.dataset.borderColor = extra.border_color || '';
+    wrap.dataset.textColor = extra.text_color || '';
+    wrap.dataset.borderStyle = extra.border_style || '';
+    wrap.dataset.borderWidth = extra.border_width || '';
+
     var header = document.createElement('div'); header.className = 'nb-container-header';
     var dh = document.createElement('span'); dh.className = 'nb-row-drag'; dh.title = 'Drag group'; dh.textContent = '⠇';
     var badge = document.createElement('span'); badge.className = 'nb-container-type-badge'; badge.textContent = 'GROUP';
     var li = document.createElement('input'); li.type = 'text'; li.className = 'nb-container-label-input nu-input'; li.value = label; li.placeholder = 'Group label';
     var addRowBtn = document.createElement('button'); addRowBtn.type = 'button'; addRowBtn.className = 'nb-row-btn'; addRowBtn.textContent = '+ Row';
     addRowBtn.addEventListener('click', function () { _addRowToContainer(wrap, [], false); });
+
+    var settingsBtn = document.createElement('button'); settingsBtn.type = 'button'; settingsBtn.className = 'nb-row-btn'; settingsBtn.textContent = '⚙'; settingsBtn.title = 'Group Settings';
+    settingsBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      _openGroupSettingsModal(wrap);
+    });
+
     var delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.className = 'nb-row-btn del'; delBtn.textContent = '✕';
     delBtn.addEventListener('click', function () {
       if (!confirm("Are you sure you want to delete this group and all its rows?")) return;
@@ -1161,7 +1346,7 @@ function _openPropsPanel(card) {
       window.nbFormBuilder._updateEmptyState();
       window.nbFormBuilder._isDirty = true;
     });
-    header.appendChild(dh); header.appendChild(badge); header.appendChild(li); header.appendChild(addRowBtn); header.appendChild(delBtn);
+    header.appendChild(dh); header.appendChild(badge); header.appendChild(li); header.appendChild(addRowBtn); header.appendChild(settingsBtn); header.appendChild(delBtn);
     var body = document.createElement('div'); body.className = 'nb-container-body nb-container-group-body';
     _attachRowContainerDragAndDrop(body);
     var hint = document.createElement('div'); hint.className = 'nb-row-drop-hint'; hint.textContent = 'Click "+ Row" to add a row, then drop fields in';
@@ -1171,6 +1356,7 @@ function _openPropsPanel(card) {
       extra.rows.forEach(function (rowDef) { _addRowToContainer(body, rowDef.fields || [], true); });
     }
     _wireRowDrag(wrap);
+    _applyGroupStyles(wrap);
     return wrap;
   }
 
@@ -1967,7 +2153,21 @@ if (canvasType === 'subform' && sfData) {
           var ctype = el.dataset.containerType;
           if (ctype === 'group') {
             var li = el.querySelector('.nb-container-label-input');
-            layout.push({ type:'group', label: li ? li.value : '', name:'group_'+Date.now(), rows:_collectContainerRows(el.querySelector('.nb-container-group-body')), col:12, row_index:-1 });
+            layout.push({
+              type: 'group',
+              label: li ? li.value : '',
+              name: el.dataset.groupName || ('group_' + Date.now()),
+              rows: _collectContainerRows(el.querySelector('.nb-container-group-body')),
+              col: 12,
+              row_index: -1,
+              collapsible: el.dataset.collapsible === 'true',
+              collapsed: el.dataset.collapsedByDefault === 'true',
+              bg_color: el.dataset.bgColor || '',
+              border_color: el.dataset.borderColor || '',
+              text_color: el.dataset.textColor || '',
+              border_style: el.dataset.borderStyle || '',
+              border_width: el.dataset.borderWidth || ''
+            });
           } else if (ctype === 'tab') {
             var tabsData = [];
             var tn = el.querySelector('[id$="-nav"]'); var tp = el.querySelector('[id$="-panels"]');
@@ -2234,7 +2434,20 @@ entry.fields.forEach(function (f) {
       } else if (child.classList.contains('nb-container-group') || (child.classList.contains('nb-container') && child.dataset.containerType === 'group')) {
         var li = child.querySelector('.nb-container-label-input');
         var groupBody = child.querySelector('.nb-container-group-body');
-        result.push({ type:'group', label: li ? li.value : '', name:'group_'+Date.now(), rows:_collectContainerRows(groupBody), col:12 });
+        result.push({
+          type: 'group',
+          label: li ? li.value : '',
+          name: child.dataset.groupName || ('group_' + Date.now()),
+          rows: _collectContainerRows(groupBody),
+          col: 12,
+          collapsible: child.dataset.collapsible === 'true',
+          collapsed: child.dataset.collapsedByDefault === 'true',
+          bg_color: child.dataset.bgColor || '',
+          border_color: child.dataset.borderColor || '',
+          text_color: child.dataset.textColor || '',
+          border_style: child.dataset.borderStyle || '',
+          border_width: child.dataset.borderWidth || ''
+        });
       }
     });
     return result;
@@ -2434,7 +2647,12 @@ entry.fields.forEach(function (f) {
       if (!btn) return;
       var body = document.getElementById(btn.getAttribute('data-target')); if (!body) return;
       var hidden = body.style.display === 'none' || body.style.display === '';
-      body.style.display = hidden ? 'block' : 'none'; btn.innerHTML = hidden ? '&#9660;' : '&#9654;';
+      body.style.display = hidden ? 'block' : 'none';
+      if (btn.classList.contains('nu-group-toggle')) {
+        btn.innerHTML = hidden ? '−' : '+';
+      } else {
+        btn.innerHTML = hidden ? '&#9660;' : '&#9654;';
+      }
     };
   }
 
