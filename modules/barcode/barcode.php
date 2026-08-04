@@ -21,9 +21,9 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
 
   <!-- ── TABS BAR ───────────────────────────────────────────────────── -->
   <div class="bc-tab-bar flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit mb-6">
-    <button class="bc-tab-btn active px-4 py-2 text-xs font-semibold rounded-md transition-all duration-150" onclick="bcSwitchTab('products', this)">📦 Item Inventory</button>
-    <button class="bc-tab-btn px-4 py-2 text-xs font-semibold rounded-md transition-all duration-150" onclick="bcSwitchTab('scanner', this)">🔍 Scan &amp; Read</button>
-    <button class="bc-tab-btn px-4 py-2 text-xs font-semibold rounded-md transition-all duration-150" onclick="bcSwitchTab('generator', this)">⚙️ Barcode Generator</button>
+    <button type="button" class="bc-tab-btn active px-4 py-2 text-xs font-semibold rounded-md transition-all duration-150" onclick="bcSwitchTab('products', this)">📦 Item Inventory</button>
+    <button type="button" class="bc-tab-btn px-4 py-2 text-xs font-semibold rounded-md transition-all duration-150" onclick="bcSwitchTab('scanner', this)">🔍 Scan &amp; Read</button>
+    <button type="button" class="bc-tab-btn px-4 py-2 text-xs font-semibold rounded-md transition-all duration-150" onclick="bcSwitchTab('generator', this)">⚙️ Barcode Generator</button>
   </div>
 
   <!-- ── TAB 1: PRODUCT INVENTORY ───────────────────────────────────── -->
@@ -31,7 +31,7 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
     <div class="nu-card" style="padding:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border-color);padding-bottom:10px;">
         <h3 style="font-size:15px;font-weight:600;margin:0;">Registered Items &amp; Codes</h3>
-        <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="bcOpenItemModal(null)">+ Add New Item</button>
+        <button type="button" class="nu-btn nu-btn-primary nu-btn-sm" onclick="bcOpenItemModal(null)">+ Add New Item</button>
       </div>
 
       <div style="overflow-x:auto;">
@@ -76,12 +76,12 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
               </svg>
               <p class="font-semibold text-sm mb-1 text-slate-200">Camera Feed Inactive</p>
               <p class="text-xs max-w-xs mb-3 text-slate-500">Enable webcam to scan 1D or 2D barcodes in real-time.</p>
-              <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="bcStartWebcam()">⚡ Start Camera</button>
+              <button type="button" class="nu-btn nu-btn-primary nu-btn-sm" onclick="bcStartWebcam()">⚡ Start Camera</button>
             </div>
           </div>
 
           <div style="display:flex;gap:10px;">
-            <button class="nu-btn nu-btn-ghost flex-1 py-2 text-xs" onclick="bcStopWebcam()">Stop Camera</button>
+            <button type="button" class="nu-btn nu-btn-ghost flex-1 py-2 text-xs" onclick="bcStopWebcam()">Stop Camera</button>
           </div>
         </div>
 
@@ -89,7 +89,7 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
           <h3 style="font-size:15px;font-weight:600;margin:0 0 12px;border-bottom:1px solid var(--border-color);padding-bottom:10px;">⌨️ Keyboard / Scanner Input</h3>
           <div class="flex gap-2">
             <input type="text" class="nu-input flex-1" id="bcManualInputCode" placeholder="Enter barcode number (e.g. 7501031311309)" onkeypress="if(event.key==='Enter') bcLookupManual()">
-            <button class="nu-btn nu-btn-primary" onclick="bcLookupManual()">Lookup</button>
+            <button type="button" class="nu-btn nu-btn-primary" onclick="bcLookupManual()">Lookup</button>
           </div>
         </div>
 
@@ -140,8 +140,8 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
         </div>
 
         <div id="bcScanResultActions" class="hidden flex gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
-          <button class="nu-btn nu-btn-ghost flex-1 py-2 text-xs" id="bcEditBtnResult" onclick="">⚙️ Edit Item Details</button>
-          <button class="nu-btn nu-btn-primary flex-1 py-2 text-xs" id="bcPrintBtnResult" onclick="">🖨️ Print Label</button>
+          <button type="button" class="nu-btn nu-btn-ghost flex-1 py-2 text-xs" id="bcEditBtnResult" onclick="">⚙️ Edit Item Details</button>
+          <button type="button" class="nu-btn nu-btn-primary flex-1 py-2 text-xs" id="bcPrintBtnResult" onclick="">🖨️ Print Label</button>
         </div>
       </div>
 
@@ -183,7 +183,7 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
           <label>Barcode Code/Value</label>
           <div class="flex gap-2">
             <input type="text" class="nu-input flex-1" id="bcGenCode" placeholder="7501031311309" oninput="bcRenderGeneratedBarcode()">
-            <button class="nu-btn nu-btn-ghost text-xs" onclick="bcGenerateNewCode()">⚡ Auto-Gen</button>
+            <button type="button" class="nu-btn nu-btn-ghost text-xs" onclick="bcGenerateNewCode()">⚡ Auto-Gen</button>
           </div>
         </div>
 
@@ -236,8 +236,8 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
         </div>
 
         <div id="bcGenActions" class="hidden flex gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
-          <button class="nu-btn nu-btn-ghost flex-1 py-2 text-xs" onclick="bcDownloadLabelSvg()">💾 Save as SVG</button>
-          <button class="nu-btn nu-btn-primary flex-1 py-2 text-xs" onclick="bcPrintLabel()">🖨️ Print Label</button>
+          <button type="button" class="nu-btn nu-btn-ghost flex-1 py-2 text-xs" onclick="bcDownloadLabelSvg()">💾 Save as SVG</button>
+          <button type="button" class="nu-btn nu-btn-primary flex-1 py-2 text-xs" onclick="bcPrintLabel()">🖨️ Print Label</button>
         </div>
       </div>
 
@@ -251,7 +251,7 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
       <!-- Modal Header -->
       <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
         <h3 id="bcModalTitle" class="font-bold text-slate-800 dark:text-slate-100 text-base">Register New Item</h3>
-        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-bold text-xl" onclick="bcCloseItemModal()">&times;</button>
+        <button type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-bold text-xl" onclick="bcCloseItemModal()">&times;</button>
       </div>
 
       <!-- Modal Body -->
@@ -282,7 +282,7 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
           <label class="font-semibold text-slate-700 dark:text-slate-300">Barcode Code / Number</label>
           <div class="flex gap-2">
             <input type="text" class="nu-input flex-1" id="bcItemBarcode" placeholder="Leave blank to auto-generate">
-            <button class="nu-btn nu-btn-ghost text-xs" onclick="bcGenerateModalBarcode()">⚡ Auto-Gen</button>
+            <button type="button" class="nu-btn nu-btn-ghost text-xs" onclick="bcGenerateModalBarcode()">⚡ Auto-Gen</button>
           </div>
           <span class="text-[10px] text-slate-400 mt-1 block">Specify custom barcode or leave empty to auto-assign standard EAN-13 code.</span>
         </div>
@@ -295,8 +295,8 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
 
       <!-- Modal Footer -->
       <div class="px-5 py-3.5 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
-        <button class="nu-btn nu-btn-ghost text-xs py-2 px-4" onclick="bcCloseItemModal()">Cancel</button>
-        <button class="nu-btn nu-btn-primary text-xs py-2 px-4" onclick="bcSaveItem()">Save Item</button>
+        <button type="button" class="nu-btn nu-btn-ghost text-xs py-2 px-4" onclick="bcCloseItemModal()">Cancel</button>
+        <button type="button" class="nu-btn nu-btn-primary text-xs py-2 px-4" onclick="bcSaveItem()">Save Item</button>
       </div>
 
     </div>
@@ -449,9 +449,9 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
         <td class="text-slate-500 max-w-xs truncate" title="${esc(t.description || '')}">${esc(t.description || 'No description')}</td>
         <td style="text-align:right;">
           <div style="display:inline-flex;gap:4px;">
-            <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick='bcEditItem(${itemJson})'>Edit</button>
-            <button class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error);" onclick="bcDeleteItem(${t.id})">Delete</button>
-            <button class="nu-btn nu-btn-primary nu-btn-sm text-[10px]" onclick='bcQuickViewBarcode(${itemJson})'>🏷️ Label</button>
+            <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" onclick='bcEditItem(${itemJson})'>Edit</button>
+            <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" style="color:var(--color-error);" onclick="bcDeleteItem(${t.id})">Delete</button>
+            <button type="button" class="nu-btn nu-btn-primary nu-btn-sm text-[10px]" onclick='bcQuickViewBarcode(${itemJson})'>🏷️ Label</button>
           </div>
         </td>
       </tr>`;
@@ -711,7 +711,7 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
     }
 
     container.innerHTML = _items.map(t => {
-      return `<button class="w-full text-left text-xs bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded p-2 transition-all flex justify-between items-center" onclick="bcTriggerSimulatedScan('${t.barcode}')">
+      return `<button type="button" class="w-full text-left text-xs bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded p-2 transition-all flex justify-between items-center" onclick="bcTriggerSimulatedScan('${t.barcode}')">
         <div>
           <span class="font-bold text-slate-800 dark:text-slate-100 block">${esc(t.name)}</span>
           <span class="text-[10px] text-slate-400 font-mono">${esc(t.barcode)}</span>
