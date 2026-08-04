@@ -871,14 +871,31 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
     alertMessage('Barcode SVG downloaded successfully', 'success');
   };
 
-  // Print Label Sheet
+  // Print Label Sheet using hidden iframe to bypass popup blockers and avoid reloads
   window.bcPrintLabel = function() {
     const size = document.getElementById('bcLabelSize').value;
     const printContents = document.getElementById('bcLabelPrintArea').innerHTML;
-    const originalContents = document.body.innerHTML;
 
-    const win = window.open('', '_blank');
-    win.document.write(`
+    // Remove existing iframe if it exists
+    let frame = document.getElementById('bcPrintFrame');
+    if (frame) {
+      frame.remove();
+    }
+
+    // Create a new hidden iframe
+    frame = document.createElement('iframe');
+    frame.id = 'bcPrintFrame';
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '0';
+    frame.style.height = '0';
+    frame.style.border = '0';
+    document.body.appendChild(frame);
+
+    const doc = frame.contentWindow.document || frame.contentDocument;
+    doc.open();
+    doc.write(`
       <html>
         <head>
           <title>Print Barcode Label</title>
@@ -913,14 +930,20 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
             }
           </style>
         </head>
-        <body onload="window.print(); window.close();">
+        <body>
           <div class="label-box">
             ${printContents}
           </div>
+          <script>
+            window.onload = function() {
+              window.focus();
+              window.print();
+            };
+          </script>
         </body>
       </html>
     `);
-    win.document.close();
+    doc.close();
   };
 
   // utility escaper
