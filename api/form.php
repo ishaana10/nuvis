@@ -1172,7 +1172,11 @@ function nu_toggle_script() {
          . 'if(!body)return;'
          . 'var hidden=body.style.display==="none"||body.style.display==="";'
          . 'body.style.display=hidden?"block":"none";'
+         . 'if(btn.classList.contains("nu-group-toggle")){'
+         . 'btn.innerHTML=hidden?"\u2212":"+";'
+         . '}else{'
          . 'btn.innerHTML=hidden?"&#9660;":"&#9654;";'
+         . '}'
          . '}}'
          . '</s' . 'cript>';
 }
@@ -1231,26 +1235,60 @@ function nu_render_layout_node($node, $record, $sectionIndex = 0) {
         $collapsible= !empty($node['collapsible']);
         $collapsed  = !empty($node['collapsed']);
         $bodyStyle  = $collapsed ? 'display:none;' : 'display:block;';
-        $icon       = $collapsed ? '&#9654;' : '&#9660;';
 
-        $html  = '<div class="nu-group" id="' . nu_attr($id) . '" style="border:1px solid #ddd;border-radius:8px;margin-bottom:16px;overflow:hidden;">';
-        $html .= '<div class="nu-group-header" style="'
-               . 'display:flex;align-items:center;gap:6px;'
-               . 'padding:8px 14px;'
-               . 'background:var(--bg-elevated,#f8f9fa);'
-               . 'border-bottom:1px solid #ddd;'
-               . 'user-select:none;'
-               . ($collapsible ? 'cursor:pointer;' : '') . '"'
+        // Outer styling
+        $bStyle = !empty($node['border_style']) ? $node['border_style'] : 'solid';
+        $bWidth = !empty($node['border_width']) ? $node['border_width'] : '1px';
+        $bColor = !empty($node['border_color']) ? $node['border_color'] : '#ddd';
+
+        $outerStyle = 'border-radius:8px;margin-bottom:16px;overflow:hidden;';
+        if (!empty($node['border_color']) || !empty($node['border_style']) || !empty($node['border_width'])) {
+            $outerStyle .= 'border:' . $bWidth . ' ' . $bStyle . ' ' . $bColor . ';';
+        } else {
+            $outerStyle .= 'border:1px solid #ddd;';
+        }
+
+        if (!empty($node['bg_color'])) {
+            $outerStyle .= 'background-color:' . $node['bg_color'] . ';';
+        }
+
+        // Header styling (justify-content space-between to align toggle button on the right)
+        $headerStyle = 'display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 14px;user-select:none;';
+        if (!empty($node['border_color']) || !empty($node['border_style']) || !empty($node['border_width'])) {
+            $headerStyle .= 'border-bottom:' . $bWidth . ' ' . $bStyle . ' ' . $bColor . ';';
+        } else {
+            $headerStyle .= 'border-bottom:1px solid #ddd;';
+        }
+
+        if (!empty($node['text_color'])) {
+            $headerStyle .= 'color:' . $node['text_color'] . ';';
+        }
+
+        if (!empty($node['bg_color'])) {
+            $headerStyle .= 'background:rgba(0,0,0,0.03);';
+        } else {
+            $headerStyle .= 'background:var(--bg-elevated,#f8f9fa);';
+        }
+
+        $html  = '<div class="nu-group" id="' . nu_attr($id) . '" style="' . $outerStyle . '">';
+        $html .= '<div class="nu-group-header" style="' . $headerStyle . ($collapsible ? 'cursor:pointer;' : '') . '"'
                . ($collapsible ? ' onclick="nuToggleContainer(this.querySelector(\'.nu-group-toggle\'))"' : '') . '>';
+
+        $html .= '<span style="font-weight:600;font-size:13.5px;color:inherit;">' . $label . '</span>';
+
         if ($collapsible) {
+            $toggleStyle = 'background:none;border:1px solid currentColor;border-radius:50%;cursor:pointer;font-size:12px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;flex-shrink:0;transition:all 0.2s;font-weight:bold;';
+            if (!empty($node['text_color'])) {
+                $toggleStyle .= 'color:' . $node['text_color'] . ';';
+            } else {
+                $toggleStyle .= 'color:#666;';
+            }
             $html .= '<button type="button" class="nu-group-toggle"'
                    . ' data-target="' . nu_attr($id) . '-body"'
                    . ' onclick="event.stopPropagation();nuToggleContainer(this)"'
-                   . ' style="background:none;border:none;cursor:pointer;font-size:13px;'
-                   . 'color:#666;padding:0 6px 0 0;line-height:1;flex-shrink:0;">'
-                   . $icon . '</button>';
+                   . ' style="' . $toggleStyle . '">'
+                   . ($collapsed ? '+' : '&#8722;') . '</button>'; // &#8722; is HTML minus sign
         }
-        $html .= '<span style="font-weight:600;font-size:13px;color:var(--text,#333);">' . $label . '</span>';
         $html .= '</div>';
         $html .= '<div id="' . nu_attr($id) . '-body" class="nu-group-body" style="padding:12px 10px;' . $bodyStyle . '">';
         $gi = 0;
