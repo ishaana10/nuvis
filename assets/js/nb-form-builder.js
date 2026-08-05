@@ -1815,6 +1815,83 @@ fields.forEach(function (f) {
       document.body.appendChild(overlay);
     },
 
+    showUpdateTableHelp: function () {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.65);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+
+      var modal = document.createElement('div');
+      modal.className = 'bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col gap-4 text-slate-800';
+      modal.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+
+      var header = document.createElement('div');
+      header.className = 'flex justify-between items-center border-b pb-3 border-slate-100';
+      header.innerHTML = '<h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">⚙️ Automating Table Updates</h3>' +
+        '<button type="button" class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>';
+
+      header.querySelector('button').onclick = function () { overlay.remove(); };
+
+      var body = document.createElement('div');
+      body.className = 'flex flex-col gap-5 text-sm leading-relaxed';
+
+      body.innerHTML =
+        '<div>' +
+          '<p class="mb-3 text-slate-600">To automatically update another table (e.g., marking a booking/order as <strong>completed</strong> when a certificate with a reference number is saved), you can use either <strong>PHP After Save</strong> or a <strong>Workflow Transition Hook</strong>.</p>' +
+        '</div>' +
+
+        '<div class="flex flex-col gap-2">' +
+          '<h4 class="font-bold text-slate-900 text-base">Method A: Using "PHP After Save" (Form DB Hook)</h4>' +
+          '<p class="text-slate-600">Paste the following code into your <strong>PHP After Save</strong> editor under the PHP / CSS tab. It executes immediately after the record is saved, using the saved reference to update your target table:</p>' +
+          '<pre class="text-xs font-mono bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto leading-normal">' +
+            '<' + '?php\n' +
+            '// 1. Get the reference number of the saved certificate record\n' +
+            '$reference = trim($cert_reference ?? \'#cert_reference#\');\n\n' +
+            'if (!empty($reference)) {\n' +
+            '    try {\n' +
+            '        $db = nu_db(); // Get current PDO connection\n' +
+            '        \n' +
+            '        // 2. Execute SQL statement to update another table\n' +
+            '        $sql = "UPDATE `orders` SET `status` = \'completed\', `updated_at` = NOW() WHERE `order_reference` = ?";\n' +
+            '        $stmt = $db->prepare($sql);\n' +
+            '        $stmt->execute([$reference]);\n' +
+            '        \n' +
+            '        nu_log("Automatically completed order for reference: " . $reference, "after_save_automation");\n' +
+            '    } catch (Throwable $e) {\n' +
+            '        error_log("[Automation Error] " . $e->getMessage());\n' +
+            '    }\n' +
+            '}' +
+          '</pre>' +
+        '</div>' +
+
+        '<div class="flex flex-col gap-2">' +
+          '<h4 class="font-bold text-slate-900 text-base">Method B: Using "Workflow Transition Hooks"</h4>' +
+          '<p class="text-slate-600">If using a workflow, define a stage transition (e.g. from <code>"Pending Certificate"</code> to <code>"Completed"</code>) and bind a transition hook:</p>' +
+          '<ul class="list-disc pl-5 text-xs text-slate-600 flex flex-col gap-1">' +
+            '<li>Set the <strong>Transition Hook</strong> to <code>update_record</code> to automatically update the bound table status to match the destination stage code.</li>' +
+            '<li>Or set the <strong>Transition Hook</strong> to <code>call_webhook</code> to send a payload to your custom listener/API which handles custom multi-table SQL queries programmatically.</li>' +
+          '</ul>' +
+        '</div>';
+
+      var footer = document.createElement('div');
+      footer.className = 'flex justify-end pt-3 border-t border-slate-100';
+      var closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'nu-btn nu-btn-secondary px-5 py-2 rounded-lg text-xs font-semibold';
+      closeBtn.textContent = 'Close';
+      closeBtn.onclick = function () { overlay.remove(); };
+      footer.appendChild(closeBtn);
+
+      modal.appendChild(header);
+      modal.appendChild(body);
+      modal.appendChild(footer);
+      overlay.appendChild(modal);
+
+      overlay.onclick = function (e) {
+        if (e.target === overlay) overlay.remove();
+      };
+
+      document.body.appendChild(overlay);
+    },
+
     open: function () {
       var card = document.getElementById('formBuilderCard'); var list = document.getElementById('formsListSection');
       if (card) card.style.display = 'block'; if (list) list.style.display = 'none';
