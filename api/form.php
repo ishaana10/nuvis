@@ -2371,7 +2371,10 @@ function nu_handle_list() {
     }
 
     $browsePhp = trim((string)($form[$c['browse_php']] ?? ''));
-    $browseConds = json_decode($form[$c['browse_conditions']] ?? '[]', true) ?: [];
+    $browseConds = $form[$c['browse_conditions']] ?? [];
+    if (is_string($browseConds)) {
+        $browseConds = json_decode($browseConds, true) ?: [];
+    }
 
     $nuHash    = nu_get_hash();
     $nuSql     = null;
@@ -2858,7 +2861,7 @@ function nu_handle_load_form() {
         'browse_page_size'         => (int)($form[$c['browse_page_size']]    ?? 20),
         'browse_default_sort'      => $form[$c['browse_default_sort']]       ?? '',
         'browse_php'               => $form[$c['browse_php']]                ?? '',
-        'browse_conditions'        => json_decode($form[$c['browse_conditions']] ?? '[]', true) ?: [],
+        'browse_conditions'        => is_array($form[$c['browse_conditions']] ?? null) ? $form[$c['browse_conditions']] : (json_decode($form[$c['browse_conditions']] ?? '[]', true) ?: []),
     ]]);
 }
 

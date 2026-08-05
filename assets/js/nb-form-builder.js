@@ -1915,8 +1915,13 @@ fields.forEach(function (f) {
 
     _clearForm: function () {
       ['builderFormName','builderFormCode','builderFormTable','formBrowseSql','formBrowseColumns','formBrowseDefaultSort',
-       'formBrowseSearchPlaceholder','formBrowseSearchFields','formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomPhpAfter','formCustomCss']
+       'formBrowseSearchPlaceholder','formBrowseSearchFields','formCustomJs','formJsBeforeSave','formJsAfterSave','formCustomPhp','formCustomPhpAfter','formCustomCss','formBrowsePhp']
         .forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+      if (window.nbAce) {
+        ['aceCustomJs', 'aceJsBeforeSave', 'aceJsAfterSave', 'aceCustomPhp', 'aceCustomPhpAfter', 'aceCustomCss', 'aceBrowsePhp'].forEach(function (id) {
+          nbAce.setValue(id, '');
+        });
+      }
       var ps = document.getElementById('formBrowsePageSize'); if (ps) ps.value = '20';
       var srch = document.getElementById('formBrowseSearchEnabled'); if (srch) srch.checked = false;
       var cList = document.getElementById('browseConditionsList'); if (cList) cList.innerHTML = '';
@@ -2439,6 +2444,7 @@ if (canvasType === 'subform' && sfData) {
         browse_search_enabled: _c('formBrowseSearchEnabled') ? 1 : 0, browse_search_placeholder: _v('formBrowseSearchPlaceholder'),
         browse_search_fields: _v('formBrowseSearchFields'), browse_conditions: this._collectBrowseConditions(),
         browse_delete_enabled: _c('formBrowseDeleteEnabled') ? 1 : 0,
+        browse_php: _v('formBrowsePhp'),
         form_custom_js: _v('formCustomJs'),
         form_js_before_save: _v('formJsBeforeSave'), form_js_after_save: _v('formJsAfterSave'),
         form_custom_php: _v('formCustomPhp'), form_custom_php_after: _v('formCustomPhpAfter'), form_custom_css: _v('formCustomCss')
@@ -2469,6 +2475,7 @@ if (canvasType === 'subform' && sfData) {
       _set('formBrowseSql', formData.browse_sql || ''); _set('formBrowseColumns', formData.browse_columns || '');
       _set('formBrowsePageSize', formData.browse_page_size || '20'); _set('formBrowseDefaultSort', formData.browse_default_sort || '');
       _set('formBrowseSearchPlaceholder', formData.browse_search_placeholder || ''); _set('formBrowseSearchFields', formData.browse_search_fields || '');
+      _set('formBrowsePhp', formData.browse_php || '');
       _set('formCustomJs', formData.form_custom_js || ''); _set('formJsBeforeSave', formData.form_js_before_save || '');
       _set('formJsAfterSave', formData.form_js_after_save || ''); _set('formCustomPhp', formData.form_custom_php || '');
       _set('formCustomPhpAfter', formData.form_custom_php_after || '');

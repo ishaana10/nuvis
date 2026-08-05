@@ -417,7 +417,10 @@ function handleBrowse($db, $formCode) {
     
     $auth = NuAuth::getInstance();
     $currentRole = $auth->getCurrentRole();
-    $browseConds = json_decode($form['browse_conditions'] ?? '[]', true) ?: [];
+    $browseConds = $form['browse_conditions'] ?? [];
+    if (is_string($browseConds)) {
+        $browseConds = json_decode($browseConds, true) ?: [];
+    }
 
     $nuWhere = '';
     $nuColumns = '*';
