@@ -1045,7 +1045,12 @@ foreach ($forms as $f) {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="grid-column:1/-1;">
-          <label class="nu-label">Browse SQL <span style="font-weight:400;color:var(--text-tertiary);">(leave empty for auto SELECT *)</span></label>
+          <label class="nu-label" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Browse SQL <span style="font-weight:400;color:var(--text-tertiary);">(leave empty for auto SELECT *)</span></span>
+            <button type="button" onclick="nbFormBuilder.showCustomJoinsHelp()" class="nu-btn nu-btn-ghost nu-btn-sm text-amber-600 hover:text-amber-700 hover:bg-amber-50" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;height:auto;border:1px solid currentColor;">
+              💡 Custom Joins Guide
+            </button>
+          </label>
           <textarea id="formBrowseSql" class="nu-input" rows="4" placeholder="SELECT id, name, email FROM customers WHERE active = 1"></textarea>
         </div>
         <div style="grid-column:1/-1;">
@@ -1637,9 +1642,14 @@ foreach ($forms as $f) {
         </div>
 
         <div style="grid-column:1/-1;border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px;">
-          <label class="nu-label" style="margin-bottom:6px;display:block;">
-            Browse PHP
-            <span style="font-weight:400;color:var(--text-tertiary);">— customize browse query (use <code>$nuSql</code>, <code>$nuWhere</code>, <code>$nuOrder</code>, <code>$nuParams</code>)</span>
+          <label class="nu-label" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>
+              Browse PHP
+              <span style="font-weight:400;color:var(--text-tertiary);">— customize browse query (use <code>$nuSql</code>, <code>$nuWhere</code>, <code>$nuOrder</code>, <code>$nuParams</code>)</span>
+            </span>
+            <button type="button" onclick="nbFormBuilder.showCustomJoinsHelp()" class="nu-btn nu-btn-ghost nu-btn-sm text-amber-600 hover:text-amber-700 hover:bg-amber-50" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;height:auto;border:1px solid currentColor;margin-bottom:4px;">
+              💡 Custom Joins Guide
+            </button>
           </label>
           <div class="nb-ace-wrap" id="wrapBrowsePhp">
             <div class="nb-ace-topbar">
