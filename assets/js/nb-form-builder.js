@@ -1701,6 +1701,197 @@ fields.forEach(function (f) {
       }
     },
 
+    showCustomJoinsHelp: function () {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.65);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+
+      var modal = document.createElement('div');
+      modal.className = 'bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col gap-4 text-slate-800';
+      modal.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+
+      var header = document.createElement('div');
+      header.className = 'flex justify-between items-center border-b pb-3 border-slate-100';
+      header.innerHTML = '<h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">💡 Custom Joins Quick Reference</h3>' +
+        '<button type="button" class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>';
+
+      header.querySelector('button').onclick = function () { overlay.remove(); };
+
+      var body = document.createElement('div');
+      body.className = 'flex flex-col gap-5 text-sm leading-relaxed';
+
+      body.innerHTML =
+        '<div>' +
+          '<p class="mb-3 text-slate-600">To display descriptive child values instead of raw foreign key IDs in your browse grid, you can use either of the following two methods:</p>' +
+        '</div>' +
+
+        '<div class="border-l-4 border-amber-500 bg-amber-50 p-3 rounded-r-md">' +
+          '<h4 class="font-bold text-amber-900 mb-1">Your SQL Query:</h4>' +
+          '<pre class="text-xs font-mono overflow-x-auto text-amber-800 bg-amber-100/50 p-2 rounded mt-1">' +
+            'SELECT * FROM pbrder_bapp\n' +
+            'LEFT JOIN agent ON agent.ag_id = pbrder_bapp.p_agent\n' +
+            'LEFT JOIN station ON station.station_id = pbrder_bapp.p_location\n' +
+            'LEFT JOIN zzzzsys_user ON zzzzsys_user.zzzzsys_user_id = pbrder_bapp.p_officer\n' +
+            'LEFT JOIN service_type ON service_type.sev_id = pbrder_bapp.p_servicetype' +
+          '</pre>' +
+        '</div>' +
+
+        '<div class="flex flex-col gap-2">' +
+          '<h4 class="font-bold text-slate-900 text-base">Method A: Using "Browse PHP" (Global SQL Override)</h4>' +
+          '<p class="text-slate-600">Paste the following code into your <strong>Browse PHP</strong> editor. The system automatically detects any alias ending with <code>_display</code> and uses it in the grid column instead of the ID:</p>' +
+          '<pre class="text-xs font-mono bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto leading-normal">' +
+            '<' + '?php\n' +
+            '$nuSql = "\n' +
+            '    SELECT \n' +
+            '        pbrder_bapp.*,\n' +
+            '        agent.ag_name                  AS p_agent_display,\n' +
+            '        station.station_name           AS p_location_display,\n' +
+            '        zzzzsys_user.username          AS p_officer_display,\n' +
+            '        service_type.sev_name          AS p_servicetype_display\n' +
+            '    FROM pbrder_bapp\n' +
+            '    LEFT JOIN agent ON agent.ag_id = pbrder_bapp.p_agent\n' +
+            '    LEFT JOIN station ON station.station_id = pbrder_bapp.p_location\n' +
+            '    LEFT JOIN zzzzsys_user ON zzzzsys_user.zzzzsys_user_id = pbrder_bapp.p_officer\n' +
+            '    LEFT JOIN service_type ON service_type.sev_id = pbrder_bapp.p_servicetype\n' +
+            '";' +
+          '</pre>' +
+        '</div>' +
+
+        '<div class="flex flex-col gap-2">' +
+          '<h4 class="font-bold text-slate-900 text-base">Method B: Field-Level Join Settings (No Code)</h4>' +
+          '<p class="text-slate-600">You can also configure individual fields. Select each field on your builder canvas and set its properties on the right panel:</p>' +
+          '<div class="overflow-x-auto border border-slate-100 rounded-lg">' +
+            '<table class="min-w-full text-xs text-left text-slate-500">' +
+              '<thead class="text-slate-700 bg-slate-50 uppercase font-semibold">' +
+                '<tr>' +
+                  '<th class="px-3 py-2">Field ID</th>' +
+                  '<th class="px-3 py-2">Join SQL</th>' +
+                  '<th class="px-3 py-2">Join Display Field</th>' +
+                '</tr>' +
+              '</thead>' +
+              '<tbody class="divide-y divide-slate-100">' +
+                '<tr>' +
+                  '<td class="px-3 py-2 font-mono text-slate-900">p_agent</td>' +
+                  '<td class="px-3 py-2 font-mono">LEFT JOIN agent ON agent.ag_id = pbrder_bapp.p_agent</td>' +
+                  '<td class="px-3 py-2 font-mono text-indigo-600">agent.ag_name</td>' +
+                '</tr>' +
+                '<tr>' +
+                  '<td class="px-3 py-2 font-mono text-slate-900">p_location</td>' +
+                  '<td class="px-3 py-2 font-mono">LEFT JOIN station ON station.station_id = pbrder_bapp.p_location</td>' +
+                  '<td class="px-3 py-2 font-mono text-indigo-600">station.station_name</td>' +
+                '</tr>' +
+                '<tr>' +
+                  '<td class="px-3 py-2 font-mono text-slate-900">p_officer</td>' +
+                  '<td class="px-3 py-2 font-mono">LEFT JOIN zzzzsys_user ON zzzzsys_user.zzzzsys_user_id = pbrder_bapp.p_officer</td>' +
+                  '<td class="px-3 py-2 font-mono text-indigo-600">zzzzsys_user.username</td>' +
+                '</tr>' +
+                '<tr>' +
+                  '<td class="px-3 py-2 font-mono text-slate-900">p_servicetype</td>' +
+                  '<td class="px-3 py-2 font-mono">LEFT JOIN service_type ON service_type.sev_id = pbrder_bapp.p_servicetype</td>' +
+                  '<td class="px-3 py-2 font-mono text-indigo-600">service_type.sev_name</td>' +
+                '</tr>' +
+              '</tbody>' +
+            '</table>' +
+          '</div>' +
+        '</div>';
+
+      var footer = document.createElement('div');
+      footer.className = 'flex justify-end pt-3 border-t border-slate-100';
+      var closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'nu-btn nu-btn-secondary px-5 py-2 rounded-lg text-xs font-semibold';
+      closeBtn.textContent = 'Close';
+      closeBtn.onclick = function () { overlay.remove(); };
+      footer.appendChild(closeBtn);
+
+      modal.appendChild(header);
+      modal.appendChild(body);
+      modal.appendChild(footer);
+      overlay.appendChild(modal);
+
+      overlay.onclick = function (e) {
+        if (e.target === overlay) overlay.remove();
+      };
+
+      document.body.appendChild(overlay);
+    },
+
+    showUpdateTableHelp: function () {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.65);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+
+      var modal = document.createElement('div');
+      modal.className = 'bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col gap-4 text-slate-800';
+      modal.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+
+      var header = document.createElement('div');
+      header.className = 'flex justify-between items-center border-b pb-3 border-slate-100';
+      header.innerHTML = '<h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">⚙️ Automating Table Updates</h3>' +
+        '<button type="button" class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>';
+
+      header.querySelector('button').onclick = function () { overlay.remove(); };
+
+      var body = document.createElement('div');
+      body.className = 'flex flex-col gap-5 text-sm leading-relaxed';
+
+      body.innerHTML =
+        '<div>' +
+          '<p class="mb-3 text-slate-600">To automatically update another table (e.g., marking a booking/order as <strong>completed</strong> when a certificate with a reference number is saved), you can use either <strong>PHP After Save</strong> or a <strong>Workflow Transition Hook</strong>.</p>' +
+        '</div>' +
+
+        '<div class="flex flex-col gap-2">' +
+          '<h4 class="font-bold text-slate-900 text-base">Method A: Using "PHP After Save" (Form DB Hook)</h4>' +
+          '<p class="text-slate-600">Paste the following code into your <strong>PHP After Save</strong> editor under the PHP / CSS tab. It executes immediately after the record is saved, using the saved reference to update your target table:</p>' +
+          '<pre class="text-xs font-mono bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto leading-normal">' +
+            '<' + '?php\n' +
+            '// 1. Get the reference number of the saved certificate record\n' +
+            '$reference = trim($cert_reference ?? \'#cert_reference#\');\n\n' +
+            'if (!empty($reference)) {\n' +
+            '    try {\n' +
+            '        $db = nu_db(); // Get current PDO connection\n' +
+            '        \n' +
+            '        // 2. Execute SQL statement to update another table\n' +
+            '        $sql = "UPDATE `orders` SET `status` = \'completed\', `updated_at` = NOW() WHERE `order_reference` = ?";\n' +
+            '        $stmt = $db->prepare($sql);\n' +
+            '        $stmt->execute([$reference]);\n' +
+            '        \n' +
+            '        nu_log("Automatically completed order for reference: " . $reference, "after_save_automation");\n' +
+            '    } catch (Throwable $e) {\n' +
+            '        error_log("[Automation Error] " . $e->getMessage());\n' +
+            '    }\n' +
+            '}' +
+          '</pre>' +
+        '</div>' +
+
+        '<div class="flex flex-col gap-2">' +
+          '<h4 class="font-bold text-slate-900 text-base">Method B: Using "Workflow Transition Hooks"</h4>' +
+          '<p class="text-slate-600">If using a workflow, define a stage transition (e.g. from <code>"Pending Certificate"</code> to <code>"Completed"</code>) and bind a transition hook:</p>' +
+          '<ul class="list-disc pl-5 text-xs text-slate-600 flex flex-col gap-1">' +
+            '<li>Set the <strong>Transition Hook</strong> to <code>update_record</code> to automatically update the bound table status to match the destination stage code.</li>' +
+            '<li>Or set the <strong>Transition Hook</strong> to <code>call_webhook</code> to send a payload to your custom listener/API which handles custom multi-table SQL queries programmatically.</li>' +
+          '</ul>' +
+        '</div>';
+
+      var footer = document.createElement('div');
+      footer.className = 'flex justify-end pt-3 border-t border-slate-100';
+      var closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'nu-btn nu-btn-secondary px-5 py-2 rounded-lg text-xs font-semibold';
+      closeBtn.textContent = 'Close';
+      closeBtn.onclick = function () { overlay.remove(); };
+      footer.appendChild(closeBtn);
+
+      modal.appendChild(header);
+      modal.appendChild(body);
+      modal.appendChild(footer);
+      overlay.appendChild(modal);
+
+      overlay.onclick = function (e) {
+        if (e.target === overlay) overlay.remove();
+      };
+
+      document.body.appendChild(overlay);
+    },
+
     open: function () {
       var card = document.getElementById('formBuilderCard'); var list = document.getElementById('formsListSection');
       if (card) card.style.display = 'block'; if (list) list.style.display = 'none';

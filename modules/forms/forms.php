@@ -843,6 +843,17 @@ foreach ($forms as $f) {
 
     <!-- ── TAB: Fields ── -->
     <div class="nb-tab-panel active" id="panelFields">
+      <!-- Quick Reference Banner for Updating Another Table -->
+      <div class="bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/60 rounded-xl p-3 mb-4 flex items-center justify-between text-xs text-indigo-800 dark:text-indigo-300" style="margin-bottom: 12px;">
+        <span class="flex items-center gap-2">
+          <span style="font-size: 14px;">⚙️</span>
+          <span>Need to automatically update another table (e.g., mark an order/booking as completed when a certificate is saved with a matching reference number)?</span>
+        </span>
+        <button type="button" onclick="nbFormBuilder.showUpdateTableHelp()" class="text-indigo-600 dark:text-indigo-400 hover:underline font-bold bg-indigo-100/50 dark:bg-indigo-900/40 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors" style="border: none; cursor: pointer;">
+          💡 View Quick Guide
+        </button>
+      </div>
+
       <!-- Premium Hover Tooltip -->
       <div id="nb-hover-tooltip" class="fixed pointer-events-none bg-slate-900/95 dark:bg-slate-950/95 text-white text-xs px-3 py-2 rounded-lg shadow-xl border border-slate-700/80 z-[99999] opacity-0 transition-opacity duration-150 backdrop-blur-sm hidden max-w-xs flex flex-col gap-1">
         <div class="font-bold border-b border-slate-700/60 pb-1 mb-1 text-primary text-[11px] uppercase tracking-wider" id="nb-tooltip-title"></div>
@@ -1045,7 +1056,12 @@ foreach ($forms as $f) {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="grid-column:1/-1;">
-          <label class="nu-label">Browse SQL <span style="font-weight:400;color:var(--text-tertiary);">(leave empty for auto SELECT *)</span></label>
+          <label class="nu-label" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Browse SQL <span style="font-weight:400;color:var(--text-tertiary);">(leave empty for auto SELECT *)</span></span>
+            <button type="button" onclick="nbFormBuilder.showCustomJoinsHelp()" class="nu-btn nu-btn-ghost nu-btn-sm text-amber-600 hover:text-amber-700 hover:bg-amber-50" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;height:auto;border:1px solid currentColor;">
+              💡 Custom Joins Guide
+            </button>
+          </label>
           <textarea id="formBrowseSql" class="nu-input" rows="4" placeholder="SELECT id, name, email FROM customers WHERE active = 1"></textarea>
         </div>
         <div style="grid-column:1/-1;">
@@ -1637,9 +1653,14 @@ foreach ($forms as $f) {
         </div>
 
         <div style="grid-column:1/-1;border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px;">
-          <label class="nu-label" style="margin-bottom:6px;display:block;">
-            Browse PHP
-            <span style="font-weight:400;color:var(--text-tertiary);">— customize browse query (use <code>$nuSql</code>, <code>$nuWhere</code>, <code>$nuOrder</code>, <code>$nuParams</code>)</span>
+          <label class="nu-label" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>
+              Browse PHP
+              <span style="font-weight:400;color:var(--text-tertiary);">— customize browse query (use <code>$nuSql</code>, <code>$nuWhere</code>, <code>$nuOrder</code>, <code>$nuParams</code>)</span>
+            </span>
+            <button type="button" onclick="nbFormBuilder.showCustomJoinsHelp()" class="nu-btn nu-btn-ghost nu-btn-sm text-amber-600 hover:text-amber-700 hover:bg-amber-50" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;height:auto;border:1px solid currentColor;margin-bottom:4px;">
+              💡 Custom Joins Guide
+            </button>
           </label>
           <div class="nb-ace-wrap" id="wrapBrowsePhp">
             <div class="nb-ace-topbar">
@@ -1750,9 +1771,14 @@ foreach ($forms as $f) {
         </div>
 
         <div>
-          <label class="nu-label" style="margin-bottom:6px;display:block;">
-            PHP After Save
-            <span style="font-weight:400;color:var(--text-tertiary);">— runs server-side after a record is saved. Use variables like <code>$field_name</code> or <code>#field_name#</code> for field values.</span>
+          <label class="nu-label" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>
+              PHP After Save
+              <span style="font-weight:400;color:var(--text-tertiary);">— runs server-side after a record is saved. Use variables like <code>$field_name</code> or <code>#field_name#</code> for field values.</span>
+            </span>
+            <button type="button" onclick="nbFormBuilder.showUpdateTableHelp()" class="nu-btn nu-btn-ghost nu-btn-sm text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;height:auto;border:1px solid currentColor;">
+              💡 Update Table Guide
+            </button>
           </label>
           <div class="nb-ace-wrap" id="wrapCustomPhpAfter">
             <div class="nb-ace-topbar">
