@@ -208,6 +208,104 @@ class NuMenuRenderer
                         'menu_default_view' => 'browse'
                     ]);
                 }
+
+                // Self-healing: Ensure "System Demo Files" menu items exist in nu_menus table (for globeadmin only)
+                $existsDemoGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'System Demo Files' AND menu_type = 'group'");
+                if (!$existsDemoGroup) {
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'System Demo Files',
+                        'menu_type'         => 'group',
+                        'menu_target'       => '',
+                        'menu_parent_id'    => 0,
+                        'menu_order'        => 120,
+                        'menu_roles'        => 'globeadmin',
+                        'menu_role_access'  => '["globeadmin"]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'clipboard',
+                    ]);
+                    $existsDemoGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'System Demo Files' AND menu_type = 'group'");
+                }
+                $demoParentId = $existsDemoGroup ? (int)$existsDemoGroup['menu_id'] : 0;
+
+                // 1. Interactive Developer Dashboard Menu Target
+                $existsDemoDashboard = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'system_demo_files'");
+                if (!$existsDemoDashboard) {
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'Developer Demo',
+                        'menu_type'         => 'form',
+                        'menu_target'       => 'system_demo_files',
+                        'menu_parent_id'    => $demoParentId,
+                        'menu_order'        => 121,
+                        'menu_roles'        => 'globeadmin',
+                        'menu_role_access'  => '["globeadmin"]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'layout',
+                        'menu_open_mode'    => 'inline|browse',
+                        'menu_browse_mode'  => 'inline',
+                        'menu_preview_mode' => 'inline',
+                        'menu_default_view' => 'browse'
+                    ]);
+                }
+
+                // 2. Service Types Forms Menu Target
+                $existsDemoTypes = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'demo_service_types'");
+                if (!$existsDemoTypes) {
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'Service Types',
+                        'menu_type'         => 'form',
+                        'menu_target'       => 'demo_service_types',
+                        'menu_parent_id'    => $demoParentId,
+                        'menu_order'        => 122,
+                        'menu_roles'        => 'globeadmin',
+                        'menu_role_access'  => '["globeadmin"]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'copy',
+                        'menu_open_mode'    => 'inline|browse',
+                        'menu_browse_mode'  => 'inline',
+                        'menu_preview_mode' => 'inline',
+                        'menu_default_view' => 'browse'
+                    ]);
+                }
+
+                // 3. Customer Requests Forms Menu Target
+                $existsDemoRequests = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'demo_customer_requests'");
+                if (!$existsDemoRequests) {
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'Customer Requests',
+                        'menu_type'         => 'form',
+                        'menu_target'       => 'demo_customer_requests',
+                        'menu_parent_id'    => $demoParentId,
+                        'menu_order'        => 123,
+                        'menu_roles'        => 'globeadmin',
+                        'menu_role_access'  => '["globeadmin"]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'users',
+                        'menu_open_mode'    => 'inline|browse',
+                        'menu_browse_mode'  => 'inline',
+                        'menu_preview_mode' => 'inline',
+                        'menu_default_view' => 'browse'
+                    ]);
+                }
+
+                // 4. Staff Services Forms Menu Target
+                $existsDemoStaff = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'demo_staff_services'");
+                if (!$existsDemoStaff) {
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'Staff Services',
+                        'menu_type'         => 'form',
+                        'menu_target'       => 'demo_staff_services',
+                        'menu_parent_id'    => $demoParentId,
+                        'menu_order'        => 124,
+                        'menu_roles'        => 'globeadmin',
+                        'menu_role_access'  => '["globeadmin"]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'clipboard',
+                        'menu_open_mode'    => 'inline|browse',
+                        'menu_browse_mode'  => 'inline',
+                        'menu_preview_mode' => 'inline',
+                        'menu_default_view' => 'browse'
+                    ]);
+                }
             } catch (Exception $e) {
                 // Fail silently if nu_menus table doesn't exist yet
             }
