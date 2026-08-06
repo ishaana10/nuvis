@@ -822,6 +822,125 @@ window.NuApp = {
     };
     searchWrap.appendChild(filtersBtn);
 
+    // View SQL button and modal for globeadmin only
+    if (isGlobeAdmin && data.browse_sql_debug) {
+      const sqlBtn = document.createElement('button');
+      sqlBtn.type = 'button';
+      sqlBtn.className = 'nu-btn nu-btn-ghost';
+      sqlBtn.innerHTML = '👁 View SQL';
+      sqlBtn.onclick = () => {
+        const debug = data.browse_sql_debug;
+
+        // Ensure parameters are formatted nicely
+        const formatParams = (params) => {
+          if (!params || (Array.isArray(params) && params.length === 0)) return 'None';
+          return JSON.stringify(params, null, 2);
+        };
+
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--bg-elevated,#fff);border:1px solid var(--border-color,#ccc);border-radius:12px;padding:24px;width:90%;max-width:850px;max-height:85vh;overflow-y:auto;display:flex;flex-direction:column;gap:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);position:relative;color:var(--text-primary,#000);';
+
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color,#eee);padding-bottom:12px;';
+
+        const title = document.createElement('h3');
+        title.style.cssText = 'margin:0;font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px;';
+        title.innerHTML = '📂 Generated Browse SQL <span style="font-size:11px;font-weight:normal;padding:2px 8px;border-radius:12px;background:rgba(59,130,246,0.1);color:#3b82f6;border:1px solid rgba(59,130,246,0.2);">globeadmin only</span>';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = 'background:none;border:none;font-size:24px;cursor:pointer;color:var(--text-secondary,#666);line-height:1;padding:0;';
+        closeBtn.onclick = () => overlay.remove();
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        box.appendChild(header);
+
+        // Code block helper
+        const createSqlBlock = (titleLabel, sqlText, paramsText) => {
+          const container = document.createElement('div');
+          container.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+
+          const titleRow = document.createElement('div');
+          titleRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+
+          const label = document.createElement('span');
+          label.style.cssText = 'font-weight:600;font-size:13px;color:var(--text-secondary,#444);';
+          label.textContent = titleLabel;
+
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'nu-btn nu-btn-ghost nu-btn-sm';
+          copyBtn.style.cssText = 'padding:2px 8px;font-size:11px;height:auto;line-height:1.5;';
+          copyBtn.textContent = '📋 Copy SQL';
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(sqlText).then(() => {
+              copyBtn.textContent = '✅ Copied!';
+              setTimeout(() => { copyBtn.textContent = '📋 Copy SQL'; }, 2000);
+            });
+          };
+
+          titleRow.appendChild(label);
+          titleRow.appendChild(copyBtn);
+          container.appendChild(titleRow);
+
+          const pre = document.createElement('pre');
+          pre.style.cssText = 'margin:0;padding:12px;background:var(--bg-hover,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px;overflow-x:auto;font-family:Consolas, Monaco, "Andale Mono", monospace;font-size:12px;line-height:1.5;color:var(--text-primary,#0f172a);max-height:200px;';
+          pre.textContent = sqlText;
+          container.appendChild(pre);
+
+          if (paramsText && paramsText !== 'None') {
+            const paramLabel = document.createElement('span');
+            paramLabel.style.cssText = 'font-weight:600;font-size:12px;color:var(--text-secondary,#444);margin-top:4px;';
+            paramLabel.textContent = 'Bound Parameters:';
+            container.appendChild(paramLabel);
+
+            const pPre = document.createElement('pre');
+            pPre.style.cssText = 'margin:0;padding:8px 12px;background:var(--bg-hover,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px;overflow-x:auto;font-family:Consolas, Monaco, "Andale Mono", monospace;font-size:11px;line-height:1.4;color:var(--text-primary,#475569);max-height:100px;';
+            pPre.textContent = paramsText;
+            container.appendChild(pPre);
+          }
+
+          return container;
+        };
+
+        // Base SQL Block
+        box.appendChild(createSqlBlock('1. Base SQL Query', debug.base_sql, formatParams(debug.params)));
+
+        // Separator
+        const sep = document.createElement('hr');
+        sep.style.cssText = 'border:0;border-top:1px solid var(--border-color,#eee);margin:4px 0;';
+        box.appendChild(sep);
+
+        // Final SQL Block
+        box.appendChild(createSqlBlock('2. Final Paginated SQL Query (Includes sorting, limit, offset)', debug.final_sql, formatParams(debug.params)));
+
+        // Footer Actions
+        const footer = document.createElement('div');
+        footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;border-top:1px solid var(--border-color,#eee);padding-top:12px;';
+
+        const closeFooterBtn = document.createElement('button');
+        closeFooterBtn.className = 'nu-btn nu-btn-ghost';
+        closeFooterBtn.textContent = 'Close';
+        closeFooterBtn.onclick = () => overlay.remove();
+
+        footer.appendChild(closeFooterBtn);
+        box.appendChild(footer);
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        // Close on clicking overlay background
+        overlay.onclick = (e) => {
+          if (e.target === overlay) overlay.remove();
+        };
+      };
+      searchWrap.appendChild(sqlBtn);
+    }
+
     // Export Dropdown menu
     const exportWrap = document.createElement('div');
     exportWrap.style.cssText = 'position:relative;display:inline-block;';
