@@ -581,6 +581,10 @@ foreach ($forms as $f) {
   opacity: 1;
   transform: translate(-50%, 0);
 }
+.nu-search-pill:focus-within {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in oklch,var(--color-primary) 15%,transparent);
+}
 </style>
 
 <div class="nu-forms">
@@ -591,14 +595,13 @@ foreach ($forms as $f) {
       <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:300px;">
         <h3 class="nu-card-title" style="margin-bottom:0;flex-shrink:0;">Forms</h3>
 
-        <!-- Search Bar -->
-        <div style="display:flex;gap:6px;align-items:center;flex:1;max-width:500px;">
-          <div style="position:relative;flex:1;">
-            <input type="text" id="nbFormsSearchInput" class="nu-input" placeholder="Search forms..." style="width:100%;padding-right:32px;" onkeydown="if(event.key === 'Enter') nbSearchForms()">
-            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);cursor:pointer;display:none;" id="btnFormsSearchClear" onclick="nbClearFormsSearch()">✕</span>
-          </div>
-          <button class="nu-btn nu-btn-primary" onclick="nbSearchForms()" style="padding:6px 12px;">Search</button>
-          <button class="nu-btn nu-btn-ghost" onclick="nbClearFormsSearch()" style="padding:6px 12px;">Clear</button>
+        <!-- Modern Unified Search Pill -->
+        <div class="nu-search-pill" style="display:flex;align-items:center;border:1px solid var(--border-color);border-radius:9999px;background:var(--bg-surface);padding:2px;flex:1;max-width:360px;transition:box-shadow .15s, border-color .15s;position:relative;">
+          <input type="text" id="nbFormsSearchInput" placeholder="Search forms..." style="flex:1;border:none;background:none;outline:none;padding:6px 12px 6px 16px;font-size:12.5px;color:var(--text-primary);" onkeydown="if(event.key === 'Enter') nbSearchForms()">
+          <button type="button" id="btnFormsSearchClear" onclick="nbClearFormsSearch()" style="display:none;background:none;border:none;cursor:pointer;color:var(--text-tertiary);font-size:11px;padding:4px 8px;margin-right:4px;transition:color .15s;" title="Clear search">✕</button>
+          <button type="button" onclick="nbSearchForms()" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--color-primary);color:#fff;border:none;cursor:pointer;margin-right:2px;transition:opacity .15s;flex-shrink:0;" title="Search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:block;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
         </div>
       </div>
 
