@@ -2413,6 +2413,10 @@ function nu_handle_list() {
     $searchEnabled = (int)($form[$c['browse_search_enabled']] ?? 0);
     $searchFields  = trim((string)($form[$c['browse_search_fields']] ?? ''));
 
+    $baseSqlForLog = '';
+    $finalSqlForLog = '';
+    $paramsForLog = [];
+
     if ($nuSql !== null) {
         $baseSql    = $nuSql;
         $baseParams = $nuParams;
@@ -2442,7 +2446,12 @@ function nu_handle_list() {
         $pages  = max(1, (int)ceil($total / $pageSize));
         if ($page > $pages) $page = $pages;
         $offset = ($page - 1) * $pageSize;
-        $records = nu_q($baseSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}", $baseParams)
+
+        $baseSqlForLog = $baseSql;
+        $finalSqlForLog = $baseSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}";
+        $paramsForLog = $baseParams;
+
+        $records = nu_q($finalSqlForLog, $baseParams)
                        ->fetchAll(PDO::FETCH_ASSOC);
 
     } else {
@@ -2510,7 +2519,11 @@ function nu_handle_list() {
         if ($page > $pages) $page = $pages;
         $offset      = ($page - 1) * $pageSize;
         
-        $recordsSql  = "SELECT {$selectSql} FROM `{$table}`" . $joinSql . $whereSql . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}";
+        $baseSqlForLog = "SELECT {$selectSql} FROM `{$table}`" . $joinSql . $whereSql;
+        $recordsSql  = $baseSqlForLog . " ORDER BY {$finalOrder} LIMIT {$pageSize} OFFSET {$offset}";
+        $finalSqlForLog = $recordsSql;
+        $paramsForLog = $params;
+
         $records     = nu_q($recordsSql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -2521,7 +2534,7 @@ function nu_handle_list() {
     }
     unset($row);
 
-    nu_json(['success' => true, 'data' => [
+    $responseData = [
         'layout'  => nu_flatten_layout_for_grid($layout), 'records' => $records,
         'page'    => $page,   'pages'   => $pages,   'total' => $total,
         'query'   => $q,      'browsesearchenabled'   => $searchEnabled,
@@ -2529,7 +2542,17 @@ function nu_handle_list() {
         'browse_layout' => $form[$c['browse_layout']] ?? null,
         'browse_delete_enabled' => (int)($form[$c['browse_delete_enabled']] ?? 1),
         'form_table' => $form[$c['table']] ?? ''
-    ]]);
+    ];
+
+    if (strtolower($currentRole) === 'globeadmin') {
+        $responseData['browse_sql_debug'] = [
+            'base_sql'  => $baseSqlForLog,
+            'final_sql' => $finalSqlForLog,
+            'params'    => $paramsForLog
+        ];
+    }
+
+    nu_json(['success' => true, 'data' => $responseData]);
 }
 
 function nu_handle_save() {
