@@ -104,7 +104,8 @@ window.NuApp = {
     'password_policy','appcloner','password','report_dashboards','email_settings',
     'updater','import_export','developer_settings','word_certificates','api_manager',
     'barcode',
-    'procedures'
+    'procedures',
+    'system_demo_files'
   ]),
 
   init() {
