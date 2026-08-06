@@ -863,5 +863,39 @@ INSERT INTO `nu_products` (`name`, `type`, `barcode`, `description`, `price`) VA
 ('Enterprise IT Security Audit', 'service', 'SVC-IT-SEC-05', 'Comprehensive end-to-end network penetration testing, software vulnerability scan, and infrastructure compliance audit report.', 1500.00)
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `type`=VALUES(`type`), `description`=VALUES(`description`), `price`=VALUES(`price`);
 
+-- ─── DEMO APP: JOINS AND AUTO-UPDATES ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `demo_service_types` (
+    `service_type_id` INT AUTO_INCREMENT PRIMARY KEY,
+    `service_name` VARCHAR(100) NOT NULL,
+    `service_code` VARCHAR(50) NOT NULL UNIQUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `demo_customer_requests` (
+    `request_id` INT AUTO_INCREMENT PRIMARY KEY,
+    `customer_name` VARCHAR(100) NOT NULL,
+    `service_type_id` INT NOT NULL,
+    `request_details` TEXT,
+    `status` VARCHAR(50) DEFAULT 'Pending',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `demo_staff_services` (
+    `service_log_id` INT AUTO_INCREMENT PRIMARY KEY,
+    `request_id` INT NOT NULL,
+    `staff_name` VARCHAR(100) NOT NULL,
+    `service_notes` TEXT,
+    `service_date` DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `demo_service_types` (`service_type_id`, `service_name`, `service_code`) VALUES
+(1, 'Hardware Diagnostics & Repair', 'HW_DIAG'),
+(2, 'Software Installation & Config', 'SW_INSTALL'),
+(3, 'Network Troubleshooting', 'NET_TRIAL');
+
+INSERT IGNORE INTO `demo_customer_requests` (`request_id`, `customer_name`, `service_type_id`, `request_details`, `status`) VALUES
+(101, 'Alice Smith', 1, 'My laptop screen is flickering.', 'Pending'),
+(102, 'Bob Johnson', 2, 'Need latest MS Office installed.', 'Pending'),
+(103, 'Charlie Brown', 3, 'Wi-Fi connection drops every 10 mins.', 'Pending');
+
 
 SET FOREIGN_KEY_CHECKS = 1;
