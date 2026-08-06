@@ -587,11 +587,28 @@ foreach ($forms as $f) {
 
   <!-- ── Forms list ────────────────────────────────────────────── -->
   <div id="formsListSection">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h3 class="nu-card-title">Forms</h3>
-      <?php if ($auth->hasPermission('forms','create')): ?>
-      <button class="nu-btn nu-btn-primary" onclick="nbFormBuilder.open()">+ New Form</button>
-      <?php endif; ?>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
+      <h3 class="nu-card-title" style="margin-bottom:0;">Forms</h3>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <!-- View Toggle Button Group -->
+        <div class="nu-btn-group" style="display:inline-flex;border:1px solid var(--border-color);border-radius:6px;overflow:hidden;background:var(--bg-surface);">
+          <button type="button" id="btnViewCards" class="nu-btn nu-btn-sm nu-btn-primary" style="border:none;border-radius:0;margin:0;padding:6px 12px;font-weight:600;" onclick="nbSetViewMode('cards')">📇 Cards</button>
+          <button type="button" id="btnViewBrowse" class="nu-btn nu-btn-sm nu-btn-ghost" style="border:none;border-radius:0;margin:0;padding:6px 12px;font-weight:600;" onclick="nbSetViewMode('browse')">▤ Browse</button>
+        </div>
+        <?php if ($auth->hasPermission('forms','create')): ?>
+        <button class="nu-btn nu-btn-primary" onclick="nbFormBuilder.open()">+ New Form</button>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+      <div style="position:relative;flex:1;">
+        <input type="text" id="nbFormsSearchInput" class="nu-input" placeholder="Search forms by name, code, table, etc..." style="width:100%;padding-right:32px;" onkeydown="if(event.key === 'Enter') nbSearchForms()">
+        <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);cursor:pointer;display:none;" id="btnFormsSearchClear" onclick="nbClearFormsSearch()">✕</span>
+      </div>
+      <button class="nu-btn nu-btn-primary" onclick="nbSearchForms()">Search</button>
+      <button class="nu-btn nu-btn-ghost" onclick="nbClearFormsSearch()">Clear</button>
     </div>
 
     <!-- Filter tabs -->
@@ -619,7 +636,11 @@ foreach ($forms as $f) {
         $isMain     = in_array($fType, ['main','popup']);
         $pkLabel    = $pkType === 'uuid' ? 'UUID' : 'Auto-int';
       ?>
-      <div class="nu-card" data-form-type="<?= htmlspecialchars($fType, ENT_QUOTES) ?>">
+      <div class="nu-card"
+           data-form-type="<?= htmlspecialchars($fType, ENT_QUOTES) ?>"
+           data-form-name="<?= htmlspecialchars(strtolower($f['form_name']), ENT_QUOTES) ?>"
+           data-form-code="<?= htmlspecialchars(strtolower($f['form_code']), ENT_QUOTES) ?>"
+           data-form-table="<?= htmlspecialchars(strtolower($f['form_table'] ?? ''), ENT_QUOTES) ?>">
         <div class="nu-card-header" style="gap:8px;flex-wrap:wrap;">
           <h4 class="nu-card-title" style="flex:1;"><?= htmlspecialchars($f['form_name']) ?></h4>
           <span class="nb-type-badge <?= htmlspecialchars($fType) ?>"><?= $typeLabel ?></span>
@@ -666,6 +687,72 @@ foreach ($forms as $f) {
       </div>
       <?php endif; ?>
     </div>
+
+    <!-- ── Browse Mode Table Container ── -->
+    <div id="formsBrowseTableContainer" style="display:none;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:10px;overflow:hidden;margin-bottom:24px;">
+      <div class="nu-table-wrap">
+        <table class="nu-table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border-color);background:var(--bg-subtle);">
+              <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;width:30%;">Form Name</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;width:15%;">Code</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;width:12%;">Type</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;width:15%;">DB Table</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;width:8%;">Fields</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;width:8%;">PK Type</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;width:12%;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="formsBrowseTableBody">
+            <?php foreach ($forms as $f): ?>
+            <?php
+              $layout     = @json_decode($f['form_layout'] ?? '[]', true);
+              $fieldCount = is_array($layout) ? count($layout) : 0;
+              $formLabel  = htmlspecialchars($f['form_name'], ENT_QUOTES);
+              $formCode   = htmlspecialchars($f['form_code'], ENT_QUOTES);
+              $browseMode = $f['browse_display_mode'] ?? 'inline';
+              $pkType     = $f['form_pk_type']   ?? 'autoincrement';
+              $tMode      = $f['form_table_mode'] ?? 'new';
+              $fType      = $f['form_type']       ?? 'main';
+              $typeLabels = ['main'=>'Main','subform'=>'Subform','popup'=>'Popup','report'=>'Report'];
+              $typeLabel  = $typeLabels[$fType] ?? ucfirst($fType);
+              $isMain     = in_array($fType, ['main','popup']);
+              $pkLabel    = $pkType === 'uuid' ? 'UUID' : 'Auto-int';
+            ?>
+            <tr data-form-type="<?= htmlspecialchars($fType, ENT_QUOTES) ?>"
+                data-form-name="<?= htmlspecialchars(strtolower($f['form_name']), ENT_QUOTES) ?>"
+                data-form-code="<?= htmlspecialchars(strtolower($f['form_code']), ENT_QUOTES) ?>"
+                data-form-table="<?= htmlspecialchars(strtolower($f['form_table'] ?? ''), ENT_QUOTES) ?>"
+                style="border-bottom:1px solid var(--border-color);transition:background .15s;">
+              <td style="padding:12px 16px;font-weight:600;color:var(--text-primary);"><?= htmlspecialchars($f['form_name']) ?></td>
+              <td style="padding:12px 16px;"><span class="nu-badge"><?= htmlspecialchars($f['form_code']) ?></span></td>
+              <td style="padding:12px 16px;"><span class="nb-type-badge <?= htmlspecialchars($fType) ?>"><?= $typeLabel ?></span></td>
+              <td style="padding:12px 16px;font-family:monospace;font-size:11px;"><?= $f['form_table'] ? htmlspecialchars($f['form_table']) : '<em style="color:var(--text-tertiary)">none</em>' ?></td>
+              <td style="padding:12px 16px;font-weight:600;"><?= $fieldCount ?></td>
+              <td style="padding:12px 16px;color:var(--color-primary);font-weight:500;"><?= $pkLabel ?></td>
+              <td style="padding:12px 16px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <?php if ($isMain): ?>
+                  <button class="nu-btn nu-btn-primary nu-btn-sm" style="padding:2px 6px;font-size:10px;" onclick="window.previewForm && previewForm('<?= $formCode ?>','<?= $formLabel ?>')">Preview</button>
+                  <button class="nu-btn nu-btn-ghost nu-btn-sm" style="padding:2px 6px;font-size:10px;" onclick="window.browseForm  && browseForm('<?= $formCode ?>',1,'','<?= $formLabel ?>','<?= htmlspecialchars($browseMode,ENT_QUOTES) ?>')">Browse</button>
+                  <?php endif; ?>
+                  <button class="nu-btn nu-btn-ghost nu-btn-sm" style="padding:2px 6px;font-size:10px;" onclick="nbFormBuilder.edit(<?= (int)$f['form_id'] ?>)">Edit</button>
+                  <button class="nu-btn nu-btn-danger nu-btn-sm" style="padding:2px 6px;font-size:10px;" onclick="window.deleteForm && deleteForm(<?= (int)$f['form_id'] ?>,'<?= $formLabel ?>')">Delete</button>
+                </div>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Empty State for Searches -->
+    <div id="formsNoMatchState" class="nu-card" style="display:none;text-align:center;padding:48px;margin-bottom:24px;">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-tertiary);margin:0 auto 12px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <p style="color:var(--text-tertiary);margin-bottom:0;">No matching forms found matching your search and filter criteria.</p>
+    </div>
+
   </div>
 
   <!-- ── Form Builder ──────────────────────────────────────────── -->
@@ -2314,15 +2401,135 @@ if (!window._nbFormsModuleInit) {
   });
   }
 
-  // ── Form type filter ─────────────────────────────────────────────
+  // ── View Mode and Unified Filtering/Search ───────────────────────
+  window.nbFormsCurrentFilter = 'all';
+  window.nbFormsSearchQuery = '';
+
+  window.nbSetViewMode = function(mode) {
+    localStorage.setItem('nuFormsViewMode', mode);
+
+    const cardsBtn = document.getElementById('btnViewCards');
+    const browseBtn = document.getElementById('btnViewBrowse');
+    const gridSection = document.getElementById('formsGrid');
+    const tableSection = document.getElementById('formsBrowseTableContainer');
+
+    if (mode === 'browse') {
+      if (cardsBtn) { cardsBtn.className = 'nu-btn nu-btn-sm nu-btn-ghost'; }
+      if (browseBtn) { browseBtn.className = 'nu-btn nu-btn-sm nu-btn-primary'; }
+      if (gridSection) { gridSection.style.display = 'none'; }
+      if (tableSection) { tableSection.style.display = 'block'; }
+    } else {
+      if (cardsBtn) { cardsBtn.className = 'nu-btn nu-btn-sm nu-btn-primary'; }
+      if (browseBtn) { browseBtn.className = 'nu-btn nu-btn-sm nu-btn-ghost'; }
+      if (gridSection) { gridSection.style.display = 'grid'; }
+      if (tableSection) { tableSection.style.display = 'none'; }
+    }
+
+    // Always re-apply current filters and search when toggling views to keep state consistent
+    window.applyFiltersAndSearch();
+  };
+
   window.nbFilterForms = function(filter, btn) {
     document.querySelectorAll('.nb-filter-tab').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    document.querySelectorAll('#formsGrid .nu-card[data-form-type]').forEach(card => {
-      const show = filter === 'all' || card.dataset.formType === filter;
-      card.style.display = show ? '' : 'none';
-    });
+    window.nbFormsCurrentFilter = filter;
+    window.applyFiltersAndSearch();
   };
+
+  window.nbSearchForms = function() {
+    const input = document.getElementById('nbFormsSearchInput');
+    const query = input ? input.value.trim().toLowerCase() : '';
+    window.nbFormsSearchQuery = query;
+
+    const clearBtn = document.getElementById('btnFormsSearchClear');
+    if (clearBtn) {
+      clearBtn.style.display = query ? 'inline' : 'none';
+    }
+
+    window.applyFiltersAndSearch();
+  };
+
+  window.nbClearFormsSearch = function() {
+    const input = document.getElementById('nbFormsSearchInput');
+    if (input) input.value = '';
+    window.nbFormsSearchQuery = '';
+
+    const clearBtn = document.getElementById('btnFormsSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    window.applyFiltersAndSearch();
+  };
+
+  window.applyFiltersAndSearch = function() {
+    const viewMode = localStorage.getItem('nuFormsViewMode') || 'cards';
+    const filter = window.nbFormsCurrentFilter;
+    const query = window.nbFormsSearchQuery;
+
+    let matchCount = 0;
+
+    if (viewMode === 'browse') {
+      // Filter rows in browse mode table
+      const rows = document.querySelectorAll('#formsBrowseTableBody tr');
+      rows.forEach(row => {
+        const type = row.getAttribute('data-form-type') || '';
+        const name = row.getAttribute('data-form-name') || '';
+        const code = row.getAttribute('data-form-code') || '';
+        const table = row.getAttribute('data-form-table') || '';
+
+        const matchesType = (filter === 'all' || type === filter);
+        const matchesSearch = !query ||
+                              name.includes(query) ||
+                              code.includes(query) ||
+                              table.includes(query) ||
+                              type.includes(query);
+
+        if (matchesType && matchesSearch) {
+          row.style.display = '';
+          matchCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    } else {
+      // Filter cards in cards mode grid
+      const cards = document.querySelectorAll('#formsGrid .nu-card[data-form-type]');
+      cards.forEach(card => {
+        const type = card.getAttribute('data-form-type') || '';
+        const name = card.getAttribute('data-form-name') || '';
+        const code = card.getAttribute('data-form-code') || '';
+        const table = card.getAttribute('data-form-table') || '';
+
+        const matchesType = (filter === 'all' || type === filter);
+        const matchesSearch = !query ||
+                              name.includes(query) ||
+                              code.includes(query) ||
+                              table.includes(query) ||
+                              type.includes(query);
+
+        if (matchesType && matchesSearch) {
+          card.style.display = '';
+          matchCount++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // Toggle No Match empty state
+    const noMatchState = document.getElementById('formsNoMatchState');
+    if (noMatchState) {
+      noMatchState.style.display = (matchCount === 0) ? 'block' : 'none';
+    }
+  };
+
+  // Restore saved view mode preference on initial script execution
+  (function() {
+    const savedMode = localStorage.getItem('nuFormsViewMode') || 'cards';
+    // Request animation frame or simple timeout to ensure elements are parsed
+    setTimeout(() => {
+      window.nbSetViewMode(savedMode);
+    }, 0);
+  })();
 
   window.nbToggleSettingsGroup = function() {
     const header = document.getElementById('nbSettingsHeader');
