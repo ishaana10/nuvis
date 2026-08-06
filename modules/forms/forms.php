@@ -587,9 +587,22 @@ foreach ($forms as $f) {
 
   <!-- ── Forms list ────────────────────────────────────────────── -->
   <div id="formsListSection">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
-      <h3 class="nu-card-title" style="margin-bottom:0;">Forms</h3>
-      <div style="display:flex;align-items:center;gap:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:300px;">
+        <h3 class="nu-card-title" style="margin-bottom:0;flex-shrink:0;">Forms</h3>
+
+        <!-- Search Bar -->
+        <div style="display:flex;gap:6px;align-items:center;flex:1;max-width:500px;">
+          <div style="position:relative;flex:1;">
+            <input type="text" id="nbFormsSearchInput" class="nu-input" placeholder="Search forms..." style="width:100%;padding-right:32px;" onkeydown="if(event.key === 'Enter') nbSearchForms()">
+            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);cursor:pointer;display:none;" id="btnFormsSearchClear" onclick="nbClearFormsSearch()">✕</span>
+          </div>
+          <button class="nu-btn nu-btn-primary" onclick="nbSearchForms()" style="padding:6px 12px;">Search</button>
+          <button class="nu-btn nu-btn-ghost" onclick="nbClearFormsSearch()" style="padding:6px 12px;">Clear</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <!-- View Toggle Button Group -->
         <div class="nu-btn-group" style="display:inline-flex;border:1px solid var(--border-color);border-radius:6px;overflow:hidden;background:var(--bg-surface);">
           <button type="button" id="btnViewCards" class="nu-btn nu-btn-sm nu-btn-primary" style="border:none;border-radius:0;margin:0;padding:6px 12px;font-weight:600;" onclick="nbSetViewMode('cards')">📇 Cards</button>
@@ -599,16 +612,6 @@ foreach ($forms as $f) {
         <button class="nu-btn nu-btn-primary" onclick="nbFormBuilder.open()">+ New Form</button>
         <?php endif; ?>
       </div>
-    </div>
-
-    <!-- Search Bar -->
-    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
-      <div style="position:relative;flex:1;">
-        <input type="text" id="nbFormsSearchInput" class="nu-input" placeholder="Search forms by name, code, table, etc..." style="width:100%;padding-right:32px;" onkeydown="if(event.key === 'Enter') nbSearchForms()">
-        <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);cursor:pointer;display:none;" id="btnFormsSearchClear" onclick="nbClearFormsSearch()">✕</span>
-      </div>
-      <button class="nu-btn nu-btn-primary" onclick="nbSearchForms()">Search</button>
-      <button class="nu-btn nu-btn-ghost" onclick="nbClearFormsSearch()">Clear</button>
     </div>
 
     <!-- Filter tabs -->
