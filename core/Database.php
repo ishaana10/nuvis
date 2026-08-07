@@ -65,10 +65,12 @@ class NuDatabase {
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_service_types (service_type_id TEXT PRIMARY KEY, name TEXT, description TEXT, price REAL)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_customer_requests (request_id TEXT PRIMARY KEY, customer_name TEXT, service_type_id TEXT, request_details TEXT, status TEXT DEFAULT 'Pending', created_at TEXT, updated_at TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_staff_services (service_log_id TEXT PRIMARY KEY, customer_request_id TEXT, staff_notes TEXT, service_date TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_instances (wfi_id INTEGER PRIMARY KEY, wfi_wf_id INTEGER, wfi_stage_id INTEGER, wfi_record_table TEXT, wfi_record_id TEXT, wfi_status TEXT, wfi_started_by INTEGER)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_instances (wfi_id INTEGER PRIMARY KEY, wfi_wf_id INTEGER, wfi_stage_id INTEGER, wfi_record_table TEXT, wfi_record_id TEXT, wfi_status TEXT, wfi_started_by INTEGER, wfi_started_at TEXT, wfi_completed_at TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflows (wf_id INTEGER PRIMARY KEY, wf_code TEXT, wf_name TEXT, wf_description TEXT, wf_form_code TEXT, wf_active INTEGER)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_stages (wfs_id INTEGER PRIMARY KEY, wfs_wf_id INTEGER, wfs_code TEXT, wfs_name TEXT, wfs_description TEXT, wfs_color TEXT, wfs_is_start INTEGER, wfs_is_end INTEGER, wfs_order INTEGER)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_transitions (wft_id INTEGER PRIMARY KEY, wft_wf_id INTEGER, wft_from_id INTEGER, wft_to_id INTEGER, wft_action TEXT, wft_label TEXT, wft_hook TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_history (wfh_id INTEGER PRIMARY KEY, wfh_wfi_id INTEGER, wfh_from_id INTEGER, wfh_to_id INTEGER, wfh_action TEXT, wfh_actor_id INTEGER, wfh_comment TEXT, wfh_acted_at TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_webhooks (webhook_id INTEGER PRIMARY KEY, webhook_name TEXT, webhook_url TEXT, webhook_secret TEXT, webhook_events TEXT, webhook_active INTEGER)");
 
             // Seed sample data
             $nowStr = date('Y-m-d H:i:s');
@@ -81,7 +83,7 @@ class NuDatabase {
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages VALUES (103, 100, 'Completed', 'Completed', 'The requested service', '#10b981', 0, 1, 3)");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions VALUES (101, 100, 101, 102, 'advance', 'Start Providing Service', 'update_record')");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions VALUES (102, 100, 102, 103, 'advance', 'Mark Service Completed', 'update_record')");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_instances VALUES (1, 100, 101, 'demo_customer_requests', 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'active', 1)");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_instances (wfi_id, wfi_wf_id, wfi_stage_id, wfi_record_table, wfi_record_id, wfi_status, wfi_started_by) VALUES (1, 100, 101, 'demo_customer_requests', 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'active', 1)");
         }
 
         // Ensure nu_menus columns exist in case of upgrade or existing database
@@ -450,50 +452,44 @@ class NuDatabase {
                 $existingStages = $stageStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
 
                 if (empty($existingStages) || !isset($existingStages['Pending']) || !isset($existingStages['In Progress']) || !isset($existingStages['Completed'])) {
-                    // Wipe broken structures for this workflow and re-insert them cleanly
+                    // Wipe broken structures for this workflow and re-insert them cleanly with explicit IDs matching the seeded instances
                     $this->pdo->prepare("DELETE FROM `nu_workflow_transitions` WHERE `wft_wf_id` = ?")->execute([$wfId]);
                     $this->pdo->prepare("DELETE FROM `nu_workflow_stages` WHERE `wfs_wf_id` = ?")->execute([$wfId]);
 
                     // Stage 1: Pending
                     $this->pdo->prepare("INSERT INTO `nu_workflow_stages` (
-                        `wfs_wf_id`, `wfs_code`, `wfs_name`, `wfs_description`, `wfs_color`, `wfs_is_start`, `wfs_is_end`, `wfs_order`
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")->execute([
-                        $wfId, 'Pending', 'Pending Service', 'The service request is created and is waiting for assignment/commencement.', '#f59e0b', 1, 0, 1
-                    ]);
-                    $stagePendingId = (int)$this->pdo->lastInsertId();
+                        `wfs_id`, `wfs_wf_id`, `wfs_code`, `wfs_name`, `wfs_description`, `wfs_color`, `wfs_is_start`, `wfs_is_end`, `wfs_order`
+                    ) VALUES (101, ?, 'Pending', 'Pending Service', 'The service request is created and is waiting for assignment/commencement.', '#f59e0b', 1, 0, 1)")->execute([$wfId]);
+                    $stagePendingId = 101;
 
                     // Stage 2: In Progress
                     $this->pdo->prepare("INSERT INTO `nu_workflow_stages` (
-                        `wfs_wf_id`, `wfs_code`, `wfs_name`, `wfs_description`, `wfs_color`, `wfs_is_start`, `wfs_is_end`, `wfs_order`
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")->execute([
-                        $wfId, 'In Progress', 'Service In Progress', 'The staff has commenced providing the requested service.', '#3b82f6', 0, 0, 2
-                    ]);
-                    $stageProgressId = (int)$this->pdo->lastInsertId();
+                        `wfs_id`, `wfs_wf_id`, `wfs_code`, `wfs_name`, `wfs_description`, `wfs_color`, `wfs_is_start`, `wfs_is_end`, `wfs_order`
+                    ) VALUES (102, ?, 'In Progress', 'Service In Progress', 'The staff has commenced providing the requested service.', '#3b82f6', 0, 0, 2)")->execute([$wfId]);
+                    $stageProgressId = 102;
 
                     // Stage 3: Completed
                     $this->pdo->prepare("INSERT INTO `nu_workflow_stages` (
-                        `wfs_wf_id`, `wfs_code`, `wfs_name`, `wfs_description`, `wfs_color`, `wfs_is_start`, `wfs_is_end`, `wfs_order`
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")->execute([
-                        $wfId, 'Completed', 'Completed', 'The requested service has been successfully completed.', '#10b981', 0, 1, 3
-                    ]);
-                    $stageCompletedId = (int)$this->pdo->lastInsertId();
+                        `wfs_id`, `wfs_wf_id`, `wfs_code`, `wfs_name`, `wfs_description`, `wfs_color`, `wfs_is_start`, `wfs_is_end`, `wfs_order`
+                    ) VALUES (103, ?, 'Completed', 'Completed', 'The requested service has been successfully completed.', '#10b981', 0, 1, 3)")->execute([$wfId]);
+                    $stageCompletedId = 103;
 
-                    // Insert Transitions & Action Hooks
+                    // Insert Transitions & Action Hooks with explicit transition IDs 101, 102
                     // Transition 1: Start Service (Pending -> In Progress)
                     $this->pdo->prepare("INSERT INTO `nu_workflow_transitions` (
-                        `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
-                    ) VALUES (?, ?, ?, ?, ?, ?)")->execute([
-                        $wfId, $stagePendingId, $stageProgressId, 'advance', 'Start Providing Service', 'update_record'
+                        `wft_id`, `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
+                    ) VALUES (101, ?, ?, ?, 'advance', 'Start Providing Service', 'update_record')")->execute([
+                        $wfId, $stagePendingId, $stageProgressId
                     ]);
 
                     // Transition 2: Finish Service (In Progress -> Completed)
                     $this->pdo->prepare("INSERT INTO `nu_workflow_transitions` (
-                        `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
-                    ) VALUES (?, ?, ?, ?, ?, ?)")->execute([
-                        $wfId, $stageProgressId, $stageCompletedId, 'advance', 'Mark Service Completed', 'update_record'
+                        `wft_id`, `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
+                    ) VALUES (102, ?, ?, ?, 'advance', 'Mark Service Completed', 'update_record')")->execute([
+                        $wfId, $stageProgressId, $stageCompletedId
                     ]);
                 } else {
-                    // Double check transitions exist
+                    // Double check transitions exist with exact IDs
                     $transStmt = $this->pdo->prepare("SELECT COUNT(*) FROM nu_workflow_transitions WHERE wft_wf_id = ?");
                     $transStmt->execute([$wfId]);
                     if ((int)$transStmt->fetchColumn() === 0) {
@@ -501,17 +497,17 @@ class NuDatabase {
                         $stageProgressId  = (int)$existingStages['In Progress'];
                         $stageCompletedId = (int)$existingStages['Completed'];
 
-                        // Re-insert Transitions & Action Hooks
+                        // Re-insert Transitions & Action Hooks with explicit IDs
                         $this->pdo->prepare("INSERT INTO `nu_workflow_transitions` (
-                            `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
-                        ) VALUES (?, ?, ?, ?, ?, ?)")->execute([
-                            $wfId, $stagePendingId, $stageProgressId, 'advance', 'Start Providing Service', 'update_record'
+                            `wft_id`, `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
+                        ) VALUES (101, ?, ?, ?, 'advance', 'Start Providing Service', 'update_record')")->execute([
+                            $wfId, $stagePendingId, $stageProgressId
                         ]);
 
                         $this->pdo->prepare("INSERT INTO `nu_workflow_transitions` (
-                            `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
-                        ) VALUES (?, ?, ?, ?, ?, ?)")->execute([
-                            $wfId, $stageProgressId, $stageCompletedId, 'advance', 'Mark Service Completed', 'update_record'
+                            `wft_id`, `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
+                        ) VALUES (102, ?, ?, ?, 'advance', 'Mark Service Completed', 'update_record')")->execute([
+                            $wfId, $stageProgressId, $stageCompletedId
                         ]);
                     }
                 }
