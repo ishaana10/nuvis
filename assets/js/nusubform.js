@@ -495,11 +495,12 @@
       displayCols.forEach(function (f) {
         var fname = f.name || f.fieldname || '';
         var val   = row[fname] !== undefined ? row[fname] : '';
+        var dispVal = row[fname + '_display'] !== undefined ? row[fname + '_display'] : '';
         var type  = f.type || f.fieldtype || 'text';
         html += '<div style="flex:1;min-width:120px;">';
         html += '<label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">'
           + esc(f.label || f.fieldlabel || fname) + '</label>';
-        html += buildInlineInput(type, fname, val, f, !hasEditPermission);
+        html += buildInlineInput(type, fname, val, f, !hasEditPermission, dispVal);
         html += '</div>';
       });
       html += '</div>';
@@ -521,13 +522,46 @@
     return String(val).split(',').map(function(s) { return s.trim(); });
   }
 
-  function buildInlineInput(type, name, value, field, disabled) {
+  function buildInlineInput(type, name, value, field, disabled, displayVal) {
     var disAttr = disabled ? ' disabled' : '';
     var base = 'class="nu-input" name="' + esc(name) + '" style="width:100%;"' + disAttr;
     if (type === 'textarea')      return '<textarea ' + base + ' rows="2">' + esc(value) + '</textarea>';
     if (type === 'calculated') {
       var expr = field.formula || (field.calculated || (field.calc_formula || ''));
       return '<input type="text" class="nu-input" name="' + esc(name) + '" data-calculated="true" data-expression="' + esc(expr) + '" value="' + esc(value) + '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
+    }
+    if (type === 'lookup') {
+      var lookup = field.lookup || {};
+      var lTable = lookup.table || '';
+      var lIdCol = lookup.id_column || lookup.idCol || 'id';
+      var lDisplayCol = lookup.display_column || lookup.displayCol || 'name';
+      var lFilter = lookup.filter || '';
+      var lExtra = lookup.extra || '';
+
+      var dispVal = displayVal || '';
+      if (value && !dispVal) {
+        dispVal = value;
+      }
+
+      var escJsArg = function(s) {
+        return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      };
+
+      if (disabled) {
+        return '<div style="display:flex;gap:6px;align-items:center;width:100%;">'
+          + '<input type="hidden" name="' + esc(name) + '" value="' + esc(value) + '">'
+          + '<input type="text" class="nu-input" value="' + esc(dispVal) + '" readonly style="flex:1;background:var(--bg-offset,#f5f5f5);color:#888;cursor:default;">'
+          + '</div>';
+      } else {
+        return '<div style="display:flex;gap:6px;align-items:center;width:100%;">'
+          + '<input type="hidden" name="' + esc(name) + '" value="' + esc(value) + '">'
+          + '<input type="text" class="nu-input" name="' + esc(name) + '_display" value="' + esc(dispVal) + '" readonly style="flex:1;">'
+          + '<button type="button" class="nu-btn nu-btn-ghost" style="white-space:nowrap;padding:4px 8px;" onclick="openLookupModal('
+          + '\'' + escJsArg(name) + '\',\'' + escJsArg(lTable) + '\',\'' + escJsArg(lIdCol) + '\',\'' + escJsArg(lDisplayCol) + '\',\'' + escJsArg(lFilter) + '\',\'' + escJsArg(lExtra) + '\''
+          + ')">&#x1F50D;</button>'
+          + '<button type="button" class="nu-btn nu-btn-ghost" style="padding:4px 8px;" onclick="clearLookup(\'' + escJsArg(name) + '\')">&#x2715;</button>'
+          + '</div>';
+      }
     }
     if (type === 'select' || type === 'select2') {
       var isMulti = !!(field.multiple === true || field.multiple === 'true' || field.multiple === 1 || field.select_type === 'multiselect');
@@ -717,7 +751,8 @@
 
       var hasEditPermission = checkPermission(container, 'edit');
       var isDisabled = !hasEditPermission || isReadonly;
-      fieldWr.insertAdjacentHTML('beforeend', buildInlineInput(ftype, fname, val, f, isDisabled));
+      var dispVal = row[fname + '_display'] !== undefined ? row[fname + '_display'] : '';
+      fieldWr.insertAdjacentHTML('beforeend', buildInlineInput(ftype, fname, val, f, isDisabled, dispVal));
 
       if (f.help_text || f.helptext) {
         var helpEl = document.createElement('div');
