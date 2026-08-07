@@ -121,7 +121,8 @@ function renderField($field, $record, $isNew, $db) {
     $width = htmlspecialchars($field['field_width'] ?? $field['width'] ?? '100%');
     $placeholder = htmlspecialchars($field['field_placeholder'] ?? $field['placeholder'] ?? '');
     $help = !empty($field['field_help_text']) ? '<small style="color:var(--text-secondary);display:block;margin-top:4px;font-size:12px;">' . htmlspecialchars($field['field_help_text']) . '</small>' : '';
-    $calculated = !empty($field['field_calculated']) ? 'data-calculated="true" data-expression="' . htmlspecialchars($field['field_calculated']) . '"' : '';
+    $calcExpr = $field['field_formula'] ?? ($field['formula'] ?? ($field['field_calculated'] ?? ($field['calculated'] ?? '')));
+    $calculated = !empty($calcExpr) ? 'data-calculated="true" data-expression="' . htmlspecialchars((string)$calcExpr) . '"' : '';
     $css = !empty($field['field_css']) ? ' style="' . htmlspecialchars($field['field_css']) . '"' : '';
     $defaultValue = $isNew ? ($field['field_default_value'] ?? $field['default_value'] ?? '') : ($record[$name] ?? '');
     

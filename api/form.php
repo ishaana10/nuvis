@@ -1119,7 +1119,7 @@ function nu_render_field($field, $value = '', $record = []) {
                 break;
 
             case 'calculated':
-                $expr    = $field['calculated'] ?? '';
+                $expr    = $field['formula'] ?? ($field['calculated'] ?? ($field['calc_formula'] ?? ''));
                 $control = '<input type="text" class="' . nu_attr($cssClass) . '" data-field="' . nu_attr($name) . '" data-calculated="true" data-expression="' . nu_attr($expr) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
                 break;
 

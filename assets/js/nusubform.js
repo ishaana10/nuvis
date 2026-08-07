@@ -367,6 +367,9 @@
       if (typeof window.nuInitSelect2 === 'function') {
         window.nuInitSelect2(body);
       }
+      if (typeof window.nuCalculateFields === 'function') {
+        window.nuCalculateFields(body);
+      }
     }
     else                          body.innerHTML = renderFormList(displayCols, records, pk, m, hasEditPermission);
 
@@ -522,6 +525,10 @@
     var disAttr = disabled ? ' disabled' : '';
     var base = 'class="nu-input" name="' + esc(name) + '" style="width:100%;"' + disAttr;
     if (type === 'textarea')      return '<textarea ' + base + ' rows="2">' + esc(value) + '</textarea>';
+    if (type === 'calculated') {
+      var expr = field.formula || (field.calculated || (field.calc_formula || ''));
+      return '<input type="text" class="nu-input" name="' + esc(name) + '" data-calculated="true" data-expression="' + esc(expr) + '" value="' + esc(value) + '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
+    }
     if (type === 'select' || type === 'select2') {
       var isMulti = !!(field.multiple === true || field.multiple === 'true' || field.multiple === 1 || field.select_type === 'multiselect');
       var s2Class = '';
@@ -818,6 +825,9 @@
 
     if (typeof window.nuInitSelect2 === 'function') {
       window.nuInitSelect2(overlay);
+    }
+    if (typeof window.nuCalculateFields === 'function') {
+      window.nuCalculateFields(overlay);
     }
   }
 
