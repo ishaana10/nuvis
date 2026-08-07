@@ -55,16 +55,77 @@
   window.nuDestroySelect2 = function (el) { _s2BuildFresh(el); };
   window.nuReinitSelect2  = function (el) { _s2InitOne(el); };
 
+  function nuSafeEval(expr) {
+    var sanitized = expr.replace(/[^0-9\s+\-*/.()]/g, '');
+    try {
+      return Function("return (" + sanitized + ")")();
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function nuCalculateFields(scope) {
+    scope = scope || document;
+    var calcs = scope.querySelectorAll('input[data-calculated="true"]');
+    calcs.forEach(function (calcEl) {
+      var expr = calcEl.getAttribute('data-expression') || '';
+      if (!expr) return;
+
+      var localScope = calcEl.closest('.nu-sf-inline-row') || calcEl.closest('[data-sf-overlay]') || calcEl.closest('.nu-form-overlay') || scope;
+      var resolvedExpr = expr.replace(/\{([a-zA-Z0-9_]+)\}/g, function (match, fieldName) {
+        var inputEl = localScope.querySelector('[name="' + CSS.escape(fieldName) + '"], [data-field="' + CSS.escape(fieldName) + '"]');
+        if (inputEl) {
+          if (inputEl.type === 'checkbox') {
+            return inputEl.checked ? '1' : '0';
+          }
+          var val = inputEl.value;
+          var num = parseFloat(val);
+          return isNaN(num) ? '0' : String(num);
+        }
+        return '0';
+      });
+
+      var result = nuSafeEval(resolvedExpr);
+      if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+        var rounded = Math.round(result * 10000) / 10000;
+        calcEl.value = rounded;
+      } else {
+        calcEl.value = '';
+      }
+    });
+  }
+
+  window.nuSafeEval = nuSafeEval;
+  window.nuCalculateFields = nuCalculateFields;
+
+  // Global listeners to calculate values on input / change
+  document.addEventListener('input', function (e) {
+    var target = e.target;
+    if (target && target.matches('input, select, textarea')) {
+      var scope = target.closest('[data-sf-overlay]') || target.closest('.nu-sf-inline-row') || target.closest('.nu-form-overlay') || document;
+      nuCalculateFields(scope);
+    }
+  });
+  document.addEventListener('change', function (e) {
+    var target = e.target;
+    if (target && target.matches('input, select, textarea')) {
+      var scope = target.closest('[data-sf-overlay]') || target.closest('.nu-sf-inline-row') || target.closest('.nu-form-overlay') || document;
+      nuCalculateFields(scope);
+    }
+  });
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { nuInitSelect2(document); });
+    document.addEventListener('DOMContentLoaded', function () { nuInitSelect2(document); nuCalculateFields(document); });
   } else {
     nuInitSelect2(document);
+    nuCalculateFields(document);
   }
 
   document.addEventListener('nu:form:opened', function (e) {
     var scope = e.detail && e.detail.scope;
     if (scope && scope.dataset && scope.dataset.nuS2Done) return;
     nuInitSelect2(scope);
+    nuCalculateFields(scope || document);
   });
 
 }());
