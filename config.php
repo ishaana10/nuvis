@@ -41,6 +41,7 @@ $nuConfig['logPath']    = NU_ROOT . '/logs/';
 // ─── Display ──────────────────────────────────────────────────────────────────
 $nuConfig['siteTitle'] = 'nuvis';
 $nuConfig['theme']     = 'auto';
+$nuConfig['userHeaderFormat'] = '{name} | {location}';
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 $nuConfig['apiRateLimit'] = 1000;

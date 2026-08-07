@@ -76,6 +76,52 @@ $userDisplay = 'User';
 if (is_array($currentUser)) {
     $userDisplay = $currentUser['usr_name'] ?? $currentUser['usr_username'] ?? 'User';
 }
+
+// ── Resolve User Header Format (userName|location customizable) ──────────────
+$userHeaderDisplay = '';
+if ($isLoggedIn && is_array($currentUser)) {
+    $format = $nuConfig['userHeaderFormat'] ?? '{name} | {location}';
+    $meta   = $_SESSION['nu_user_meta'] ?? [];
+
+    $name = $currentUser['usr_name'] ?? '';
+    if (trim((string)$name) === '') {
+        $name = $currentUser['usr_username'] ?? 'User';
+    }
+
+    $customFields = [];
+    if (!empty($currentUser['usr_custom_fields'])) {
+        $customFields = json_decode($currentUser['usr_custom_fields'], true) ?: [];
+    }
+    $location = $meta['location'] ?? $customFields['location'] ?? '';
+    if (is_array($location)) {
+        $location = '';
+    }
+
+    $replacements = [
+        '{name}'     => $name,
+        '{username}' => $currentUser['usr_username'] ?? '',
+        '{role}'     => $currentUser['usr_role'] ?? '',
+        '{location}' => $location,
+    ];
+
+    // Also support any other session metadata
+    foreach ($meta as $k => $v) {
+        if (is_string($v) || is_numeric($v)) {
+            $replacements['{' . $k . '}'] = (string)$v;
+        }
+    }
+
+    $userHeaderDisplay = strtr($format, $replacements);
+
+    // Clean up potential trailing, leading, or multiple pipe separators
+    $userHeaderDisplay = trim($userHeaderDisplay);
+    $userHeaderDisplay = preg_replace('/^\s*\|\s*|\s*\|\s*$/', '', $userHeaderDisplay);
+    $userHeaderDisplay = preg_replace('/\s*\|\s*\|\s*/', ' | ', $userHeaderDisplay);
+    if ($userHeaderDisplay === '') {
+        $userHeaderDisplay = $name;
+    }
+}
+
 // ── Inspector is visible to globeadmin OR admin ──────────────────────────────
 $_role   = strtolower((string)($currentUser['usr_role'] ?? ''));
 $isAdmin = ($_role === 'globeadmin' || $_role === 'admin');
@@ -514,35 +560,8 @@ try {
             <?php endif; ?>
             <?php endif; ?>
 
-            <!-- ── Personal section (every user) ── -->
-            <div style="margin:12px 8px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted,#888);padding:0 4px;">Personal</div>
-            <a href="#password" class="nu-nav-item" data-module="password"
-               onclick="NuApp.loadModule('password'); return false;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    <line x1="12" y1="16" x2="12" y2="16"/>
-                    <circle cx="12" cy="16" r="1" fill="currentColor"/>
-                </svg>
-                <span>Change Password</span>
-            </a>
-
         </nav>
         <?php endif; ?>
-
-        <div class="nu-sidebar-footer">
-            <div class="nu-user-info">
-                <div class="nu-user-name"><?= h($userDisplay) ?></div>
-                <div class="nu-user-role"><?= h($currentUser['usr_role'] ?? '') ?></div>
-            </div>
-            <form method="post" action="index.php" style="margin:0">
-                <input type="hidden" name="nu_csrf" value="<?= h($csrfToken) ?>">
-                <button type="submit" name="logout" value="1"
-                        class="nu-btn nu-btn-ghost nu-btn-sm" style="margin-top:8px;width:100%">
-                    Logout
-                </button>
-            </form>
-        </div>
     </aside>
 
     <!-- Main -->
@@ -583,6 +602,43 @@ try {
                         <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
                     </svg>
                 </button>
+
+                <!-- User Profile Dropdown -->
+                <div class="nu-user-dropdown" id="nuUserDropdown">
+                    <button class="nu-user-dropdown-toggle" id="nuUserDropdownToggle" type="button" aria-haspopup="true" aria-expanded="false" title="User Menu">
+                        <span class="nu-user-dropdown-text"><?= h($userHeaderDisplay) ?></span>
+                        <svg class="nu-user-dropdown-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </button>
+                    <div class="nu-user-dropdown-menu" id="nuUserDropdownMenu">
+                        <div class="nu-user-dropdown-header">
+                            <div class="nu-dropdown-user-name"><?= h($currentUser['usr_name'] ?: ($currentUser['usr_username'] ?? 'User')) ?></div>
+                            <div class="nu-dropdown-user-role"><?= h($currentUser['usr_role'] ?? '') ?></div>
+                        </div>
+                        <div class="nu-user-dropdown-divider"></div>
+                        <a href="#password" class="nu-user-dropdown-item" onclick="NuApp.loadModule('password'); return false;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                <circle cx="12" cy="16" r="1" fill="currentColor"/>
+                            </svg>
+                            <span>Change Password</span>
+                        </a>
+                        <div class="nu-user-dropdown-divider"></div>
+                        <form method="post" action="index.php" style="margin: 0; padding: 0;">
+                            <input type="hidden" name="nu_csrf" value="<?= h($csrfToken) ?>">
+                            <button type="submit" name="logout" value="1" class="nu-user-dropdown-item nu-user-dropdown-logout" style="width: 100%;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                                    <polyline points="16 17 21 12 16 7"/>
+                                    <line x1="21" y1="12" x2="9" y2="12"/>
+                                </svg>
+                                <span>Logout</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -619,6 +675,32 @@ try {
     window.nuUserPerms = <?= json_encode($_nuUserPerms) ?>;
     // ── Inject global CSRF token for secure AJAX requests ────────────────────
     window.nuCsrfToken = <?= json_encode($csrfToken) ?>;
+
+    // ── User Profile Dropdown Logic ──────────────────────────────────────────
+    (function() {
+        var toggle = document.getElementById('nuUserDropdownToggle');
+        var menu   = document.getElementById('nuUserDropdownMenu');
+        if (!toggle || !menu) return;
+
+        toggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var show = menu.classList.toggle('show');
+            toggle.setAttribute('aria-expanded', show ? 'true' : 'false');
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!toggle.contains(e.target) && !menu.contains(e.target)) {
+                menu.classList.remove('show');
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        // Close dropdown when item is clicked (e.g. Change Password)
+        menu.addEventListener('click', function (e) {
+            menu.classList.remove('show');
+            toggle.setAttribute('aria-expanded', 'false');
+        });
+    })();
 
     // Restore theme
     try {
