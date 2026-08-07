@@ -175,8 +175,49 @@ class WorkflowEngine
                     if ($table && $recId) {
                         $toStage = $this->db->fetchOne('SELECT wfs_code FROM nu_workflow_stages WHERE wfs_id = :id', [':id' => $transition['wft_to_id']]);
                         if ($toStage && !empty($toStage['wfs_code'])) {
+                            $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+                            $pkCol = 'id';
+                            try {
+                                if (stripos($cleanTable, 'demo_customer_requests') !== false) {
+                                    $pkCol = 'request_id';
+                                } elseif (stripos($cleanTable, 'demo_service_types') !== false) {
+                                    $pkCol = 'service_type_id';
+                                } elseif (stripos($cleanTable, 'demo_staff_services') !== false) {
+                                    $pkCol = 'service_log_id';
+                                } else {
+                                    $driver = 'mysql';
+                                    try {
+                                        $pdo = $this->db->getPdo();
+                                        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+                                    } catch (Throwable $e) {}
+
+                                    if (strtolower($driver) === 'sqlite') {
+                                        $colStmt = $pdo->query("PRAGMA table_info(`{$cleanTable}`)");
+                                        if ($colStmt) {
+                                            $cols = $colStmt->fetchAll(PDO::FETCH_ASSOC);
+                                            foreach ($cols as $c) {
+                                                if (!empty($c['pk'])) {
+                                                    $pkCol = $c['name'];
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        $colStmt = $pdo->query("SHOW KEYS FROM `{$cleanTable}` WHERE Key_name = 'PRIMARY'");
+                                        if ($colStmt) {
+                                            $rowCol = $colStmt->fetch(PDO::FETCH_ASSOC);
+                                            if ($rowCol && !empty($rowCol['Column_name'])) {
+                                                $pkCol = $rowCol['Column_name'];
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Throwable $ignored) {
+                                $pkCol = 'id';
+                            }
+
                             $this->db->query(
-                                "UPDATE `" . preg_replace('/[^a-zA-Z0-9_]/', '', $table) . "` SET `status` = :status WHERE id = :id",
+                                "UPDATE `{$cleanTable}` SET `status` = :status WHERE `{$pkCol}` = :id",
                                 [':status' => $toStage['wfs_code'], ':id' => $recId]
                             );
                         }
