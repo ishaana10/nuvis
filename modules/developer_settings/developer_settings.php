@@ -25,6 +25,12 @@ if (!$currentUser || strtolower((string)$currentUser['usr_role']) !== 'globeadmi
                 <span class="nu-field-desc">Used in browser tabs, navigation title, and login cards.</span>
             </div>
 
+            <div class="nu-field">
+                <label for="devUserHeaderFormat" class="nu-label">User Header Format</label>
+                <input id="devUserHeaderFormat" type="text" class="nu-input" placeholder="e.g. {name} | {location}">
+                <span class="nu-field-desc">Custom format for top-right user profile text. Placeholders: {name}, {username}, {role}, {location}.</span>
+            </div>
+
             <div class="nu-field" style="display: flex; align-items: center; margin-top: 10px;">
                 <input id="devForgotPasswordEnabled" type="checkbox" style="width: 18px; height: 18px; margin-right: 8px; cursor: pointer;">
                 <div>
@@ -136,6 +142,9 @@ var DevSettings = (function() {
 
             var settings = json.settings || {};
             document.getElementById('devAppName').value = settings.app_name || '';
+            if (document.getElementById('devUserHeaderFormat')) {
+                document.getElementById('devUserHeaderFormat').value = settings.user_header_format || '';
+            }
             document.getElementById('devLogoUrl').value = settings.app_logo || '';
             if (document.getElementById('devForgotPasswordEnabled')) {
                 document.getElementById('devForgotPasswordEnabled').checked = (settings.forgot_password_enabled === '1');
@@ -295,6 +304,7 @@ var DevSettings = (function() {
 
         var payload = {
             app_name: document.getElementById('devAppName').value,
+            user_header_format: document.getElementById('devUserHeaderFormat')?.value || '',
             app_logo: document.getElementById('devLogoUrl').value,
             forgot_password_enabled: document.getElementById('devForgotPasswordEnabled')?.checked ? '1' : '0',
             system_fields_def: rows

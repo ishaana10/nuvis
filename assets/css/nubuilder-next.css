@@ -1027,6 +1027,8 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
 /* Ensure Select2 dropdown has correct z-index in modals and subforms */
 .select2-container {
   z-index: 99999 !important;

@@ -56,6 +56,14 @@ switch ($action) {
             if (isset($input['app_name'])) {
                 $db->update('nu_system_settings', ['setting_value' => trim((string)$input['app_name'])], "setting_key = 'app_name'");
             }
+            if (isset($input['user_header_format'])) {
+                $existing = $db->fetchOne("SELECT setting_key FROM nu_system_settings WHERE setting_key = 'user_header_format'");
+                if ($existing) {
+                    $db->update('nu_system_settings', ['setting_value' => trim((string)$input['user_header_format'])], "setting_key = 'user_header_format'");
+                } else {
+                    $db->insert('nu_system_settings', ['setting_key' => 'user_header_format', 'setting_value' => trim((string)$input['user_header_format'])]);
+                }
+            }
             if (isset($input['app_logo'])) {
                 $db->update('nu_system_settings', ['setting_value' => trim((string)$input['app_logo'])], "setting_key = 'app_logo'");
             }
