@@ -362,7 +362,15 @@
     var hasEditPermission = checkPermission(container, 'edit');
 
     if (m.view === 'grid')        body.innerHTML = renderGrid(displayCols, records, pk, m, hasEditPermission);
-    else if (m.view === 'inline') body.innerHTML = renderInline(displayCols, records, pk, m, hasEditPermission);
+    else if (m.view === 'inline') {
+      body.innerHTML = renderInline(displayCols, records, pk, m, hasEditPermission);
+      if (typeof window.nuInitSelect2 === 'function') {
+        window.nuInitSelect2(body);
+      }
+      if (typeof window.nuCalculateFields === 'function') {
+        window.nuCalculateFields(body);
+      }
+    }
     else                          body.innerHTML = renderFormList(displayCols, records, pk, m, hasEditPermission);
 
     /* ── bind delete buttons ── */
@@ -507,17 +515,41 @@
     return html;
   }
 
+  function toValuesArray(val) {
+    if (Array.isArray(val)) return val.map(String);
+    if (val == null || val === '') return [];
+    return String(val).split(',').map(function(s) { return s.trim(); });
+  }
+
   function buildInlineInput(type, name, value, field, disabled) {
     var disAttr = disabled ? ' disabled' : '';
     var base = 'class="nu-input" name="' + esc(name) + '" style="width:100%;"' + disAttr;
     if (type === 'textarea')      return '<textarea ' + base + ' rows="2">' + esc(value) + '</textarea>';
-    if (type === 'select') {
-      var opts = '<option value="">—</option>';
+    if (type === 'calculated') {
+      var expr = field.formula || (field.calculated || (field.calc_formula || ''));
+      return '<input type="text" class="nu-input" name="' + esc(name) + '" data-calculated="true" data-expression="' + esc(expr) + '" value="' + esc(value) + '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
+    }
+    if (type === 'select' || type === 'select2') {
+      var isMulti = !!(field.multiple === true || field.multiple === 'true' || field.multiple === 1 || field.select_type === 'multiselect');
+      var s2Class = '';
+      var s2Attrs = '';
+      if (type === 'select2') {
+        s2Class = ' nu-select2';
+        s2Attrs = ' data-select-type="select2" data-select-mode="' + (isMulti ? 'multiple' : 'single') + '"'
+                + ' data-placeholder="' + esc(field.placeholder || 'Select\u2026') + '"'
+                + ' data-allow-clear="' + (field.allow_clear === false ? 'false' : 'true') + '"';
+      }
+      var selectBase = 'class="nu-input' + s2Class + '" name="' + esc(name) + '" style="width:100%;"' + disAttr + s2Attrs + (isMulti ? ' multiple' : '');
+      var selectedValues = toValuesArray(value);
+      var opts = '';
+      if (!isMulti) {
+        opts += '<option value="">—</option>';
+      }
       (field.options || []).forEach(function (o) {
-        var sel = String(value) === String(o.value) ? ' selected' : '';
+        var sel = selectedValues.indexOf(String(o.value)) !== -1 ? ' selected' : '';
         opts += '<option value="' + esc(o.value) + '"' + sel + '>' + esc(o.label || o.value) + '</option>';
       });
-      return '<select ' + base + '>' + opts + '</select>';
+      return '<select ' + selectBase + '>' + opts + '</select>';
     }
     if (type === 'checkbox')  return '<input type="checkbox" name="' + esc(name) + '" value="1"' + (value ? ' checked' : '') + disAttr + '>';
     if (type === 'date')      return '<input type="date" '            + base + ' value="' + esc(value) + '">';
@@ -533,6 +565,18 @@
   function formatSubformCell(col, val, type) {
     if (type === 'checkbox') return val ? '&#10003;' : '&mdash;';
     if (val == null || val === '') return '';
+
+    if (type === 'select' || type === 'select2') {
+      var options = col ? (col.options || []) : [];
+      if (options.length > 0) {
+        var values = toValuesArray(val);
+        var labels = values.map(function(v) {
+          var opt = options.find(function(o) { return String(o.value) === String(v); });
+          return opt ? (opt.label || opt.value) : v;
+        });
+        val = labels.join(', ');
+      }
+    }
 
     if (!col) {
       var str = String(val).toLowerCase().trim();
@@ -708,7 +752,19 @@
         if (skip.indexOf(ftype) !== -1 || !fname) return;
         var el = box.querySelector('[name="' + CSS.escape(fname) + '"]');
         if (!el) return;
-        data[fname] = (ftype === 'checkbox') ? (el.checked ? 1 : 0) : el.value;
+        if (ftype === 'checkbox') {
+          data[fname] = el.checked ? 1 : 0;
+        } else if (el.tagName === 'SELECT' && el.multiple) {
+          var selected = [];
+          for (var i = 0; i < el.options.length; i++) {
+            if (el.options[i].selected) {
+              selected.push(el.options[i].value);
+            }
+          }
+          data[fname] = selected;
+        } else {
+          data[fname] = el.value;
+        }
       });
 
       var m = meta(container);
@@ -766,6 +822,13 @@
     box.appendChild(footer);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
+
+    if (typeof window.nuInitSelect2 === 'function') {
+      window.nuInitSelect2(overlay);
+    }
+    if (typeof window.nuCalculateFields === 'function') {
+      window.nuCalculateFields(overlay);
+    }
   }
 
   /* ── delete row ───────────────────────────────────────────────────── */
@@ -794,7 +857,19 @@
     var raw   = {};
     if (rowEl) {
       rowEl.querySelectorAll('[name]').forEach(function (el) {
-        raw[el.name] = (el.type === 'checkbox') ? (el.checked ? 1 : 0) : el.value;
+        if (el.type === 'checkbox') {
+          raw[el.name] = el.checked ? 1 : 0;
+        } else if (el.tagName === 'SELECT' && el.multiple) {
+          var selected = [];
+          for (var i = 0; i < el.options.length; i++) {
+            if (el.options[i].selected) {
+              selected.push(el.options[i].value);
+            }
+          }
+          raw[el.name] = selected;
+        } else {
+          raw[el.name] = el.value;
+        }
       });
     }
     var data = stripProtectedFields(raw, allFields || container._sfAllFields || []);

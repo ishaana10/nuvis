@@ -175,10 +175,44 @@ function nu_decode_layout($form) {
 
 function nu_get_pk($table) {
     try {
+        // Try MySQL syntax first
         $stmt = nu_q("SHOW KEYS FROM `{$table}` WHERE Key_name = 'PRIMARY'");
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return ($row && !empty($row['Column_name'])) ? $row['Column_name'] : 'id';
-    } catch (Throwable $e) { return 'id'; }
+        if ($row && !empty($row['Column_name'])) {
+            return $row['Column_name'];
+        }
+    } catch (Throwable $e) {
+        // Fallback or SQLite
+    }
+
+    try {
+        // Try SQLite syntax
+        $stmt = nu_q("PRAGMA table_info(`{$table}`)");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) {
+            if (!empty($r['pk'])) {
+                return $r['name'];
+            }
+        }
+    } catch (Throwable $e) {}
+
+    // Fallback to candidates commonly used
+    $candidates = ['request_id', 'service_type_id', 'service_log_id', 'id'];
+    try {
+        $stmt = nu_db()->query("SELECT * FROM `{$table}` LIMIT 1");
+        if ($stmt) {
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                foreach ($candidates as $c) {
+                    if (array_key_exists($c, $row)) {
+                        return $c;
+                    }
+                }
+            }
+        }
+    } catch (Throwable $e) {}
+
+    return 'id';
 }
 
 function nu_get_record($table, $id) {
@@ -1119,7 +1153,7 @@ function nu_render_field($field, $value = '', $record = []) {
                 break;
 
             case 'calculated':
-                $expr    = $field['calculated'] ?? '';
+                $expr    = $field['formula'] ?? ($field['calculated'] ?? ($field['calc_formula'] ?? ''));
                 $control = '<input type="text" class="' . nu_attr($cssClass) . '" data-field="' . nu_attr($name) . '" data-calculated="true" data-expression="' . nu_attr($expr) . '" name="' . nu_attr($name) . '" value="' . nu_attr($value) . '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
                 break;
 
@@ -1913,6 +1947,27 @@ function nu_handle_subform_fields() {
                 }
             }
         }
+        $type = nu_field_type($field);
+        if ($type === 'select' || $type === 'select2') {
+            $options = [];
+            $optSource = $field['options_source'] ?? ($field['source_type'] ?? 'manual');
+            if ($optSource === 'table') {
+                $tbl      = nu_safe_ident($field['options_table']     ?? '');
+                $valCol   = nu_safe_ident($field['options_value_col'] ?? '');
+                $labelCol = nu_safe_ident($field['options_label_col'] ?? $valCol);
+                $filter   = trim((string)($field['options_filter']   ?? ''));
+                if ($tbl !== '' && $valCol !== '') {
+                    $sql = "SELECT `{$valCol}`, `{$labelCol}` FROM `{$tbl}`";
+                    if ($filter !== '') $sql .= ' WHERE ' . $filter;
+                    try { $options = nu_fetch_sql_options($sql); } catch (Throwable $e) { $options = []; }
+                }
+            } elseif ($optSource === 'sql' && !empty($field['sql_source'])) {
+                try { $options = nu_fetch_sql_options($field['sql_source']); } catch (Throwable $e) { $options = []; }
+            } else {
+                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
+            }
+            $field['options'] = $options;
+        }
     };
 
     foreach ($allFields as &$f) { $decorateField($f); } unset($f);
@@ -1999,6 +2054,27 @@ function nu_handle_subform_list() {
                     $field[$prop] = $bCol[$prop];
                 }
             }
+        }
+        $type = nu_field_type($field);
+        if ($type === 'select' || $type === 'select2') {
+            $options = [];
+            $optSource = $field['options_source'] ?? ($field['source_type'] ?? 'manual');
+            if ($optSource === 'table') {
+                $tbl      = nu_safe_ident($field['options_table']     ?? '');
+                $valCol   = nu_safe_ident($field['options_value_col'] ?? '');
+                $labelCol = nu_safe_ident($field['options_label_col'] ?? $valCol);
+                $filter   = trim((string)($field['options_filter']   ?? ''));
+                if ($tbl !== '' && $valCol !== '') {
+                    $sql = "SELECT `{$valCol}`, `{$labelCol}` FROM `{$tbl}`";
+                    if ($filter !== '') $sql .= ' WHERE ' . $filter;
+                    try { $options = nu_fetch_sql_options($sql); } catch (Throwable $e) { $options = []; }
+                }
+            } elseif ($optSource === 'sql' && !empty($field['sql_source'])) {
+                try { $options = nu_fetch_sql_options($field['sql_source']); } catch (Throwable $e) { $options = []; }
+            } else {
+                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
+            }
+            $field['options'] = $options;
         }
     };
 
@@ -2468,15 +2544,31 @@ function nu_handle_list() {
             if (empty($selectCols)) $selectCols = ["`{$table}`.*"];
         }
 
-        // Handle custom Joins from layout
+        // Handle custom Joins from layout AND browse_layout
         $flatLayout = nu_flatten_layout_for_grid($layout);
-        foreach ($flatLayout as $f) {
+        $bLayoutJson = $form[$c['browse_layout']] ?? '';
+        $bLayout = [];
+        if (!empty($bLayoutJson)) {
+            $bLayout = json_decode($bLayoutJson, true);
+            if (!is_array($bLayout)) $bLayout = [];
+        }
+
+        // Collect all potential elements to scan for LEFT JOINs
+        $scannedFields = array_merge($flatLayout, $bLayout);
+
+        foreach ($scannedFields as $f) {
             $jSql = trim($f['join_sql'] ?? '');
             $jDisp = trim($f['join_display_field'] ?? '');
-            $fName = nu_field_name($f);
-            if ($jSql !== '' && $jDisp !== '') {
-                $joins[] = $jSql;
-                $selectCols[] = "{$jDisp} AS `{$fName}_display`";
+            $fName = trim((string)($f['name'] ?? ($f['fieldname'] ?? '')));
+            if ($jSql !== '' && $jDisp !== '' && $fName !== '') {
+                if (!in_array($jSql, $joins, true)) {
+                    $joins[] = $jSql;
+                }
+                $alias = "`{$fName}_display`";
+                $projection = "{$jDisp} AS {$alias}";
+                if (!in_array($projection, $selectCols, true)) {
+                    $selectCols[] = $projection;
+                }
             }
         }
 

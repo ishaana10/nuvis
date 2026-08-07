@@ -54,6 +54,7 @@ class NuDatabase {
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
             // Create essential tables to support mock/visual preview gracefully
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_forms (form_id INTEGER PRIMARY KEY, form_code TEXT UNIQUE, form_table TEXT, form_layout TEXT, browse_layout TEXT, form_active INTEGER, form_type TEXT, form_name TEXT, form_description TEXT, form_pk_type TEXT, form_table_mode TEXT, browse_search_enabled INTEGER, browse_search_placeholder TEXT, browse_search_fields TEXT, browse_page_size INTEGER, browse_default_sort TEXT, browse_php TEXT, browse_conditions TEXT, browse_delete_enabled INTEGER)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_system_settings (setting_key VARCHAR(50) PRIMARY KEY, setting_value TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_error_log (err_id INTEGER PRIMARY KEY, err_message TEXT, err_file TEXT, err_line INTEGER, err_severity TEXT, err_user_id TEXT, err_created_at TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_audit_log (audit_id INTEGER PRIMARY KEY, audit_action TEXT, audit_table TEXT, audit_username TEXT, audit_timestamp TEXT)");
@@ -332,6 +333,61 @@ class NuDatabase {
         if (!$sessionActive || empty($_SESSION['_nu_demo_forms_ensured'])) {
             try {
                 $hasForm = $this->pdo->query("SELECT form_id FROM nu_forms WHERE form_code = 'demo_customer_requests'")->fetch();
+
+                $layoutTypes = json_encode([
+                    ["type" => "row", "children" => [
+                        ["name" => "name", "label" => "Service Name", "type" => "text", "required" => true, "col" => 6],
+                        ["name" => "price", "label" => "Price ($)", "type" => "number", "required" => true, "col" => 6]
+                    ]],
+                    ["type" => "row", "children" => [
+                        ["name" => "description", "label" => "Description", "type" => "textarea", "col" => 12, "rows" => 4]
+                    ]]
+                ]);
+                $browseTypes = json_encode([
+                    ["fieldname" => "name", "fieldlabel" => "Service Name", "width" => "200px", "align" => "left", "formatter" => "text", "sortable" => true],
+                    ["fieldname" => "price", "fieldlabel" => "Price", "width" => "120px", "align" => "right", "formatter" => "currency", "sortable" => true],
+                    ["fieldname" => "description", "fieldlabel" => "Description", "width" => "300px", "align" => "left", "formatter" => "text", "sortable" => true]
+                ]);
+
+                $layoutRequests = json_encode([
+                    ["type" => "row", "children" => [
+                        ["name" => "customer_name", "label" => "Customer Name", "type" => "text", "required" => true, "col" => 6],
+                        ["name" => "service_type_id", "label" => "Service Type", "type" => "select", "required" => true, "col" => 6, "options_source" => "table", "options_table" => "demo_service_types", "options_value_col" => "service_type_id", "options_label_col" => "name", "join_sql" => "LEFT JOIN demo_service_types ON demo_service_types.service_type_id = demo_customer_requests.service_type_id", "join_display_field" => "demo_service_types.name"]
+                    ]],
+                    ["type" => "row", "children" => [
+                        ["name" => "request_details", "label" => "Request Details", "type" => "textarea", "col" => 12, "rows" => 4]
+                    ]],
+                    ["type" => "row", "children" => [
+                        ["name" => "status", "label" => "Status", "type" => "text", "required" => true, "col" => 6, "default_value" => "Pending", "readonly" => true]
+                    ]]
+                ]);
+                $browseRequests = json_encode([
+                    ["fieldname" => "customer_name", "fieldlabel" => "Customer Name", "width" => "180px", "align" => "left", "formatter" => "text", "sortable" => true],
+                    ["fieldname" => "service_type_id", "fieldlabel" => "Service Type", "width" => "200px", "align" => "left", "formatter" => "text", "sortable" => true, "join_sql" => "LEFT JOIN demo_service_types ON demo_service_types.service_type_id = demo_customer_requests.service_type_id", "join_display_field" => "demo_service_types.name"],
+                    ["fieldname" => "request_details", "fieldlabel" => "Details", "width" => "280px", "align" => "left", "formatter" => "text", "sortable" => true],
+                    ["fieldname" => "status", "fieldlabel" => "Status", "width" => "120px", "align" => "center", "formatter" => "badge", "sortable" => true]
+                ]);
+
+                $layoutStaff = json_encode([
+                    ["type" => "row", "children" => [
+                        ["name" => "customer_request_id", "label" => "Customer Request", "type" => "select", "required" => true, "col" => 6, "options_source" => "table", "options_table" => "demo_customer_requests", "options_value_col" => "request_id", "options_label_col" => "customer_name", "options_filter" => "status != 'Completed'", "join_sql" => "LEFT JOIN demo_customer_requests ON demo_customer_requests.request_id = demo_staff_services.customer_request_id", "join_display_field" => "demo_customer_requests.customer_name"],
+                        ["name" => "service_date", "label" => "Service Date", "type" => "datetime", "required" => true, "col" => 6]
+                    ]],
+                    ["type" => "row", "children" => [
+                        ["name" => "staff_notes", "label" => "Staff Service Notes", "type" => "textarea", "required" => true, "col" => 12, "rows" => 4]
+                    ]]
+                ]);
+                $browseStaff = json_encode([
+                    ["fieldname" => "customer_request_id", "fieldlabel" => "Customer", "width" => "180px", "align" => "left", "formatter" => "text", "sortable" => true, "join_sql" => "LEFT JOIN demo_customer_requests ON demo_customer_requests.request_id = demo_staff_services.customer_request_id", "join_display_field" => "demo_customer_requests.customer_name"],
+                    ["fieldname" => "staff_notes", "fieldlabel" => "Notes", "width" => "300px", "align" => "left", "formatter" => "text", "sortable" => true],
+                    ["fieldname" => "service_date", "fieldlabel" => "Date & Time", "width" => "160px", "align" => "left", "formatter" => "text", "sortable" => true]
+                ]);
+                $staffAfterSave = '$db = NuDatabase::getInstance();' . "\n" .
+                                  '$reqId = $customer_request_id;' . "\n" .
+                                  'if ($reqId) {' . "\n" .
+                                  '    $db->update("demo_customer_requests", ["status" => "Completed"], "request_id = ?", [$reqId]);' . "\n" .
+                                  '}';
+
                 if (!$hasForm) {
                     // 1. Service Types Form
                     $this->pdo->prepare("INSERT INTO `nu_forms` (
@@ -339,21 +395,7 @@ class NuDatabase {
                         `form_layout`, `browse_layout`, `form_active`, `form_pk_type`, `form_table_mode`
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")->execute([
                         'demo_service_types', 'main', 'Service Types', 'demo_service_types', 'Manage service types and pricing.',
-                        json_encode([
-                            ["type" => "row", "children" => [
-                                ["name" => "name", "label" => "Service Name", "type" => "text", "required" => true, "col" => 6],
-                                ["name" => "price", "label" => "Price ($)", "type" => "number", "required" => true, "col" => 6]
-                            ]],
-                            ["type" => "row", "children" => [
-                                ["name" => "description", "label" => "Description", "type" => "textarea", "col" => 12, "rows" => 4]
-                            ]]
-                        ]),
-                        json_encode([
-                            ["fieldname" => "name", "fieldlabel" => "Service Name", "width" => "200px", "align" => "left", "formatter" => "text", "sortable" => true],
-                            ["fieldname" => "price", "fieldlabel" => "Price", "width" => "120px", "align" => "right", "formatter" => "currency", "sortable" => true],
-                            ["fieldname" => "description", "fieldlabel" => "Description", "width" => "300px", "align" => "left", "formatter" => "text", "sortable" => true]
-                        ]),
-                        1, 'uuid', 'existing'
+                        $layoutTypes, $browseTypes, 1, 'uuid', 'existing'
                     ]);
 
                     // 2. Customer Requests Form
@@ -362,25 +404,7 @@ class NuDatabase {
                         `form_layout`, `browse_layout`, `form_active`, `form_pk_type`, `form_table_mode`
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")->execute([
                         'demo_customer_requests', 'main', 'Customer Requests', 'demo_customer_requests', 'Manage customer requests.',
-                        json_encode([
-                            ["type" => "row", "children" => [
-                                ["name" => "customer_name", "label" => "Customer Name", "type" => "text", "required" => true, "col" => 6],
-                                ["name" => "service_type_id", "label" => "Service Type", "type" => "select", "required" => true, "col" => 6, "options_source" => "table", "options_table" => "demo_service_types", "options_value_col" => "service_type_id", "options_label_col" => "name", "join_sql" => "LEFT JOIN demo_service_types ON demo_service_types.service_type_id = demo_customer_requests.service_type_id", "join_display_field" => "demo_service_types.name"]
-                            ]],
-                            ["type" => "row", "children" => [
-                                ["name" => "request_details", "label" => "Request Details", "type" => "textarea", "col" => 12, "rows" => 4]
-                            ]],
-                            ["type" => "row", "children" => [
-                                ["name" => "status", "label" => "Status", "type" => "text", "required" => true, "col" => 6, "default_value" => "Pending", "readonly" => true]
-                            ]]
-                        ]),
-                        json_encode([
-                            ["fieldname" => "customer_name", "fieldlabel" => "Customer Name", "width" => "180px", "align" => "left", "formatter" => "text", "sortable" => true],
-                            ["fieldname" => "service_type_id", "fieldlabel" => "Service Type", "width" => "200px", "align" => "left", "formatter" => "text", "sortable" => true, "join_sql" => "LEFT JOIN demo_service_types ON demo_service_types.service_type_id = demo_customer_requests.service_type_id", "join_display_field" => "demo_service_types.name"],
-                            ["fieldname" => "request_details", "fieldlabel" => "Details", "width" => "280px", "align" => "left", "formatter" => "text", "sortable" => true],
-                            ["fieldname" => "status", "fieldlabel" => "Status", "width" => "120px", "align" => "center", "formatter" => "badge", "sortable" => true]
-                        ]),
-                        1, 'uuid', 'existing'
+                        $layoutRequests, $browseRequests, 1, 'uuid', 'existing'
                     ]);
 
                     // 3. Staff Services Form
@@ -389,28 +413,15 @@ class NuDatabase {
                         `form_layout`, `browse_layout`, `form_custom_php_after`, `form_active`, `form_pk_type`, `form_table_mode`
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")->execute([
                         'demo_staff_services', 'main', 'Staff Services', 'demo_staff_services', 'Log staff service actions.',
-                        json_encode([
-                            ["type" => "row", "children" => [
-                                ["name" => "customer_request_id", "label" => "Customer Request", "type" => "select", "required" => true, "col" => 6, "options_source" => "table", "options_table" => "demo_customer_requests", "options_value_col" => "request_id", "options_label_col" => "customer_name", "options_filter" => "status != 'Completed'", "join_sql" => "LEFT JOIN demo_customer_requests ON demo_customer_requests.request_id = demo_staff_services.customer_request_id", "join_display_field" => "demo_customer_requests.customer_name"],
-                                ["name" => "service_date", "label" => "Service Date", "type" => "datetime", "required" => true, "col" => 6]
-                            ]],
-                            ["type" => "row", "children" => [
-                                ["name" => "staff_notes", "label" => "Staff Service Notes", "type" => "textarea", "required" => true, "col" => 12, "rows" => 4]
-                            ]]
-                        ]),
-                        json_encode([
-                            ["fieldname" => "customer_request_id", "fieldlabel" => "Customer", "width" => "180px", "align" => "left", "formatter" => "text", "sortable" => true, "join_sql" => "LEFT JOIN demo_customer_requests ON demo_customer_requests.request_id = demo_staff_services.customer_request_id", "join_display_field" => "demo_customer_requests.customer_name"],
-                            ["fieldname" => "staff_notes", "fieldlabel" => "Notes", "width" => "300px", "align" => "left", "formatter" => "text", "sortable" => true],
-                            ["fieldname" => "service_date", "fieldlabel" => "Date & Time", "width" => "160px", "align" => "left", "formatter" => "text", "sortable" => true]
-                        ]),
-                        '$db = NuDatabase::getInstance();' . "\n" .
-                        '$reqId = $customer_request_id;' . "\n" .
-                        'if ($reqId) {' . "\n" .
-                        '    $db->update("demo_customer_requests", ["status" => "Completed"], "request_id = ?", [$reqId]);' . "\n" .
-                        '}',
-                        1, 'uuid', 'existing'
+                        $layoutStaff, $browseStaff, $staffAfterSave, 1, 'uuid', 'existing'
                     ]);
+                } else {
+                    // Update existing form layouts to ensure Join configs are in place
+                    $this->pdo->prepare("UPDATE `nu_forms` SET `form_layout` = ?, `browse_layout` = ? WHERE `form_code` = ?")->execute([$layoutTypes, $browseTypes, 'demo_service_types']);
+                    $this->pdo->prepare("UPDATE `nu_forms` SET `form_layout` = ?, `browse_layout` = ? WHERE `form_code` = ?")->execute([$layoutRequests, $browseRequests, 'demo_customer_requests']);
+                    $this->pdo->prepare("UPDATE `nu_forms` SET `form_layout` = ?, `browse_layout` = ?, `form_custom_php_after` = ? WHERE `form_code` = ?")->execute([$layoutStaff, $browseStaff, $staffAfterSave, 'demo_staff_services']);
                 }
+
                 if ($sessionActive) {
                     $_SESSION['_nu_demo_forms_ensured'] = true;
                 }
@@ -429,8 +440,20 @@ class NuDatabase {
                         'customer_request_wf', 'Customer Request Workflow', 'A demo workflow tracking customer service requests through life cycle stage progressions.', 'demo_customer_requests', 1
                     ]);
                     $wfId = (int)$this->pdo->lastInsertId();
+                } else {
+                    $wfId = (int)$hasWf['wf_id'];
+                }
 
-                    // 2. Insert Stages
+                // Verify and synchronize stages
+                $stageStmt = $this->pdo->prepare("SELECT wfs_id, wfs_code FROM nu_workflow_stages WHERE wfs_wf_id = ?");
+                $stageStmt->execute([$wfId]);
+                $existingStages = $stageStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+
+                if (empty($existingStages) || !isset($existingStages['Pending']) || !isset($existingStages['In Progress']) || !isset($existingStages['Completed'])) {
+                    // Wipe broken structures for this workflow and re-insert them cleanly
+                    $this->pdo->prepare("DELETE FROM `nu_workflow_transitions` WHERE `wft_wf_id` = ?")->execute([$wfId]);
+                    $this->pdo->prepare("DELETE FROM `nu_workflow_stages` WHERE `wfs_wf_id` = ?")->execute([$wfId]);
+
                     // Stage 1: Pending
                     $this->pdo->prepare("INSERT INTO `nu_workflow_stages` (
                         `wfs_wf_id`, `wfs_code`, `wfs_name`, `wfs_description`, `wfs_color`, `wfs_is_start`, `wfs_is_end`, `wfs_order`
@@ -455,7 +478,7 @@ class NuDatabase {
                     ]);
                     $stageCompletedId = (int)$this->pdo->lastInsertId();
 
-                    // 3. Insert Transitions & Action Hooks
+                    // Insert Transitions & Action Hooks
                     // Transition 1: Start Service (Pending -> In Progress)
                     $this->pdo->prepare("INSERT INTO `nu_workflow_transitions` (
                         `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
@@ -469,7 +492,30 @@ class NuDatabase {
                     ) VALUES (?, ?, ?, ?, ?, ?)")->execute([
                         $wfId, $stageProgressId, $stageCompletedId, 'advance', 'Mark Service Completed', 'update_record'
                     ]);
+                } else {
+                    // Double check transitions exist
+                    $transStmt = $this->pdo->prepare("SELECT COUNT(*) FROM nu_workflow_transitions WHERE wft_wf_id = ?");
+                    $transStmt->execute([$wfId]);
+                    if ((int)$transStmt->fetchColumn() === 0) {
+                        $stagePendingId   = (int)$existingStages['Pending'];
+                        $stageProgressId  = (int)$existingStages['In Progress'];
+                        $stageCompletedId = (int)$existingStages['Completed'];
+
+                        // Re-insert Transitions & Action Hooks
+                        $this->pdo->prepare("INSERT INTO `nu_workflow_transitions` (
+                            `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
+                        ) VALUES (?, ?, ?, ?, ?, ?)")->execute([
+                            $wfId, $stagePendingId, $stageProgressId, 'advance', 'Start Providing Service', 'update_record'
+                        ]);
+
+                        $this->pdo->prepare("INSERT INTO `nu_workflow_transitions` (
+                            `wft_wf_id`, `wft_from_id`, `wft_to_id`, `wft_action`, `wft_label`, `wft_hook`
+                        ) VALUES (?, ?, ?, ?, ?, ?)")->execute([
+                            $wfId, $stageProgressId, $stageCompletedId, 'advance', 'Mark Service Completed', 'update_record'
+                        ]);
+                    }
                 }
+
                 if ($sessionActive) {
                     $_SESSION['_nu_demo_workflow_ensured'] = true;
                 }
