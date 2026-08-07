@@ -1913,6 +1913,27 @@ function nu_handle_subform_fields() {
                 }
             }
         }
+        $type = nu_field_type($field);
+        if ($type === 'select' || $type === 'select2') {
+            $options = [];
+            $optSource = $field['options_source'] ?? ($field['source_type'] ?? 'manual');
+            if ($optSource === 'table') {
+                $tbl      = nu_safe_ident($field['options_table']     ?? '');
+                $valCol   = nu_safe_ident($field['options_value_col'] ?? '');
+                $labelCol = nu_safe_ident($field['options_label_col'] ?? $valCol);
+                $filter   = trim((string)($field['options_filter']   ?? ''));
+                if ($tbl !== '' && $valCol !== '') {
+                    $sql = "SELECT `{$valCol}`, `{$labelCol}` FROM `{$tbl}`";
+                    if ($filter !== '') $sql .= ' WHERE ' . $filter;
+                    try { $options = nu_fetch_sql_options($sql); } catch (Throwable $e) { $options = []; }
+                }
+            } elseif ($optSource === 'sql' && !empty($field['sql_source'])) {
+                try { $options = nu_fetch_sql_options($field['sql_source']); } catch (Throwable $e) { $options = []; }
+            } else {
+                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
+            }
+            $field['options'] = $options;
+        }
     };
 
     foreach ($allFields as &$f) { $decorateField($f); } unset($f);
@@ -1999,6 +2020,27 @@ function nu_handle_subform_list() {
                     $field[$prop] = $bCol[$prop];
                 }
             }
+        }
+        $type = nu_field_type($field);
+        if ($type === 'select' || $type === 'select2') {
+            $options = [];
+            $optSource = $field['options_source'] ?? ($field['source_type'] ?? 'manual');
+            if ($optSource === 'table') {
+                $tbl      = nu_safe_ident($field['options_table']     ?? '');
+                $valCol   = nu_safe_ident($field['options_value_col'] ?? '');
+                $labelCol = nu_safe_ident($field['options_label_col'] ?? $valCol);
+                $filter   = trim((string)($field['options_filter']   ?? ''));
+                if ($tbl !== '' && $valCol !== '') {
+                    $sql = "SELECT `{$valCol}`, `{$labelCol}` FROM `{$tbl}`";
+                    if ($filter !== '') $sql .= ' WHERE ' . $filter;
+                    try { $options = nu_fetch_sql_options($sql); } catch (Throwable $e) { $options = []; }
+                }
+            } elseif ($optSource === 'sql' && !empty($field['sql_source'])) {
+                try { $options = nu_fetch_sql_options($field['sql_source']); } catch (Throwable $e) { $options = []; }
+            } else {
+                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
+            }
+            $field['options'] = $options;
         }
     };
 
