@@ -900,6 +900,133 @@ body {
   transform: translateY(-1px);
 }
 
+/* ── User Profile Dropdown in Header ── */
+.nu-user-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.nu-user-dropdown-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 6px);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.nu-user-dropdown-toggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+}
+
+.nu-user-dropdown-text {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-user-dropdown-caret {
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+
+.nu-user-dropdown-toggle[aria-expanded="true"] .nu-user-dropdown-caret {
+  transform: rotate(180deg);
+}
+
+.nu-user-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 1000;
+  display: none;
+  min-width: 200px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1));
+  overflow: hidden;
+  animation: nu-fade-in 0.15s ease-out;
+}
+
+.nu-user-dropdown-menu.show {
+  display: block;
+}
+
+.nu-user-dropdown-header {
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.nu-dropdown-user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-dropdown-user-role {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.nu-user-dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+}
+
+.nu-user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nu-user-dropdown-item:hover {
+  background: var(--bg-hover);
+  color: var(--primary);
+}
+
+.nu-user-dropdown-logout {
+  color: #ef4444;
+}
+
+.nu-user-dropdown-logout:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444 !important;
+}
+
+@keyframes nu-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 /* Ensure Select2 dropdown has correct z-index in modals and subforms */
 .select2-container {
   z-index: 99999 !important;
