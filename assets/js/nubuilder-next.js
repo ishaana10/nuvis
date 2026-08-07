@@ -72,7 +72,6 @@
       if (!expr) return;
 
       var localScope = calcEl.closest('.nu-sf-inline-row') || calcEl.closest('[data-sf-overlay]') || calcEl.closest('.nu-form-overlay') || scope;
-      var resolvedExpr = expr.replace(/\{([a-zA-Z0-9_]+)\}/g, function (match, fieldName) {
 
       // 1. Resolve SQL-style hashes (e.g. ##tax_rate##) from window.nuUserMeta
       var resolvedExpr = expr.replace(/##([a-zA-Z0-9_]+)##/g, function (match, hashName) {
