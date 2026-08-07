@@ -221,26 +221,7 @@ class NuAuth {
      * If a key has no value in session, the placeholder is replaced with empty string.
      */
     public function resolveHashes(string $sql): string {
-        $meta = $_SESSION['nu_user_meta'] ?? [];
-
-        // Load custom global developer settings from nu_system_settings
-        try {
-            $db = NuDatabase::getInstance();
-            $row = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'system_fields_def'");
-            if ($row && !empty($row['setting_value'])) {
-                $fields = json_decode($row['setting_value'], true);
-                if (is_array($fields)) {
-                    foreach ($fields as $f) {
-                        if (!empty($f['global']) && !empty($f['key'])) {
-                            $meta[$f['key']] = $f['value'] ?? '';
-                        }
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            error_log('[Auth.php resolveHashes] ' . $e->getMessage());
-        }
-
+        $meta = $this->getGlobalMeta();
         if (empty($meta)) return $sql;
 
         foreach ($meta as $key => $value) {
@@ -258,7 +239,27 @@ class NuAuth {
      * Useful for JS injection or debug.
      */
     public function getGlobalMeta(): array {
-        return $_SESSION['nu_user_meta'] ?? [];
+        $meta = $_SESSION['nu_user_meta'] ?? [];
+
+        // Load custom global developer settings from nu_system_settings
+        try {
+            $db = NuDatabase::getInstance();
+            $row = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'system_fields_def'");
+            if ($row && !empty($row['setting_value'])) {
+                $fields = json_decode($row['setting_value'], true);
+                if (is_array($fields)) {
+                    foreach ($fields as $f) {
+                        if (!empty($f['global']) && !empty($f['key'])) {
+                            $meta[$f['key']] = $f['value'] ?? '';
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[Auth.php getGlobalMeta] ' . $e->getMessage());
+        }
+
+        return $meta;
     }
 
     // -------------------------------------------------------------------------
