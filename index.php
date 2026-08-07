@@ -80,7 +80,16 @@ if (is_array($currentUser)) {
 // ── Resolve User Header Format (userName|location customizable) ──────────────
 $userHeaderDisplay = '';
 if ($isLoggedIn && is_array($currentUser)) {
-    $format = $nuConfig['userHeaderFormat'] ?? '{name} | {location}';
+    $dbFormat = '';
+    try {
+        $db = NuDatabase::getInstance();
+        $userHeaderFormatRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'user_header_format'");
+        if ($userHeaderFormatRow && trim((string)$userHeaderFormatRow['setting_value']) !== '') {
+            $dbFormat = trim((string)$userHeaderFormatRow['setting_value']);
+        }
+    } catch (Throwable $e) {}
+
+    $format = $dbFormat ?: ($nuConfig['userHeaderFormat'] ?? '{name} | {location}');
     $meta   = $_SESSION['nu_user_meta'] ?? [];
 
     $name = $currentUser['usr_name'] ?? '';

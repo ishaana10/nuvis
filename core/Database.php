@@ -159,6 +159,13 @@ class NuDatabase {
                               ->execute(['forgot_password_enabled', '1']);
                 }
 
+                // user_header_format
+                $stmt->execute(['user_header_format']);
+                if ((int)$stmt->fetchColumn() === 0) {
+                    $this->pdo->prepare("INSERT INTO `nu_system_settings` (`setting_key`, `setting_value`) VALUES (?, ?)")
+                              ->execute(['user_header_format', '{name} | {location}']);
+                }
+
                 if ($sessionActive) {
                     $_SESSION['_nu_system_settings_ensured'] = true;
                 }
