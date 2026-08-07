@@ -25,13 +25,14 @@
     if (typeof jQuery === 'undefined' || typeof jQuery.fn.select2 === 'undefined') return;
     var $ = jQuery;
     var fresh = _s2BuildFresh(el);
+    var parentOverlay = fresh.closest('.nu-form-overlay, [data-sf-overlay]');
     var opts = {
       width: '100%',
       theme: (window.nuUXOptions && window.nuUXOptions.nuSelect2Theme) || 'default',
       placeholder: fresh.dataset.placeholder || 'Select\u2026',
       allowClear:  fresh.dataset.allowClear !== 'false',
       multiple:    fresh.dataset.selectMode === 'multiple' || fresh.hasAttribute('multiple'),
-      dropdownParent: $(document.body),
+      dropdownParent: parentOverlay ? $(parentOverlay) : $(document.body),
     };
     try {
       $(fresh).select2(opts);

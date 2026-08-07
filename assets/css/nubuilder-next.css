@@ -899,3 +899,8 @@ body {
   background: var(--bg-hover) !important;
   transform: translateY(-1px);
 }
+
+/* Ensure Select2 dropdown has correct z-index in modals and subforms */
+.select2-container {
+  z-index: 99999 !important;
+}
