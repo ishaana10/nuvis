@@ -73,12 +73,31 @@
 
       var localScope = calcEl.closest('.nu-sf-inline-row') || calcEl.closest('[data-sf-overlay]') || calcEl.closest('.nu-form-overlay') || scope;
       var resolvedExpr = expr.replace(/\{([a-zA-Z0-9_]+)\}/g, function (match, fieldName) {
+
+      // 1. Resolve SQL-style hashes (e.g. ##tax_rate##) from window.nuUserMeta
+      var resolvedExpr = expr.replace(/##([a-zA-Z0-9_]+)##/g, function (match, hashName) {
+        if (window.nuUserMeta && window.nuUserMeta[hashName] !== undefined) {
+          var val = window.nuUserMeta[hashName];
+          var num = parseFloat(val);
+          return isNaN(num) ? '0' : String(num);
+        }
+        return '0';
+      });
+
+      // 2. Resolve field-style tokens (e.g. {tax_rate}) from form fields or fallback to window.nuUserMeta
+      resolvedExpr = resolvedExpr.replace(/\{([a-zA-Z0-9_]+)\}/g, function (match, fieldName) {
         var inputEl = localScope.querySelector('[name="' + CSS.escape(fieldName) + '"], [data-field="' + CSS.escape(fieldName) + '"]');
         if (inputEl) {
           if (inputEl.type === 'checkbox') {
             return inputEl.checked ? '1' : '0';
           }
           var val = inputEl.value;
+          var num = parseFloat(val);
+          return isNaN(num) ? '0' : String(num);
+        }
+        // Fallback to global hashes/user meta if field is not present on the form
+        if (window.nuUserMeta && window.nuUserMeta[fieldName] !== undefined) {
+          var val = window.nuUserMeta[fieldName];
           var num = parseFloat(val);
           return isNaN(num) ? '0' : String(num);
         }

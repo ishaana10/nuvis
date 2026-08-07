@@ -684,6 +684,19 @@ try {
     window.nuUserPerms = <?= json_encode($_nuUserPerms) ?>;
     // ── Inject global CSRF token for secure AJAX requests ────────────────────
     window.nuCsrfToken = <?= json_encode($csrfToken) ?>;
+    // ── Inject global user meta and developer-configured system global hashes ──
+    window.nuUserMeta  = <?= json_encode($isLoggedIn && $auth ? $auth->getGlobalMeta() : []) ?>;
+
+    // Friendly helper function to retrieve all global hashes/user meta
+    window.nuGetGlobalHashes = function() {
+        return window.nuUserMeta || {};
+    };
+
+    // Log the loaded global hashes to the developer console
+    if (window.nuUserMeta && Object.keys(window.nuUserMeta).length > 0) {
+        console.log("%c📂 [NuBuilder] Global Hashes & User Meta Loaded:", "color: #4f6bed; font-weight: bold; font-size: 12px;");
+        console.table(window.nuUserMeta);
+    }
 
     // ── User Profile Dropdown Logic ──────────────────────────────────────────
     (function() {
