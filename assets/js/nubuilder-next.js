@@ -56,7 +56,12 @@
   window.nuReinitSelect2  = function (el) { _s2InitOne(el); };
 
   function nuSafeEval(expr) {
-    var sanitized = expr.replace(/[^0-9\s+\-*/.()]/g, '');
+    var normalised = expr
+      .replace(/×/g, '*')
+      .replace(/x/g, '*')
+      .replace(/X/g, '*')
+      .replace(/÷/g, '/');
+    var sanitized = normalised.replace(/[^0-9\s+\-*/.()]/g, '');
     try {
       return Function("return (" + sanitized + ")")();
     } catch (e) {
