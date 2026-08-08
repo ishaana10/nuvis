@@ -2486,7 +2486,143 @@ window.clearLookup = function(name) {
   }
   if (displayEl) {
     displayEl.value = '';
+    displayEl.dataset.lastVal = '';
     displayEl.dispatchEvent(new Event('change', { bubbles: true }));
     displayEl.dispatchEvent(new Event('input', { bubbles: true }));
   }
 };
+
+window.triggerAutoLookup = function(el) {
+  const name = el.dataset.lookupName;
+  const table = el.dataset.lookupTable;
+  const idCol = el.dataset.lookupId;
+  const displayCol = el.dataset.lookupDisplay;
+  const filter = el.dataset.lookupFilter || '';
+  const extra = el.dataset.lookupExtra || '';
+
+  const query = el.value.trim();
+
+  // Find corresponding hidden element to check current selection
+  const activeOverlay = document.querySelector('[data-sf-overlay]') || document.querySelector('.nu-form-overlay');
+  const container = activeOverlay || document;
+  const hiddenEl = container.querySelector('input[name="' + name + '"]') || container.querySelector('[data-field="' + name + '"]') || document.querySelector('input[name="' + name + '"]') || document.querySelector('[data-field="' + name + '"]');
+
+  if (query === '') {
+    window.clearLookup(name);
+    return;
+  }
+
+  let filterVal = filter || '';
+  if (window.nuUserMeta) {
+    Object.keys(window.nuUserMeta).forEach(key => {
+      filterVal = filterVal.replace(new RegExp('##' + key + '##', 'g'), window.nuUserMeta[key]);
+    });
+  }
+  if (window.nuUserLocation) {
+    filterVal = filterVal.replace(/##location##/g, window.nuUserLocation);
+  }
+
+  let url = 'api/crud.php?table=' + encodeURIComponent(table) + '&page=1&per_page=100';
+  if (filterVal) {
+    url += '&where=' + encodeURIComponent(filterVal);
+  }
+
+  const apiCall = (window.NuApp && typeof window.NuApp.apiJson === 'function')
+    ? window.NuApp.apiJson(url, { credentials: 'same-origin' })
+    : fetch(url).then(r => r.json());
+
+  apiCall.then(res => {
+    if (!res || !res.success) return;
+    const records = Array.isArray(res.data) ? res.data : (res.records || []);
+
+    const qLower = query.toLowerCase();
+
+    // First try finding an exact match
+    let matches = records.filter(r => {
+      const disp = String(r[displayCol] || '').toLowerCase();
+      const idVal = String(r[idCol] || '').toLowerCase();
+      return disp === qLower || idVal === qLower;
+    });
+
+    // Fallback to partial matches
+    if (matches.length === 0) {
+      matches = records.filter(r => {
+        const disp = String(r[displayCol] || '').toLowerCase();
+        const idVal = String(r[idCol] || '').toLowerCase();
+        return disp.indexOf(qLower) !== -1 || idVal.indexOf(qLower) !== -1;
+      });
+    }
+
+    if (matches.length === 1) {
+      const r = matches[0];
+      if (hiddenEl) {
+        hiddenEl.value = r[idCol];
+        hiddenEl.dispatchEvent(new Event('change', { bubbles: true }));
+        hiddenEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      el.value = r[displayCol] || r[idCol];
+      el.dataset.lastVal = el.value;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Extra mapping
+      if (extra && typeof extra === 'string' && extra.trim() !== '') {
+        const mappings = extra.split(',');
+        mappings.forEach(m => {
+          const parts = m.split(':');
+          if (parts.length === 2) {
+            const sourceField = parts[0].trim();
+            const targetField = parts[1].trim();
+            const targetEl = container.querySelector('input[name="' + targetField + '"]') || container.querySelector('[data-field="' + targetField + '"]') || document.querySelector('input[name="' + targetField + '"]');
+            if (targetEl && r[sourceField] !== undefined) {
+              targetEl.value = r[sourceField];
+              targetEl.dispatchEvent(new Event('change', { bubbles: true }));
+              targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }
+        });
+      }
+    } else {
+      // Open modal automatically
+      window.openLookupModal(name, table, idCol, displayCol, filter, extra);
+      setTimeout(() => {
+        // Find newly opened lookup overlay (z-index: 200000)
+        const allOverlays = document.querySelectorAll('div[style*="z-index"]');
+        let topOverlay = null;
+        allOverlays.forEach(ov => {
+          if (ov.style.zIndex === '200000' || ov.style.cssText.indexOf('z-index:200000') !== -1 || ov.style.cssText.indexOf('z-index: 200000') !== -1) {
+            topOverlay = ov;
+          }
+        });
+        if (topOverlay) {
+          const searchInp = topOverlay.querySelector('input[type="text"]');
+          if (searchInp) {
+            searchInp.value = query;
+            searchInp.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+      }, 100);
+    }
+  }).catch(err => {
+    console.error('Auto lookup error:', err);
+  });
+};
+
+// Global Event Delegation for Autocomplete / Auto Lookup
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.dataset && e.target.dataset.lookupName) {
+    if (e.target.value !== e.target.dataset.lastVal) {
+      e.target.dataset.lastVal = e.target.value;
+      window.triggerAutoLookup(e.target);
+    }
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.target && e.target.dataset && e.target.dataset.lookupName) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.target.blur();
+    }
+  }
+});
