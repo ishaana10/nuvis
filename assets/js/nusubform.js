@@ -529,6 +529,13 @@
       var expr = field.formula || (field.calculated || (field.calc_formula || ''));
       return '<input type="text" class="nu-input" name="' + esc(name) + '" data-calculated="true" data-expression="' + esc(expr) + '" value="' + esc(value) + '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
     }
+    if (type === 'uploadbutton') {
+      var btnText = field.button_text || (field.buttontext || 'Upload');
+      var btnHtml = '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm nu-sf-upload-btn" data-field-name="' + esc(name) + '" style="margin:0;"' + disAttr + '>' + esc(btnText) + '</button>';
+      var inpHtml = '<input type="text" class="nu-input nu-sf-upload-input" name="' + esc(name) + '" value="' + esc(value) + '" readonly style="flex:1;">';
+      var clearBtn = (value && !disabled) ? '<button type="button" class="nu-btn nu-btn-danger nu-btn-sm nu-sf-upload-clear" data-field-name="' + esc(name) + '" style="padding:4px 8px;">Clear</button>' : '';
+      return '<div class="nu-field-wrap nu-field-uploadbutton" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;">' + btnHtml + inpHtml + clearBtn + '</div>';
+    }
     if (type === 'select' || type === 'select2') {
       var isMulti = !!(field.multiple === true || field.multiple === 'true' || field.multiple === 1 || field.select_type === 'multiselect');
       var s2Class = '';
@@ -1001,6 +1008,103 @@
   document.addEventListener('nu:form:opened', function (e) {
     var scope = e.detail && e.detail.scope ? e.detail.scope : document;
     nuSubform.initAll(scope);
+  });
+
+  // Handle Subform Upload Button click
+  document.addEventListener('click', function (e) {
+    var target = e.target;
+    if (target && target.matches('.nu-sf-upload-btn')) {
+      var fname = target.getAttribute('data-field-name');
+      var container = target.closest('.nu-field-wrap');
+      var inputEl = container.querySelector('.nu-sf-upload-input');
+      if (!inputEl) return;
+
+      // Initialize and open Uppy
+      var modalId = 'uppy_modal_sf_' + fname;
+      var modalContainer = document.getElementById(modalId);
+      if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = modalId;
+        document.body.appendChild(modalContainer);
+      }
+
+      if (typeof Uppy === 'undefined') {
+        toast('Uppy is not loaded. Please ensure Uppy is configured globally.', 'error');
+        return;
+      }
+
+      // Check restrictions from global config
+      var allowedTypes = ['pdf','doc','docx','xls','xlsx','jpg','jpeg','png','gif','csv'].map(function(ext) {
+        return '.' + ext;
+      });
+
+      var uppy = new Uppy.Uppy({
+        autoProceed: false,
+        restrictions: {
+          allowedFileTypes: allowedTypes
+        }
+      })
+      .use(Uppy.Dashboard, {
+        target: modalContainer,
+        inline: false,
+        trigger: target,
+        closeModalOnClickOutside: true,
+        showProgressDetails: true,
+        proudlyDisplayPoweredByUppy: false
+      })
+      .use(Uppy.XHRUpload, {
+        endpoint: 'api/upload.php',
+        fieldName: 'file',
+        formData: true
+      });
+
+      uppy.getPlugin('Dashboard').openModal();
+
+      uppy.on('complete', function (result) {
+        if (result.successful.length > 0) {
+          var names = result.successful.map(function (file) { return file.response.body.name; });
+          if (inputEl.value) {
+            inputEl.value = inputEl.value + ', ' + names.join(', ');
+          } else {
+            inputEl.value = names.join(', ');
+          }
+          toast('Upload successful!', 'success');
+          uppy.getPlugin('Dashboard').closeModal();
+          uppy.close();
+          modalContainer.remove();
+
+          // Add dynamic Clear button if not present
+          var clearBtn = container.querySelector('.nu-sf-upload-clear');
+          if (!clearBtn) {
+            clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'nu-btn nu-btn-danger nu-btn-sm nu-sf-upload-clear';
+            clearBtn.setAttribute('data-field-name', fname);
+            clearBtn.style.cssText = 'padding:4px 8px;';
+            clearBtn.textContent = 'Clear';
+            container.appendChild(clearBtn);
+          }
+          // Trigger change event to update any calculated fields!
+          inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+
+      uppy.on('dashboard:modal-closed', function () {
+        uppy.close();
+        modalContainer.remove();
+      });
+    }
+
+    // Handle Clear Button click
+    if (target && target.matches('.nu-sf-upload-clear')) {
+      var container = target.closest('.nu-field-wrap');
+      var inputEl = container.querySelector('.nu-sf-upload-input');
+      if (inputEl) {
+        inputEl.value = '';
+        inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      target.remove();
+    }
   });
 
   /* ── listen for parent save event ────────────────────────────────── */
