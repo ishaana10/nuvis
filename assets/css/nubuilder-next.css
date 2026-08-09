@@ -1030,6 +1030,7 @@ body {
 }
 
 /* Ensure Select2 dropdown has correct z-index in modals and subforms */
-.select2-container {
+.select2-container--open,
+.select2-dropdown {
   z-index: 99999 !important;
 }
