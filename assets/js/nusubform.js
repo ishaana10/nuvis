@@ -1342,7 +1342,12 @@
         var uniqueId = 'uppy_sf_' + name + '_' + Math.random().toString(36).substr(2, 9);
         var modalContainer = document.createElement('div');
         modalContainer.id = uniqueId;
+        modalContainer.style.cssText = 'position: relative; z-index: 30000;';
         document.body.appendChild(modalContainer);
+
+        var styleEl = document.createElement('style');
+        styleEl.innerHTML = '#' + uniqueId + ' .uppy-Dashboard--modal, .uppy-Dashboard--modal { z-index: 30000 !important; }';
+        document.head.appendChild(styleEl);
 
         var uppy = new Uppy.Uppy({
           autoProceed: false,
@@ -1383,12 +1388,14 @@
             uppy.getPlugin('Dashboard').closeModal();
             uppy.close();
             modalContainer.remove();
+            styleEl.remove();
           }
         });
 
         uppy.on('dashboard:modal-closed', function () {
           uppy.close();
           modalContainer.remove();
+          styleEl.remove();
         });
       });
     });
