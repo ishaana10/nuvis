@@ -370,6 +370,9 @@
       if (typeof window.nuCalculateFields === 'function') {
         window.nuCalculateFields(body);
       }
+      if (typeof window.nuInitUploadButtons === 'function') {
+        window.nuInitUploadButtons(body);
+      }
     }
     else                          body.innerHTML = renderFormList(displayCols, records, pk, m, hasEditPermission);
 
@@ -530,6 +533,74 @@
       var expr = field.formula || (field.calculated || (field.calc_formula || ''));
       return '<input type="text" class="nu-input" name="' + esc(name) + '" data-calculated="true" data-expression="' + esc(expr) + '" value="' + esc(value) + '" readonly style="width:100%;background:var(--bg-offset,#f5f5f5);color:#888;">';
     }
+    if (type === 'uploadbutton') {
+      var buttonText = field.button_text || field.buttontext || 'Upload';
+      var uploadTarget = field.upload_target || field.uploadtarget || 'local';
+      var onedriveClientId = field.onedrive_client_id || field.onedriveclientid || '';
+      var allowedExts = field.allowed_extensions || field.allowedextensions || '';
+      var maxFileSize = field.max_file_size_mb || field.maxfilesizemb || '';
+      var isMultiple = !!(field.multiple === true || field.multiple === 'true' || field.multiple === 1);
+      var maxFiles = field.max_files || field.maxfiles || '';
+      var preview = !!(field.preview === true || field.preview === 'true' || field.preview === 1 || field.preview === '1');
+
+      var wrapHtml = '<div class="nu-sf-upload-wrap" style="display:flex;flex-direction:column;gap:6px;width:100%;"';
+      wrapHtml += ' data-field-name="' + esc(name) + '"';
+      wrapHtml += ' data-button-text="' + esc(buttonText) + '"';
+      wrapHtml += ' data-upload-target="' + esc(uploadTarget) + '"';
+      wrapHtml += ' data-onedrive-client-id="' + esc(onedriveClientId) + '"';
+      wrapHtml += ' data-allowed-extensions="' + esc(allowedExts) + '"';
+      wrapHtml += ' data-max-file-size-mb="' + esc(maxFileSize) + '"';
+      wrapHtml += ' data-multiple="' + (isMultiple ? '1' : '0') + '"';
+      wrapHtml += ' data-max-files="' + esc(maxFiles) + '"';
+      wrapHtml += ' data-preview="' + (preview ? '1' : '0') + '"';
+      wrapHtml += '>';
+
+      wrapHtml += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;">';
+      if (!disabled) {
+        wrapHtml += '<button type="button" class="nu-btn nu-btn-ghost nu-btn-sm nu-sf-upload-btn" style="margin:0;">' + esc(buttonText) + '</button>';
+      }
+      wrapHtml += '<input type="text" class="nu-input nu-sf-upload-input" name="' + esc(name) + '" value="' + esc(value) + '" readonly style="flex:1;' + (disabled ? 'background:var(--bg-offset,#f5f5f5);color:#888;cursor:default;' : '') + '">';
+      if (!disabled) {
+        wrapHtml += '<button type="button" class="nu-btn nu-btn-danger nu-btn-sm nu-sf-upload-clear" style="padding:4px 8px;' + (value ? '' : 'display:none;') + '">Clear</button>';
+      }
+      wrapHtml += '</div>';
+
+      // Preview section
+      wrapHtml += '<div class="nu-sf-upload-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">';
+      if (value) {
+        var filesArray = String(value).split(',').map(function(f) { return f.trim(); });
+        filesArray.forEach(function(fName) {
+          if (fName !== '') {
+            if (fName.indexOf('http://') === 0 || fName.indexOf('https://') === 0) {
+              // Cloud preview
+              var ext = fName.split('.').pop().toLowerCase();
+              if (['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) !== -1) {
+                wrapHtml += '<div style="display:inline-block;text-align:center;">';
+                wrapHtml += '<img src="' + esc(fName) + '" style="max-height:50px;border-radius:4px;border:1px solid #ddd;cursor:pointer;" onclick="if(window._showImageLightbox)window._showImageLightbox(' + esc(JSON.stringify(fName)) + ')">';
+                wrapHtml += '</div>';
+              } else {
+                wrapHtml += '<div style="font-size:11px;"><a href="' + esc(fName) + '" target="_blank" style="color:var(--color-primary,#1d4ed8);text-decoration:underline;">Cloud Link</a></div>';
+              }
+            } else {
+              // Local preview
+              var ext = fName.split('.').pop().toLowerCase();
+              if (['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) !== -1) {
+                wrapHtml += '<div style="display:inline-block;text-align:center;">';
+                wrapHtml += '<img src="uploads/' + esc(fName) + '" style="max-height:50px;border-radius:4px;border:1px solid #ddd;cursor:pointer;" onclick="if(window._showImageLightbox)window._showImageLightbox(' + esc(JSON.stringify('uploads/' + fName)) + ')">';
+                wrapHtml += '<div style="font-size:9px;color:#888;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(fName) + '</div>';
+                wrapHtml += '</div>';
+              } else {
+                wrapHtml += '<div style="font-size:11px;"><a href="uploads/' + esc(fName) + '" target="_blank" style="color:var(--color-primary,#1d4ed8);text-decoration:underline;">' + esc(fName) + '</a></div>';
+              }
+            }
+          }
+        });
+      }
+      wrapHtml += '</div>';
+
+      wrapHtml += '</div>';
+      return wrapHtml;
+    }
     if (type === 'lookup') {
       var lookup = field.lookup || {};
       var lTable = lookup.table || '';
@@ -607,6 +678,31 @@
   function formatSubformCell(col, val, type) {
     if (type === 'checkbox') return val ? '&#10003;' : '&mdash;';
     if (val == null || val === '') return '';
+
+    if (type === 'uploadbutton') {
+      var files = String(val).split(',').map(function (f) { return f.trim(); });
+      var cellHtml = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
+      files.forEach(function (fName) {
+        if (!fName) return;
+        if (fName.indexOf('http://') === 0 || fName.indexOf('https://') === 0) {
+          var ext = fName.split('.').pop().toLowerCase();
+          if (['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) !== -1) {
+            cellHtml += '<img src="' + esc(fName) + '" style="max-height:30px;border-radius:4px;border:1px solid #ddd;cursor:pointer;" onclick="if(window._showImageLightbox)window._showImageLightbox(' + esc(JSON.stringify(fName)) + ')">';
+          } else {
+            cellHtml += '<a href="' + esc(fName) + '" target="_blank" style="color:var(--color-primary,#1d4ed8);text-decoration:underline;font-size:11px;">Cloud Link</a>';
+          }
+        } else {
+          var ext = fName.split('.').pop().toLowerCase();
+          if (['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) !== -1) {
+            cellHtml += '<img src="uploads/' + esc(fName) + '" style="max-height:30px;border-radius:4px;border:1px solid #ddd;cursor:pointer;" onclick="if(window._showImageLightbox)window._showImageLightbox(' + esc(JSON.stringify('uploads/' + fName)) + ')" title="' + esc(fName) + '">';
+          } else {
+            cellHtml += '<a href="uploads/' + esc(fName) + '" target="_blank" style="color:var(--color-primary,#1d4ed8);text-decoration:underline;font-size:11px;" title="' + esc(fName) + '">' + esc(fName) + '</a>';
+          }
+        }
+      });
+      cellHtml += '</div>';
+      return cellHtml;
+    }
 
     if (type === 'select' || type === 'select2') {
       var options = col ? (col.options || []) : [];
@@ -872,6 +968,9 @@
     if (typeof window.nuCalculateFields === 'function') {
       window.nuCalculateFields(overlay);
     }
+    if (typeof window.nuInitUploadButtons === 'function') {
+      window.nuInitUploadButtons(overlay);
+    }
   }
 
   /* ── delete row ───────────────────────────────────────────────────── */
@@ -1093,6 +1192,207 @@
       });
     };
   }
+
+  function updateSfUploadPreviewAndActions(wrap, newValue) {
+    var input = wrap.querySelector('.nu-sf-upload-input');
+    if (input) {
+      input.value = newValue;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    var clearBtn = wrap.querySelector('.nu-sf-upload-clear');
+    if (clearBtn) {
+      if (newValue) {
+        clearBtn.style.display = '';
+      } else {
+        clearBtn.style.display = 'none';
+      }
+    }
+
+    var previewSection = wrap.querySelector('.nu-sf-upload-preview');
+    if (previewSection) {
+      previewSection.innerHTML = '';
+      if (newValue) {
+        var filesArray = String(newValue).split(',').map(function(f) { return f.trim(); });
+        filesArray.forEach(function(fName) {
+          if (fName !== '') {
+            var html = '';
+            if (fName.indexOf('http://') === 0 || fName.indexOf('https://') === 0) {
+              var ext = fName.split('.').pop().toLowerCase();
+              if (['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) !== -1) {
+                html += '<div style="display:inline-block;text-align:center;">';
+                html += '<img src="' + esc(fName) + '" style="max-height:50px;border-radius:4px;border:1px solid #ddd;cursor:pointer;" onclick="if(window._showImageLightbox)window._showImageLightbox(' + esc(JSON.stringify(fName)) + ')">';
+                html += '</div>';
+              } else {
+                html += '<div style="font-size:11px;"><a href="' + esc(fName) + '" target="_blank" style="color:var(--color-primary,#1d4ed8);text-decoration:underline;">Cloud Link</a></div>';
+              }
+            } else {
+              var ext = fName.split('.').pop().toLowerCase();
+              if (['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) !== -1) {
+                html += '<div style="display:inline-block;text-align:center;">';
+                html += '<img src="uploads/' + esc(fName) + '" style="max-height:50px;border-radius:4px;border:1px solid #ddd;cursor:pointer;" onclick="if(window._showImageLightbox)window._showImageLightbox(' + esc(JSON.stringify('uploads/' + fName)) + ')">';
+                html += '<div style="font-size:9px;color:#888;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(fName) + '</div>';
+                html += '</div>';
+              } else {
+                html += '<div style="font-size:11px;"><a href="uploads/' + esc(fName) + '" target="_blank" style="color:var(--color-primary,#1d4ed8);text-decoration:underline;">' + esc(fName) + '</a></div>';
+              }
+            }
+            previewSection.insertAdjacentHTML('beforeend', html);
+          }
+        });
+      }
+    }
+  }
+
+  window.nuInitUploadButtons = function (scope) {
+    scope = scope || document;
+    var wraps = scope.querySelectorAll('.nu-sf-upload-wrap');
+    wraps.forEach(function (wrap) {
+      if (wrap._uppyBound) return;
+      wrap._uppyBound = true;
+
+      var btn = wrap.querySelector('.nu-sf-upload-btn');
+      var input = wrap.querySelector('.nu-sf-upload-input');
+      var clearBtn = wrap.querySelector('.nu-sf-upload-clear');
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          updateSfUploadPreviewAndActions(wrap, '');
+        });
+      }
+
+      if (!btn || !input) return;
+
+      var name = wrap.dataset.fieldName || '';
+      var buttonText = wrap.dataset.buttonText || 'Upload';
+      var uploadTarget = wrap.dataset.uploadTarget || 'local';
+      var onedriveClientId = wrap.dataset.onedriveClientId || '';
+      var allowedExtensions = wrap.dataset.allowedExtensions || '';
+      var maxFileSizeMb = parseFloat(wrap.dataset.maxFileSizeMb) || 0;
+      var isMultiple = wrap.dataset.multiple === '1';
+      var maxFilesAttr = wrap.dataset.maxFiles;
+
+      var allowedTypes = null;
+      if (allowedExtensions) {
+        allowedTypes = allowedExtensions.split(',').map(function (ext) {
+          ext = ext.trim();
+          return ext.indexOf('.') === 0 ? ext : '.' + ext;
+        });
+      }
+      var maxFileSize = maxFileSizeMb ? (maxFileSizeMb * 1024 * 1024) : (10 * 1024 * 1024);
+      var maxNumFiles = isMultiple ? (parseInt(maxFilesAttr, 10) || null) : 1;
+      if (maxNumFiles !== null && maxNumFiles <= 0) {
+        maxNumFiles = null;
+      }
+
+      function launchOneDrivePicker() {
+        if (!onedriveClientId) {
+          toast('Error: OneDrive Client ID is not configured in properties panel!', 'error');
+          return;
+        }
+        var odOptions = {
+          clientId: onedriveClientId,
+          action: 'share',
+          multiSelect: isMultiple,
+          advanced: {},
+          success: function (response) {
+            if (response && response.value && response.value.length > 0) {
+              var links = response.value.map(function (item) { return item.permissions[0].link.webUrl; });
+              var newVal = input.value;
+              if (newVal) {
+                newVal = newVal + ', ' + links.join(', ');
+              } else {
+                newVal = links.join(', ');
+              }
+              updateSfUploadPreviewAndActions(wrap, newVal);
+              toast('OneDrive link acquired!', 'success');
+            }
+          },
+          cancel: function () {
+            toast('OneDrive selection canceled.', 'info');
+          },
+          error: function (err) {
+            toast('OneDrive Error: ' + (err.message || String(err)), 'error');
+            console.error('OneDrive error', err);
+          }
+        };
+        OneDrive.open(odOptions);
+      }
+
+      btn.addEventListener('click', function () {
+        if (uploadTarget === 'onedrive') {
+          if (typeof OneDrive === 'undefined') {
+            toast('OneDrive Picker SDK is loading...', 'info');
+            var script = document.createElement('script');
+            script.src = 'https://js.live.net/v7.2/OneDrive.js';
+            script.onload = launchOneDrivePicker;
+            document.head.appendChild(script);
+          } else {
+            launchOneDrivePicker();
+          }
+          return;
+        }
+
+        // Local Server upload mode using Uppy
+        if (typeof Uppy === 'undefined') {
+          toast('Error: Uppy library is not loaded!', 'error');
+          return;
+        }
+
+        var uniqueId = 'uppy_sf_' + name + '_' + Math.random().toString(36).substr(2, 9);
+        var modalContainer = document.createElement('div');
+        modalContainer.id = uniqueId;
+        document.body.appendChild(modalContainer);
+
+        var uppy = new Uppy.Uppy({
+          autoProceed: false,
+          restrictions: {
+            maxFileSize: maxFileSize,
+            allowedFileTypes: allowedTypes,
+            maxNumberOfFiles: maxNumFiles
+          }
+        })
+        .use(Uppy.Dashboard, {
+          target: modalContainer,
+          inline: false,
+          trigger: btn,
+          closeModalOnClickOutside: true,
+          showProgressDetails: true,
+          proudlyDisplayPoweredByUppy: false,
+          metaFields: []
+        })
+        .use(Uppy.XHRUpload, {
+          endpoint: 'api/upload.php',
+          fieldName: 'file',
+          formData: true
+        });
+
+        uppy.getPlugin('Dashboard').openModal();
+
+        uppy.on('complete', function (result) {
+          if (result.successful.length > 0) {
+            var names = result.successful.map(function (file) { return file.response.body.name; });
+            var newVal = input.value;
+            if (newVal) {
+              newVal = newVal + ', ' + names.join(', ');
+            } else {
+              newVal = names.join(', ');
+            }
+            updateSfUploadPreviewAndActions(wrap, newVal);
+            toast('Upload successful!', 'success');
+            uppy.getPlugin('Dashboard').closeModal();
+            uppy.close();
+            modalContainer.remove();
+          }
+        });
+
+        uppy.on('dashboard:modal-closed', function () {
+          uppy.close();
+          modalContainer.remove();
+        });
+      });
+    });
+  };
 
   if (window.NuApp && window.NuApp.apiJson) {
     installParentSavePatch();
