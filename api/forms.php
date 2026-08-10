@@ -29,6 +29,7 @@ switch ($action) {
     case 'get_fields':   actionGetFields($db);    break;
     case 'get_versions': actionGetVersions($db);  break;
     case 'rollback':     actionRollback($db);     break;
+    case 'create_fk_field': actionCreateFkField($db); break;
     default:
         echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
 }
@@ -297,6 +298,124 @@ function actionGet($db) {
         echo json_encode(['success' => true, 'form' => $form]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function actionCreateFkField($db) {
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+
+    try {
+        $raw = file_get_contents('php://input');
+        $data = json_decode($raw, true);
+
+        if (!is_array($data)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid JSON payload'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $childFormCode = trim((string)($data['child_form_code'] ?? ''));
+        $fkToFormCode  = trim((string)($data['fk_to_form_code'] ?? ''));
+
+        if ($childFormCode === '' || $fkToFormCode === '') {
+            echo json_encode(['success' => false, 'error' => 'child_form_code and fk_to_form_code are required'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        // 1. Fetch child form
+        $childForm = $db->fetchOne('SELECT * FROM nu_forms WHERE form_code = ?', [$childFormCode]);
+        if (!$childForm) {
+            echo json_encode(['success' => false, 'error' => "Child form '{$childFormCode}' not found"], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        // 2. Fetch parent form to determine table name & PK type
+        $parentForm = $db->fetchOne('SELECT * FROM nu_forms WHERE form_code = ?', [$fkToFormCode]);
+        if (!$parentForm) {
+            echo json_encode(['success' => false, 'error' => "Parent form '{$fkToFormCode}' not found"], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $parentTable  = trim((string)($parentForm['form_table'] ?? ''));
+        $parentPkType = trim((string)($parentForm['form_pk_type'] ?? 'autoincrement'));
+
+        if ($parentTable === '') {
+            $parentTable = preg_replace('/[^a-zA-Z0-9_]/', '', $fkToFormCode);
+        }
+
+        // Generate sanitized FK name and label
+        $fkName  = $parentTable . '_id';
+        $fkLabel = trim(ucwords(str_replace('_', ' ', $parentTable))) . ' ID';
+
+        // 3. Update child form's layout if the field does not already exist
+        $childLayoutJson = $childForm['form_layout'] ?? '[]';
+        $childLayout = json_decode($childLayoutJson, true);
+        if (!is_array($childLayout)) $childLayout = [];
+
+        // Check if field already exists in any nested row
+        $flatFields = nu_flatten_fields($childLayout);
+        $exists = false;
+        foreach ($flatFields as $f) {
+            $colName = nu_resolve_col_name($f);
+            if (strtolower($colName) === strtolower($fkName)) {
+                $exists = true;
+                break;
+            }
+        }
+
+        if (!$exists) {
+            // Append a new row containing the FK field to the child form layout
+            $newFkField = [
+                'name' => $fkName,
+                'label' => $fkLabel,
+                'type' => ($parentPkType === 'uuid') ? 'text' : 'number',
+                'required' => true,
+                'col' => 6,
+                'is_fk' => true,
+                'hide_in_grid' => true
+            ];
+            $childLayout[] = [
+                'type' => 'row',
+                'fields' => [$newFkField]
+            ];
+
+            // Update child form layout in the database
+            $updateData = [
+                'form_layout' => json_encode($childLayout, JSON_UNESCAPED_UNICODE),
+            ];
+            // Only update form_updated_at if the column exists
+            $columns = [];
+            if ($driver === 'sqlite') {
+                foreach ($db->fetchAll("PRAGMA table_info(`nu_forms`)") as $c) {
+                    $columns[] = strtolower($c['name']);
+                }
+            } else {
+                foreach ($db->fetchAll("DESCRIBE `nu_forms`") as $c) {
+                    $columns[] = strtolower($c['Field']);
+                }
+            }
+            if (in_array('form_updated_at', $columns, true)) {
+                $updateData['form_updated_at'] = date('Y-m-d H:i:s');
+            }
+
+            $db->update('nu_forms', $updateData, 'form_id = ?', [$childForm['form_id']]);
+        }
+
+        // 4. Synchronize/alter the child table to add the column
+        $childTable  = trim((string)($childForm['form_table'] ?? ''));
+        $childPkType = trim((string)($childForm['form_pk_type'] ?? 'autoincrement'));
+        if ($childTable !== '') {
+            nu_sync_table_from_layout($db, $childTable, json_encode($childLayout, JSON_UNESCAPED_UNICODE), $childPkType);
+        }
+
+        echo json_encode([
+            'success' => true,
+            'field_name' => $fkName
+        ], JSON_UNESCAPED_UNICODE);
+
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
     }
 }
 
