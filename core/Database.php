@@ -65,10 +65,10 @@ class NuDatabase {
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_service_types (service_type_id TEXT PRIMARY KEY, name TEXT, description TEXT, price REAL)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_customer_requests (request_id TEXT PRIMARY KEY, customer_name TEXT, service_type_id TEXT, request_details TEXT, status TEXT DEFAULT 'Pending', created_at TEXT, updated_at TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_staff_services (service_log_id TEXT PRIMARY KEY, customer_request_id TEXT, staff_notes TEXT, service_date TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_instances (wfi_id INTEGER PRIMARY KEY, wfi_wf_id INTEGER, wfi_stage_id INTEGER, wfi_record_table TEXT, wfi_record_id TEXT, wfi_status TEXT, wfi_started_by INTEGER, wfi_started_at TEXT, wfi_completed_at TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_instances (wfi_id INTEGER PRIMARY KEY, wfi_wf_id INTEGER, wfi_stage_id INTEGER, wfi_record_table TEXT, wfi_record_id TEXT, wfi_status TEXT, wfi_started_by INTEGER, wfi_started_at TEXT, wfi_completed_at TEXT, wfi_meta TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflows (wf_id INTEGER PRIMARY KEY, wf_code TEXT, wf_name TEXT, wf_description TEXT, wf_form_code TEXT, wf_active INTEGER)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_stages (wfs_id INTEGER PRIMARY KEY, wfs_wf_id INTEGER, wfs_code TEXT, wfs_name TEXT, wfs_description TEXT, wfs_color TEXT, wfs_is_start INTEGER, wfs_is_end INTEGER, wfs_order INTEGER)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_transitions (wft_id INTEGER PRIMARY KEY, wft_wf_id INTEGER, wft_from_id INTEGER, wft_to_id INTEGER, wft_action TEXT, wft_label TEXT, wft_hook TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_transitions (wft_id INTEGER PRIMARY KEY, wft_wf_id INTEGER, wft_from_id INTEGER, wft_to_id INTEGER, wft_action TEXT, wft_label TEXT, wft_condition TEXT, wft_hook TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_history (wfh_id INTEGER PRIMARY KEY, wfh_wfi_id INTEGER, wfh_from_id INTEGER, wfh_to_id INTEGER, wfh_action TEXT, wfh_actor_id INTEGER, wfh_comment TEXT, wfh_acted_at TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_webhooks (webhook_id INTEGER PRIMARY KEY, webhook_name TEXT, webhook_url TEXT, webhook_secret TEXT, webhook_events TEXT, webhook_active INTEGER)");
 
@@ -81,8 +81,8 @@ class NuDatabase {
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages VALUES (101, 100, 'Pending', 'Pending Service', 'The service request is created', '#f59e0b', 1, 0, 1)");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages VALUES (102, 100, 'In Progress', 'Service In Progress', 'The staff has commenced', '#3b82f6', 0, 0, 2)");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages VALUES (103, 100, 'Completed', 'Completed', 'The requested service', '#10b981', 0, 1, 3)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions VALUES (101, 100, 101, 102, 'advance', 'Start Providing Service', 'update_record')");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions VALUES (102, 100, 102, 103, 'advance', 'Mark Service Completed', 'update_record')");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions (wft_id, wft_wf_id, wft_from_id, wft_to_id, wft_action, wft_label, wft_hook) VALUES (101, 100, 101, 102, 'advance', 'Start Providing Service', 'update_record')");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions (wft_id, wft_wf_id, wft_from_id, wft_to_id, wft_action, wft_label, wft_hook) VALUES (102, 100, 102, 103, 'advance', 'Mark Service Completed', 'update_record')");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_instances (wfi_id, wfi_wf_id, wfi_stage_id, wfi_record_table, wfi_record_id, wfi_status, wfi_started_by) VALUES (1, 100, 101, 'demo_customer_requests', 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'active', 1)");
         }
 
