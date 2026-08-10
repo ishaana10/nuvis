@@ -1627,8 +1627,14 @@ function nu_inject_parent_context(array $layout, string $parentTable, string $pa
             $node['_parent_table']     = $parentTable;
             $node['_parent_id']        = $parentId;
             $node['_parent_form_code'] = $parentFormCode;
-        } elseif (in_array($t, ['section', 'group', 'row'], true) && isset($node['children'])) {
+        }
+
+        if (isset($node['children']) && is_array($node['children'])) {
             $node['children'] = nu_inject_parent_context($node['children'], $parentTable, $parentId, $parentFormCode);
+        }
+
+        if (isset($node['fields']) && is_array($node['fields'])) {
+            $node['fields'] = nu_inject_parent_context($node['fields'], $parentTable, $parentId, $parentFormCode);
         }
 
         // Also handle group/tab rows if present
