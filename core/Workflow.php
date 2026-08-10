@@ -79,7 +79,7 @@ class WorkflowEngine
         $this->logHistory($instanceId, (int)$instance['wfi_stage_id'], (int)$transition['wft_to_id'], $transition['wft_action'], $userId, $comment);
 
         // Execute Action Hook
-        $this->executeHook($transition, $instance, $userId);
+        $this->executeHook($transition, $instance, $userId, $comment);
 
         // Trigger Outgoing Webhooks for workflow_advance
         try {
@@ -104,128 +104,234 @@ class WorkflowEngine
         return true;
     }
 
+    // ── Primary Key Resolution ───────────────────────────────────────────────
+    private function getPrimaryKeyColumn(string $table): string
+    {
+        $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+        if (stripos($cleanTable, 'demo_customer_requests') !== false) {
+            return 'request_id';
+        }
+        if (stripos($cleanTable, 'demo_service_types') !== false) {
+            return 'service_type_id';
+        }
+        if (stripos($cleanTable, 'demo_staff_services') !== false) {
+            return 'service_log_id';
+        }
+        try {
+            $pdo = $this->db->getPdo();
+            $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+            if (strtolower((string)$driver) === 'sqlite') {
+                $colStmt = $pdo->query("PRAGMA table_info(`{$cleanTable}`)");
+                if ($colStmt) {
+                    $cols = $colStmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($cols as $c) {
+                        if (!empty($c['pk'])) {
+                            return $c['name'];
+                        }
+                    }
+                }
+            } else {
+                $colStmt = $pdo->query("SHOW KEYS FROM `{$cleanTable}` WHERE Key_name = 'PRIMARY'");
+                if ($colStmt) {
+                    $rowCol = $colStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($rowCol && !empty($rowCol['Column_name'])) {
+                        return $rowCol['Column_name'];
+                    }
+                }
+            }
+        } catch (Throwable $ignored) {}
+        return 'id';
+    }
+
+    // ── Placeholder Replacement ──────────────────────────────────────────────
+    private function replacePlaceholders(string $template, array $record, array $instance, string $actorName, string $comment): string
+    {
+        // Replace {{record.field_name}}
+        foreach ($record as $key => $val) {
+            $template = str_replace("{{record.{$key}}}", (string)$val, $template);
+        }
+        // Also replace flat {{field_name}} if present
+        foreach ($record as $key => $val) {
+            $template = str_replace("{{{$key}}}", (string)$val, $template);
+        }
+        // Replace other common placeholders
+        $template = str_replace('{{wf_name}}', $instance['wf_name'] ?? '', $template);
+        $template = str_replace('{{wf_code}}', $instance['wf_code'] ?? '', $template);
+        $template = str_replace('{{wfi_id}}', (string)($instance['wfi_id'] ?? ''), $template);
+        $template = str_replace('{{instance.wfi_id}}', (string)($instance['wfi_id'] ?? ''), $template);
+        $template = str_replace('{{actor_name}}', $actorName, $template);
+        $template = str_replace('{{comment}}', $comment, $template);
+        return $template;
+    }
+
     // ── Execute Hook ───────────────────────────────────────────────────────────
-    private function executeHook(array $transition, array $instance, int $userId): void
+    private function executeHook(array $transition, array $instance, int $userId, string $comment = ''): void
     {
         $hook = $transition['wft_hook'] ?? null;
         if (!$hook) {
             return;
         }
 
-        switch ($hook) {
-            case 'send_email':
-                try {
-                    require_once __DIR__ . '/EmailService.php';
-                    $service = new NuEmailService();
+        // Fetch actor details
+        $actor = $this->db->fetchOne('SELECT usr_name, usr_email FROM nu_users WHERE usr_id = :id', [':id' => $userId]);
+        $actorName = $actor['usr_name'] ?? 'System';
 
-                    // Fetch actor and target details
-                    $actor = $this->db->fetchOne('SELECT usr_name, usr_email FROM nu_users WHERE usr_id = :id', [':id' => $userId]);
-                    $actorName = $actor['usr_name'] ?? 'System';
+        // Load linked record details if available
+        $record = [];
+        $table = $instance['wfi_record_table'] ?? null;
+        $recId = $instance['wfi_record_id'] ?? null;
+        if ($table && $recId) {
+            $pkCol = $this->getPrimaryKeyColumn($table);
+            $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+            try {
+                $record = $this->db->fetchOne("SELECT * FROM `{$cleanTable}` WHERE `{$pkCol}` = :id", [':id' => $recId]) ?: [];
+            } catch (Throwable $e) {}
+        }
 
-                    // Send to current workflow owner or started_by user
-                    $startedBy = $this->db->fetchOne('SELECT usr_email, usr_name FROM nu_users WHERE usr_id = :id', [':id' => (int)$instance['wfi_started_by']]);
-                    if ($startedBy && !empty($startedBy['usr_email'])) {
-                        $toEmail = $startedBy['usr_email'];
-                        $subject = "Workflow Notification: [" . $instance['wf_name'] . "] #" . $instance['wfi_id'];
-                        $body = "<h2>Workflow Notification</h2>" .
-                                "<p>The workflow <b>" . htmlspecialchars($instance['wf_name']) . "</b> (Instance #" . $instance['wfi_id'] . ") has advanced.</p>" .
-                                "<p><b>Action:</b> " . htmlspecialchars($transition['wft_label']) . "</p>" .
-                                "<p><b>By Actor:</b> " . htmlspecialchars($actorName) . "</p>" .
-                                "<p>You can check the dashboard/workflow module for details.</p>";
-
-                        $service->sendEmail($toEmail, $subject, $body);
-                    }
-                } catch (Throwable $e) {
-                    error_log('[Workflow Hook Error - Email] ' . $e->getMessage());
+        // Try to decode JSON
+        $hookConfigList = [];
+        $isJson = false;
+        $hookTrimmed = trim((string)$hook);
+        if (str_starts_with($hookTrimmed, '{') || str_starts_with($hookTrimmed, '[')) {
+            $decoded = json_decode($hook, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $isJson = true;
+                if (isset($decoded['action'])) {
+                    $hookConfigList[] = $decoded;
+                } else {
+                    $hookConfigList = $decoded;
                 }
-                break;
+            }
+        }
 
-            case 'call_webhook':
-                try {
-                    $url = getenv('NU_BASE_URL') ?: 'http://127.0.0.1';
-                    $payload = json_encode([
-                        'event'         => 'workflow_advance',
-                        'workflow'      => $instance['wf_name'],
-                        'instance_id'   => $instance['wfi_id'],
-                        'action'        => $transition['wft_label'],
-                        'from_stage_id' => $transition['wft_from_id'],
-                        'to_stage_id'   => $transition['wft_to_id'],
-                        'actor_id'      => $userId,
-                        'timestamp'     => date('Y-m-d H:i:s')
-                    ]);
+        if (!$isJson) {
+            // Legacy/String action names
+            $hookConfigList[] = [
+                'action' => $hook
+            ];
+        }
 
-                    $ch = curl_init();
-                    curl_setopt($ch, CURLOPT_URL, $url . '/api/webhook.php');
-                    curl_setopt($ch, CURLOPT_POST, true);
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_TIMEOUT, 3);
-                    curl_exec($ch);
-                    curl_close($ch);
-                } catch (Throwable $e) {
-                    error_log('[Workflow Hook Error - Webhook] ' . $e->getMessage());
-                }
-                break;
+        foreach ($hookConfigList as $hookConfig) {
+            $action = $hookConfig['action'] ?? null;
+            if (!$action) continue;
 
-            case 'update_record':
-                try {
-                    $table = $instance['wfi_record_table'] ?? null;
-                    $recId = $instance['wfi_record_id'] ?? null;
-                    if ($table && $recId) {
-                        $toStage = $this->db->fetchOne('SELECT wfs_code FROM nu_workflow_stages WHERE wfs_id = :id', [':id' => $transition['wft_to_id']]);
-                        if ($toStage && !empty($toStage['wfs_code'])) {
-                            $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
-                            $pkCol = 'id';
-                            try {
-                                if (stripos($cleanTable, 'demo_customer_requests') !== false) {
-                                    $pkCol = 'request_id';
-                                } elseif (stripos($cleanTable, 'demo_service_types') !== false) {
-                                    $pkCol = 'service_type_id';
-                                } elseif (stripos($cleanTable, 'demo_staff_services') !== false) {
-                                    $pkCol = 'service_log_id';
-                                } else {
-                                    $driver = 'mysql';
-                                    try {
-                                        $pdo = $this->db->getPdo();
-                                        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-                                    } catch (Throwable $e) {}
-
-                                    if (strtolower($driver) === 'sqlite') {
-                                        $colStmt = $pdo->query("PRAGMA table_info(`{$cleanTable}`)");
-                                        if ($colStmt) {
-                                            $cols = $colStmt->fetchAll(PDO::FETCH_ASSOC);
-                                            foreach ($cols as $c) {
-                                                if (!empty($c['pk'])) {
-                                                    $pkCol = $c['name'];
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        $colStmt = $pdo->query("SHOW KEYS FROM `{$cleanTable}` WHERE Key_name = 'PRIMARY'");
-                                        if ($colStmt) {
-                                            $rowCol = $colStmt->fetch(PDO::FETCH_ASSOC);
-                                            if ($rowCol && !empty($rowCol['Column_name'])) {
-                                                $pkCol = $rowCol['Column_name'];
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (Throwable $ignored) {
-                                $pkCol = 'id';
-                            }
-
-                            $this->db->query(
-                                "UPDATE `{$cleanTable}` SET `status` = :status WHERE `{$pkCol}` = :id",
-                                [':status' => $toStage['wfs_code'], ':id' => $recId]
-                            );
+            switch ($action) {
+                case 'send_email':
+                    try {
+                        require_once __DIR__ . '/EmailService.php';
+                        $className = class_exists('NuEmailService') ? 'NuEmailService' : (class_exists('EmailService') ? 'EmailService' : null);
+                        if (!$className) {
+                            throw new Exception('EmailService class not found');
                         }
+                        $service = new $className();
+
+                        // Resolve dynamic recipient
+                        $toEmail = null;
+                        if (!empty($hookConfig['to'])) {
+                            $toRaw = $hookConfig['to'];
+                            if (filter_var($toRaw, FILTER_VALIDATE_EMAIL)) {
+                                $toEmail = $toRaw;
+                            } elseif (isset($record[$toRaw]) && filter_var($record[$toRaw], FILTER_VALIDATE_EMAIL)) {
+                                $toEmail = $record[$toRaw];
+                            }
+                        }
+                        if (!$toEmail) {
+                            $startedBy = $this->db->fetchOne('SELECT usr_email FROM nu_users WHERE usr_id = :id', [':id' => (int)$instance['wfi_started_by']]);
+                            $toEmail = $startedBy['usr_email'] ?? null;
+                        }
+
+                        if (!empty($toEmail)) {
+                            $subjectTemplate = $hookConfig['subject'] ?? "Workflow Notification: [" . $instance['wf_name'] . "] #" . $instance['wfi_id'];
+                            $bodyTemplate = $hookConfig['body'] ?? "<h2>Workflow Notification</h2>" .
+                                    "<p>The workflow <b>" . htmlspecialchars($instance['wf_name']) . "</b> (Instance #" . $instance['wfi_id'] . ") has advanced.</p>" .
+                                    "<p><b>Action:</b> " . htmlspecialchars($transition['wft_label']) . "</p>" .
+                                    "<p><b>By Actor:</b> " . htmlspecialchars($actorName) . "</p>" .
+                                    "<p>You can check the dashboard/workflow module for details.</p>";
+
+                            $subject = $this->replacePlaceholders($subjectTemplate, $record, $instance, $actorName, $comment);
+                            $body = $this->replacePlaceholders($bodyTemplate, $record, $instance, $actorName, $comment);
+
+                            if (method_exists($service, 'sendEmail')) {
+                                $service->sendEmail($toEmail, $subject, $body);
+                            } else {
+                                $service->send($toEmail, $subject, $body);
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - Email] ' . $e->getMessage());
                     }
-                } catch (Throwable $e) {
-                    error_log('[Workflow Hook Error - Update Record] ' . $e->getMessage());
-                }
-                break;
+                    break;
+
+                case 'call_webhook':
+                    try {
+                        $url = $hookConfig['url'] ?? (getenv('NU_BASE_URL') ?: 'http://127.0.0.1');
+                        $payloadData = $hookConfig['payload'] ?? [
+                            'event'         => 'workflow_advance',
+                            'workflow'      => $instance['wf_name'],
+                            'instance_id'   => $instance['wfi_id'],
+                            'action'        => $transition['wft_label'],
+                            'from_stage_id' => $transition['wft_from_id'],
+                            'to_stage_id'   => $transition['wft_to_id'],
+                            'actor_id'      => $userId,
+                            'timestamp'     => date('Y-m-d H:i:s')
+                        ];
+
+                        if (is_array($payloadData)) {
+                            // recursively replace placeholders in payload values
+                            array_walk_recursive($payloadData, function(&$val) use ($record, $instance, $actorName, $comment) {
+                                if (is_string($val)) {
+                                    $val = $this->replacePlaceholders($val, $record, $instance, $actorName, $comment);
+                                }
+                            });
+                        }
+
+                        $payload = json_encode($payloadData);
+
+                        $ch = curl_init();
+                        curl_setopt($ch, CURLOPT_URL, $url . '/api/webhook.php');
+                        curl_setopt($ch, CURLOPT_POST, true);
+                        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+                        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+                        curl_exec($ch);
+                        curl_close($ch);
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - Webhook] ' . $e->getMessage());
+                    }
+                    break;
+
+                case 'update_record':
+                    try {
+                        $targetTable = $hookConfig['table'] ?? $instance['wfi_record_table'];
+                        $targetField = $hookConfig['field'] ?? 'status';
+                        $targetVal = $hookConfig['value'] ?? null;
+
+                        if ($targetVal !== null) {
+                            $targetVal = $this->replacePlaceholders($targetVal, $record, $instance, $actorName, $comment);
+                        } else {
+                            $toStage = $this->db->fetchOne('SELECT wfs_code FROM nu_workflow_stages WHERE wfs_id = :id', [':id' => $transition['wft_to_id']]);
+                            $targetVal = $toStage['wfs_code'] ?? '';
+                        }
+
+                        if ($targetTable && $targetField) {
+                            $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $targetTable);
+                            $cleanField = preg_replace('/[^a-zA-Z0-9_]/', '', $targetField);
+                            $pkCol = $this->getPrimaryKeyColumn($cleanTable);
+
+                            $recordId = $instance['wfi_record_id'];
+                            if ($recordId) {
+                                $this->db->query(
+                                    "UPDATE `{$cleanTable}` SET `{$cleanField}` = :val WHERE `{$pkCol}` = :id",
+                                    [':val' => $targetVal, ':id' => $recordId]
+                                );
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - Update Record] ' . $e->getMessage());
+                    }
+                    break;
+            }
         }
     }
 
