@@ -1621,46 +1621,36 @@ function nu_render_form_html($form, $record = [], $recordId = null) {
 }
 
 function nu_inject_parent_context(array $layout, string $parentTable, string $parentId, string $parentFormCode): array {
-    foreach ($layout as &$node) {
-        $t = $node['type'] ?? 'field';
-        if ($t === 'subform') {
-            $node['_parent_table']     = $parentTable;
-            $node['_parent_id']        = $parentId;
-            $node['_parent_form_code'] = $parentFormCode;
-        }
+    $walk = function(&$items) use (&$walk, $parentTable, $parentId, $parentFormCode) {
+        if (!is_array($items)) return;
+        foreach ($items as &$item) {
+            if (!is_array($item)) continue;
 
-        if (isset($node['children']) && is_array($node['children'])) {
-            $node['children'] = nu_inject_parent_context($node['children'], $parentTable, $parentId, $parentFormCode);
-        }
-
-        if (isset($node['fields']) && is_array($node['fields'])) {
-            $node['fields'] = nu_inject_parent_context($node['fields'], $parentTable, $parentId, $parentFormCode);
-        }
-
-        // Also handle group/tab rows if present
-        if ($t === 'group' && isset($node['rows'])) {
-            foreach ($node['rows'] as &$row) {
-                if (isset($row['fields'])) {
-                    $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId, $parentFormCode);
-                }
+            $type = strtolower(trim((string)($item['type'] ?? '')));
+            if ($type === 'subform') {
+                $item['_parent_table']     = $parentTable;
+                $item['_parent_id']        = $parentId;
+                $item['_parent_form_code'] = $parentFormCode;
             }
-            unset($row);
-        }
-        if ($t === 'tab' && isset($node['tabs'])) {
-            foreach ($node['tabs'] as &$tab) {
-                if (isset($tab['rows'])) {
-                    foreach ($tab['rows'] as &$row) {
-                        if (isset($row['fields'])) {
-                            $row['fields'] = nu_inject_parent_context($row['fields'], $parentTable, $parentId, $parentFormCode);
-                        }
-                    }
-                    unset($row);
-                }
+
+            // Recurse into all possible nested structures
+            if (isset($item['children']) && is_array($item['children'])) {
+                $walk($item['children']);
             }
-            unset($tab);
+            if (isset($item['fields']) && is_array($item['fields'])) {
+                $walk($item['fields']);
+            }
+            if (isset($item['rows']) && is_array($item['rows'])) {
+                $walk($item['rows']);
+            }
+            if (isset($item['tabs']) && is_array($item['tabs'])) {
+                $walk($item['tabs']);
+            }
         }
-    }
-    unset($node);
+        unset($item);
+    };
+
+    $walk($layout);
     return $layout;
 }
 
@@ -2000,15 +1990,22 @@ function nu_handle_subform_list() {
     $parentId       = $_GET['parent_id']       ?? '';
     $parentFormCode = $_GET['parent_form_code'] ?? '';
 
+    nu_log("nu_handle_subform_list called with code='{$code}', fk='{$fk}', parent_id='{$parentId}', parent_form_code='{$parentFormCode}'", "subform_list");
+
     if ($code === '' || $fk === '' || $parentId === '') {
+        nu_log("Error: Missing subform params", "subform_list");
         nu_json(['success' => false, 'error' => 'Missing subform params'], 400);
     }
 
     $form = nu_get_form($code);
-    if (!$form) nu_json(['success' => false, 'error' => 'Child form not found'], 404);
+    if (!$form) {
+        nu_log("Error: Child form not found for code='{$code}'", "subform_list");
+        nu_json(['success' => false, 'error' => 'Child form not found'], 404);
+    }
 
     // ── Fetch Roles and Configs Pure Server-Side ──
     $sfMeta = nu_get_subform_roles($parentFormCode, $code, $fk);
+    nu_log("sfMeta view roles: '" . ($sfMeta['view'] ?? '') . "', edit roles: '" . ($sfMeta['edit'] ?? '') . "', searchable: " . (($sfMeta['searchable'] ?? true) ? 'true' : 'false'), "subform_list");
 
     // ── Enforce View Roles ──
     $viewRoles = $sfMeta['view'];
@@ -2095,9 +2092,13 @@ function nu_handle_subform_list() {
     foreach ($allFields as &$f) { $decorateField($f); } unset($f);
     foreach ($gridFields as &$f) { $decorateField($f); } unset($f);
 
-    if ($table === '') nu_json(['success' => false, 'error' => 'No table for child form'], 400);
+    if ($table === '') {
+        nu_log("Error: No table for child form '{$code}'", "subform_list");
+        nu_json(['success' => false, 'error' => 'No table for child form'], 400);
+    }
 
     $pk = nu_get_pk($table);
+    nu_log("Table resolved: '{$table}', PK: '{$pk}'", "subform_list");
 
     // Get searchable fields
     $searchFields = [];
@@ -2126,7 +2127,15 @@ function nu_handle_subform_list() {
 
     $whereSql = implode(' AND ', $where);
     $totalSql = "SELECT COUNT(*) FROM `{$table}` WHERE {$whereSql}";
-    $total = (int)nu_q($totalSql, $params)->fetchColumn();
+    nu_log("Count query: {$totalSql} with params: " . json_encode($params), "subform_list");
+
+    try {
+        $total = (int)nu_q($totalSql, $params)->fetchColumn();
+    } catch (Throwable $e) {
+        nu_log("Database error in total count query: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine(), "subform_list");
+        throw $e;
+    }
+    nu_log("Total records in subform table: {$total}", "subform_list");
 
     $page = max(1, (int)($_GET['page'] ?? 1));
     $pageSize = max(1, (int)($_GET['page_size'] ?? 10));
@@ -2135,7 +2144,15 @@ function nu_handle_subform_list() {
     $offset = max(0, ($page - 1) * $pageSize);
 
     $recordsSql = "SELECT * FROM `{$table}` WHERE {$whereSql} ORDER BY `{$pk}` ASC LIMIT {$pageSize} OFFSET {$offset}";
-    $records = nu_q($recordsSql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    nu_log("Records query: {$recordsSql} with params: " . json_encode($params), "subform_list");
+
+    try {
+        $records = nu_q($recordsSql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        nu_log("Database error in records fetch query: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine(), "subform_list");
+        throw $e;
+    }
+    nu_log("Successfully fetched " . count($records) . " records from '{$table}'", "subform_list");
 
     foreach ($records as &$row) {
         if (isset($row[$pk])) {

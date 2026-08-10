@@ -260,12 +260,14 @@
 
     /* No parent_id yet (new unsaved parent) — show pending rows only */
     if (!m.parentId) {
+      console.warn("[nuSubform] Loading subform with empty parentId. Code: '" + m.code + "', FK: '" + m.fk + "' — only pending queue will be shown.");
       var footer = container.querySelector('.nu-subform-footer');
       if (footer) footer.style.display = 'none';
 
       var fieldsUrl = 'api/form.php?action=subform_fields&code=' + encodeURIComponent(m.code);
       apiJson(fieldsUrl)
         .then(function (json) {
+          console.log("[nuSubform] Fields response for code '" + m.code + "':", json);
           if (!json.success) {
             body.innerHTML = '<div style="padding:12px;color:red;">' + esc(json.error) + '</div>';
             return;
@@ -279,12 +281,14 @@
           renderWithPending(container, gridFields, allFields, [], pk);
         })
         .catch(function (e) {
+          console.error("[nuSubform] Error loading subform fields:", e);
           body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>';
         });
       return;
     }
 
     /* Has parentId — fetch real rows */
+    console.log("[nuSubform] Loading subform. Code: '" + m.code + "', FK: '" + m.fk + "', parentId: '" + m.parentId + "', parentFormCode: '" + m.parentFormCode + "'");
     body.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:13px;">Loading...</div>';
 
     var listUrl = 'api/form.php?action=subform_list&code=' + encodeURIComponent(m.code)
@@ -295,9 +299,13 @@
       + '&page='      + encodeURIComponent(m.page || 1)
       + '&page_size=' + encodeURIComponent(m.pageSize || 10);
 
+    console.log("[nuSubform] Fetching subform records URL: " + listUrl);
+
     apiJson(listUrl)
     .then(function (json) {
+      console.log("[nuSubform] Subform records response for '" + m.code + "':", json);
       if (!json.success) {
+        console.error("[nuSubform] Error response returned from server:", json.error);
         body.innerHTML = '<div style="padding:12px;color:red;">' + esc(json.error) + '</div>';
         return;
       }
@@ -315,6 +323,7 @@
       ensureFooter(container, total);
     })
     .catch(function (e) {
+      console.error("[nuSubform] Catch error loading subform records:", e);
       body.innerHTML = '<div style="padding:12px;color:red;">' + esc(e.message) + '</div>';
     });
   }
