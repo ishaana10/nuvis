@@ -488,6 +488,20 @@ $groupIdx = 0;
 .nu-fa-picker-btn i { font-size: 1.1rem; color: var(--color-text, #111); }
 .nu-fa-picker-btn:hover { background: var(--color-surface-offset, #f0f0f0); border-color: var(--color-border, #e5e7eb); }
 .nu-fa-picker-btn.nu-selected { background: #e6f4f4; border-color: #01696f; }
+
+@media (max-width: 768px) {
+  #nuWidgetGrid, .nu-role-group-body {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .nu-widget-card {
+    grid-column: span 12 !important;
+    grid-row: auto !important;
+  }
+  .nu-widget-card canvas {
+    max-width: 100% !important;
+  }
+}
 </style>
 
 <?php if ($canManage): ?>

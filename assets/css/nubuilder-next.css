@@ -1034,3 +1034,215 @@ body {
 .select2-dropdown {
   z-index: 99999 !important;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   NuBuilder 5 — Mobile Responsive & Touch-Target Optimization Styles
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Tab Container Styling ── */
+.nu-tabs {
+  margin-bottom: 20px;
+}
+.nu-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+.nu-tab-btn {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+.nu-tab-btn:hover {
+  color: var(--primary);
+}
+.nu-tab-btn.nu-tab-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+.nu-tab-panel {
+  display: block;
+}
+.nu-tab-panel-hidden {
+  display: none !important;
+}
+
+/* ── Layout Grid Systems ── */
+.nu-form-grid {
+  display: grid;
+  gap: 16px;
+}
+.nu-form-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.nu-form-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.nu-form-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.nu-form-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.nu-field-span-1 { grid-column: span 1 / span 1; }
+.nu-field-span-2 { grid-column: span 2 / span 2; }
+.nu-field-span-3 { grid-column: span 3 / span 3; }
+.nu-field-span-4 { grid-column: span 4 / span 4; }
+
+/* ── Group Collapsing Styles ── */
+.nu-group-body-collapsed {
+  display: none !important;
+}
+.nu-group-chevron {
+  transition: transform 0.25s ease;
+}
+.nu-chevron-collapsed {
+  transform: rotate(-90deg) !important;
+}
+
+/* ── Admin KPI / Dashboard Grid ── */
+.nu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.nu-kpi {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.nu-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.nu-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.nu-kpi-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1.2;
+}
+.nu-kpi-change {
+  font-size: 11px;
+  font-weight: 500;
+  color: #22c55e;
+}
+.nu-kpi-change.up { color: #22c55e; }
+.nu-kpi-change.down { color: #ef4444; }
+
+/* ── Responsive Overrides on Mobile/Narrow Screens ── */
+@media (max-width: 768px) {
+  /* Simplified header adjustments */
+  .nu-header {
+    padding: 0 12px !important;
+    gap: 8px !important;
+  }
+  .nu-page-title {
+    font-size: 14px !important;
+    font-weight: 600;
+  }
+  .nu-user-dropdown-toggle {
+    padding: 6px 8px !important;
+  }
+
+  /* Touch target sizes & tap feedback */
+  .nu-input, select.nu-input, textarea.nu-input {
+    padding: 12px 14px !important;
+    font-size: 16px !important; /* Prevents auto-zoom on iOS on focus */
+  }
+  .nu-btn {
+    padding: 12px 20px !important;
+    font-size: 15px !important;
+    min-height: 44px; /* Standard accessibility tap size */
+  }
+  .nu-btn-sm {
+    padding: 8px 14px !important;
+    font-size: 13px !important;
+    min-height: 36px;
+  }
+
+  /* Fields and spacings */
+  .nu-field {
+    margin-bottom: 20px !important;
+  }
+
+  /* Collapsible group header touch target */
+  .nu-group-header, .nu-section-header {
+    padding: 12px 14px !important;
+  }
+
+  /* Layout Grid Stacking */
+  .nu-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .nu-field {
+    grid-column: span 1 !important;
+  }
+
+  /* Modals, Lookups and Overlay responsiveness */
+  .nu-form-overlay > div, .nu-lookup-overlay > div, .nu-browse-overlay > div {
+    width: 96% !important;
+    max-width: 100% !important;
+    margin: 8px auto !important;
+    padding: 16px !important;
+    max-height: 96vh !important;
+    border-radius: 12px !important;
+  }
+
+  /* Dashboard KPI items columns stacking */
+  .nu-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .nu-kpi {
+    padding: 12px 16px !important;
+  }
+  .nu-kpi-value {
+    font-size: 22px !important;
+  }
+
+  /* Dashboard widgets stacking on mobile */
+  #nuWidgetGrid, .nu-role-group-body {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .nu-widget-card {
+    grid-column: span 12 !important;
+    grid-row: auto !important;
+  }
+}
+
+/* ── Mobile-Specific Screen Optimizations ── */
+@media (max-width: 480px) {
+  /* Simplified User Profile in Top Header */
+  .nu-user-dropdown-text {
+    display: none !important;
+  }
+  .nu-user-icon {
+    display: block !important;
+  }
+
+  /* Login card padding reduction on very narrow screens */
+  .nu-login-card {
+    padding: 24px 20px !important;
+    border-radius: var(--radius-md) !important;
+  }
+}

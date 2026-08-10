@@ -615,6 +615,9 @@ try {
                 <!-- User Profile Dropdown -->
                 <div class="nu-user-dropdown" id="nuUserDropdown">
                     <button class="nu-user-dropdown-toggle" id="nuUserDropdownToggle" type="button" aria-haspopup="true" aria-expanded="false" title="User Menu">
+                        <svg class="nu-user-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none; flex-shrink: 0; color: var(--text-secondary);">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                        </svg>
                         <span class="nu-user-dropdown-text"><?= h($userHeaderDisplay) ?></span>
                         <svg class="nu-user-dropdown-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="6 9 12 15 18 9"/>
