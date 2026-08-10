@@ -115,14 +115,25 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
         $desired[$col] = nu_col_def_for_type($type);
     }
 
-    $tableExists = (bool)$db->fetchOne("SHOW TABLES LIKE ?", [$table]);
+    $driver = $db->getPdo()->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        $tableExists = (bool)$db->fetchOne("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [$table]);
+    } else {
+        $tableExists = (bool)$db->fetchOne("SHOW TABLES LIKE ?", [$table]);
+    }
     error_log('[forms.php] nu_sync_table_from_layout: table=' . $table . ' exists=' . ($tableExists ? 'yes' : 'no') . ' desired_cols=' . count($desired));
 
     if (!$tableExists) {
         // ── CREATE TABLE ──────────────────────────────────────────────────
-        $pkDef = ($pkType === 'uuid')
-            ? "`id` VARCHAR(36) NOT NULL PRIMARY KEY"
-            : "`id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY";
+        if ($driver === 'sqlite') {
+            $pkDef = ($pkType === 'uuid')
+                ? "`id` TEXT NOT NULL PRIMARY KEY"
+                : "`id` INTEGER PRIMARY KEY AUTOINCREMENT";
+        } else {
+            $pkDef = ($pkType === 'uuid')
+                ? "`id` VARCHAR(36) NOT NULL PRIMARY KEY"
+                : "`id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY";
+        }
 
         $colsSql = '';
         foreach ($desired as $col => $def) {
@@ -133,15 +144,22 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
         $colsSql .= ",\n  `created_at` DATETIME NULL DEFAULT NULL";
         $colsSql .= ",\n  `updated_at` DATETIME NULL DEFAULT NULL";
 
-        $createSql = "CREATE TABLE `{$table}` (\n  {$pkDef}{$colsSql}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        $engineClause = ($driver === 'sqlite') ? "" : " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        $createSql = "CREATE TABLE `{$table}` (\n  {$pkDef}{$colsSql}\n)" . $engineClause;
         nu_ddl($db, $createSql);  // uses exec(), not query()
         return;
     }
 
     // ── ALTER TABLE: add any missing columns ──────────────────────────────
     $existing = [];
-    foreach ($db->fetchAll("DESCRIBE `{$table}`") as $row) {
-        $existing[$row['Field']] = true;
+    if ($driver === 'sqlite') {
+        foreach ($db->fetchAll("PRAGMA table_info(`{$table}`)") as $row) {
+            $existing[$row['name']] = true;
+        }
+    } else {
+        foreach ($db->fetchAll("DESCRIBE `{$table}`") as $row) {
+            $existing[$row['Field']] = true;
+        }
     }
 
     // Ensure system columns are present in $desired so they are added if missing
@@ -156,23 +174,25 @@ function nu_sync_table_from_layout(NuDatabase $db, string $table, string $layout
             // MySQL uses AFTER, not BEFORE. If it is a custom field, find the first existing system column
             // and position this column right before it (by placing it AFTER the column before that system column).
             $positionClause = '';
-            $systemCols = ['user_id', 'location', 'created_at', 'updated_at'];
-            if (!in_array($col, $systemCols, true)) {
-                $firstSystemCol = null;
-                $cols = array_keys($existing);
-                foreach ($cols as $cName) {
-                    if (in_array($cName, $systemCols, true)) {
-                        $firstSystemCol = $cName;
-                        break;
+            if ($driver !== 'sqlite') {
+                $systemCols = ['user_id', 'location', 'created_at', 'updated_at'];
+                if (!in_array($col, $systemCols, true)) {
+                    $firstSystemCol = null;
+                    $cols = array_keys($existing);
+                    foreach ($cols as $cName) {
+                        if (in_array($cName, $systemCols, true)) {
+                            $firstSystemCol = $cName;
+                            break;
+                        }
                     }
-                }
-                if ($firstSystemCol !== null) {
-                    $caIdx = array_search($firstSystemCol, $cols);
-                    if ($caIdx === 0) {
-                        $positionClause = ' FIRST';
-                    } elseif ($caIdx !== false) {
-                        $prevCol = $cols[$caIdx - 1];
-                        $positionClause = ' AFTER `' . $prevCol . '`';
+                    if ($firstSystemCol !== null) {
+                        $caIdx = array_search($firstSystemCol, $cols);
+                        if ($caIdx === 0) {
+                            $positionClause = ' FIRST';
+                        } elseif ($caIdx !== false) {
+                            $prevCol = $cols[$caIdx - 1];
+                            $positionClause = ' AFTER `' . $prevCol . '`';
+                        }
                     }
                 }
             }
@@ -193,8 +213,15 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
     $checked = true;
 
     $existing = [];
-    foreach ($db->fetchAll("DESCRIBE `nu_forms`") as $col) {
-        $existing[$col['Field']] = true;
+    $driver = $db->getPdo()->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        foreach ($db->fetchAll("PRAGMA table_info(`nu_forms`)") as $col) {
+            $existing[$col['name']] = true;
+        }
+    } else {
+        foreach ($db->fetchAll("DESCRIBE `nu_forms`") as $col) {
+            $existing[$col['Field']] = true;
+        }
     }
 
     $needed = [
@@ -244,7 +271,12 @@ function nu_drop_table(NuDatabase $db, string $table): array {
     $table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
     if ($table === '') return [false, 'Empty table name after sanitisation'];
 
-    $exists = $db->fetchOne("SHOW TABLES LIKE ?", [$table]);
+    $driver = $db->getPdo()->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        $exists = $db->fetchOne("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [$table]);
+    } else {
+        $exists = $db->fetchOne("SHOW TABLES LIKE ?", [$table]);
+    }
     if (!$exists) return [true, ''];
 
     try {
@@ -548,14 +580,10 @@ function actionSave($db) {
         }
 
         if ($formTable !== '' && $tableMode !== 'existing_no_sync') {
-            if ($formLayout !== '' && $formLayout !== '[]') {
-                try {
-                    nu_sync_table_from_layout($db, $formTable, $formLayout, $pkType);
-                } catch (Throwable $e) {
-                    error_log('[forms.php] DDL sync FAILED: ' . $e->getMessage());
-                }
-            } else {
-                error_log('[forms.php] actionSave: skipping DDL — form_layout empty for table=' . $formTable);
+            try {
+                nu_sync_table_from_layout($db, $formTable, $formLayout, $pkType);
+            } catch (Throwable $e) {
+                error_log('[forms.php] DDL sync FAILED: ' . $e->getMessage());
             }
         } elseif ($formTable === '') {
             error_log('[forms.php] actionSave: no form_table — skipping DDL');
