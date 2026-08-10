@@ -393,6 +393,13 @@ window.NuApp = {
     browseMode  = ['inline','popup'].includes(browseMode)    ? browseMode  : 'inline';
     previewMode = ['inline','popup'].includes(previewMode)   ? previewMode : 'inline';
 
+    if (window.innerWidth <= 768) {
+      const sidebarEl = document.getElementById('sidebar');
+      const overlayEl = document.getElementById('overlay');
+      if (sidebarEl) sidebarEl.classList.remove('open');
+      if (overlayEl) overlayEl.classList.remove('open');
+    }
+
     this._exitFullPage();
     this.currentModule = module;
 
@@ -1846,6 +1853,7 @@ window.NuApp = {
 
       // Create Lookup Modal DOM
       const overlay = document.createElement('div');
+      overlay.className = 'nu-form-overlay nu-lookup-overlay';
       overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:200000;display:flex;align-items:center;justify-content:center;';
 
       const box = document.createElement('div');
@@ -2367,6 +2375,7 @@ window.openLookupModal = function(name, table, idCol, displayCol, filter, extra)
     const records = Array.isArray(res.data) ? res.data : (res.records || []);
 
     const overlay = document.createElement('div');
+    overlay.className = 'nu-form-overlay nu-lookup-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:200000;display:flex;align-items:center;justify-content:center;';
 
     const box = document.createElement('div');
@@ -2617,6 +2626,25 @@ document.addEventListener('change', function(e) {
     }
   }
 });
+
+// window.nuGroupToggle function for collapsible layout sections
+window.nuGroupToggle = function(headerEl) {
+  const container = headerEl.closest('.nu-form-group');
+  if (!container) return;
+  const body = container.querySelector('.nu-group-body');
+  if (!body) return;
+
+  const isExpanded = headerEl.getAttribute('aria-expanded') === 'true';
+  const newExpanded = !isExpanded;
+
+  headerEl.setAttribute('aria-expanded', newExpanded ? 'true' : 'false');
+  body.classList.toggle('nu-group-body-collapsed', !newExpanded);
+
+  const chevron = headerEl.querySelector('.nu-group-chevron');
+  if (chevron) {
+    chevron.classList.toggle('nu-chevron-collapsed', !newExpanded);
+  }
+};
 
 document.addEventListener('keydown', function(e) {
   if (e.target && e.target.dataset && e.target.dataset.lookupName) {
