@@ -172,9 +172,14 @@ class WorkflowEngine
             return;
         }
 
-        // Fetch actor details
-        $actor = $this->db->fetchOne('SELECT usr_name, usr_email FROM nu_users WHERE usr_id = :id', [':id' => $userId]);
-        $actorName = $actor['usr_name'] ?? 'System';
+        // Fetch actor details safely
+        $actorName = 'System';
+        try {
+            $actor = $this->db->fetchOne('SELECT * FROM nu_users WHERE usr_id = :id', [':id' => $userId]);
+            if ($actor) {
+                $actorName = $actor['usr_name'] ?? ($actor['usr_username'] ?? 'System');
+            }
+        } catch (Throwable $e) {}
 
         // Load linked record details if available
         $record = [];
@@ -378,7 +383,7 @@ class WorkflowEngine
     public function getHistory(int $instanceId): array
     {
         return $this->db->fetchAll(
-            'SELECT h.*, u.usr_name AS actor_name,
+            'SELECT h.*, u.usr_username AS actor_name,
                     fs.wfs_name AS from_stage, ts.wfs_name AS to_stage
                FROM nu_workflow_history h
                LEFT JOIN nu_users u  ON u.usr_id  = h.wfh_actor_id
