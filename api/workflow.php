@@ -222,7 +222,7 @@ try {
             $wfId   = (int)($_GET['wf_id'] ?? 0);
             $status = trim((string)($_GET['status'] ?? ''));
             $sql    = 'SELECT i.*, s.wfs_name AS stage_name, s.wfs_color AS stage_color,
-                              u.usr_name AS started_by_name
+                              u.usr_username AS started_by_name
                          FROM nu_workflow_instances i
                          JOIN nu_workflow_stages s ON s.wfs_id = i.wfi_stage_id
                          LEFT JOIN nu_users u ON u.usr_id = i.wfi_started_by
