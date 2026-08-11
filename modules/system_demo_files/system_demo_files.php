@@ -19,6 +19,29 @@ function demo_generate_uuid() {
     return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 }
 
+// Helper to resolve workflow, stage, and transition IDs dynamically
+function demo_get_workflow_info($db) {
+    $wf = $db->fetchOne("SELECT wf_id FROM nu_workflows WHERE wf_code = 'customer_request_wf' LIMIT 1");
+    $wfId = $wf ? (int)$wf['wf_id'] : 100;
+
+    $startStage = $db->fetchOne("SELECT wfs_id FROM nu_workflow_stages WHERE wfs_wf_id = ? AND wfs_is_start = 1 LIMIT 1", [$wfId]);
+    $startStageId = $startStage ? (int)$startStage['wfs_id'] : 101;
+
+    $t1 = $db->fetchOne("SELECT wft_id, wft_to_id FROM nu_workflow_transitions WHERE wft_wf_id = ? AND wft_from_id = ? LIMIT 1", [$wfId, $startStageId]);
+    $trans1Id = $t1 ? (int)$t1['wft_id'] : 101;
+
+    $trans2Id = 102;
+    if ($t1) {
+        $nextStageId = (int)$t1['wft_to_id'];
+        $t2 = $db->fetchOne("SELECT wft_id FROM nu_workflow_transitions WHERE wft_wf_id = ? AND wft_from_id = ? LIMIT 1", [$wfId, $nextStageId]);
+        if ($t2) {
+            $trans2Id = (int)$t2['wft_id'];
+        }
+    }
+
+    return [$wfId, $startStageId, $trans1Id, $trans2Id];
+}
+
 // Handle AJAX actions
 if (isset($_GET['ajax_action'])) {
     header('Content-Type: application/json');
@@ -26,11 +49,12 @@ if (isset($_GET['ajax_action'])) {
 
     try {
         if ($action === 'reset_demo') {
+            list($wfId, $startStageId, $trans1Id, $trans2Id) = demo_get_workflow_info($db);
             // Delete and re-seed
             $db->query("DELETE FROM demo_customer_requests");
             $db->query("DELETE FROM demo_staff_services");
             $db->query("DELETE FROM demo_service_types");
-            $db->query("DELETE FROM nu_workflow_instances WHERE wfi_wf_id = 100");
+            $db->query("DELETE FROM nu_workflow_instances WHERE wfi_wf_id = ?", [$wfId]);
             $db->query("DELETE FROM nu_workflow_history WHERE wfh_wfi_id NOT IN (SELECT wfi_id FROM nu_workflow_instances)");
 
             $db->exec("INSERT INTO `demo_service_types` (`service_type_id`, `name`, `description`, `price`) VALUES
@@ -45,8 +69,8 @@ if (isset($_GET['ajax_action'])) {
             // Also re-start workflow instances for the two seeded customer requests
             if (class_exists('WorkflowEngine')) {
                 $wfEngine = new WorkflowEngine();
-                $wfEngine->start(100, (int)$currentUser['usr_id'], 'demo_customer_requests', 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a');
-                $wfEngine->start(100, (int)$currentUser['usr_id'], 'demo_customer_requests', 'e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b');
+                $wfEngine->start($wfId, (int)$currentUser['usr_id'], 'demo_customer_requests', 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a');
+                $wfEngine->start($wfId, (int)$currentUser['usr_id'], 'demo_customer_requests', 'e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b');
             }
 
             echo json_encode(['success' => true, 'message' => 'Demo data reset successfully.']);
@@ -77,7 +101,8 @@ if (isset($_GET['ajax_action'])) {
             // Automatically start workflow
             if (class_exists('WorkflowEngine')) {
                 $wfEngine = new WorkflowEngine();
-                $wfEngine->start(100, (int)$currentUser['usr_id'], 'demo_customer_requests', $requestId);
+                list($wfId, $startStageId, $trans1Id, $trans2Id) = demo_get_workflow_info($db);
+                $wfEngine->start($wfId, (int)$currentUser['usr_id'], 'demo_customer_requests', $requestId);
             }
 
             echo json_encode(['success' => true, 'request_id' => $requestId]);
@@ -110,16 +135,17 @@ if (isset($_GET['ajax_action'])) {
                 $msg = "Logged service action and updated Customer Request status to 'Completed' via simulated 'PHP After Save' script.";
             } else {
                 // Simulate/trigger Workflow transition to Completed
-                $instance = $db->fetchOne("SELECT wfi_id FROM nu_workflow_instances WHERE wfi_record_id = ? AND wfi_wf_id = 100 ORDER BY wfi_id DESC LIMIT 1", [$requestId]);
+                list($wfId, $startStageId, $trans1Id, $trans2Id) = demo_get_workflow_info($db);
+                $instance = $db->fetchOne("SELECT wfi_id FROM nu_workflow_instances WHERE wfi_record_id = ? AND wfi_wf_id = ? ORDER BY wfi_id DESC LIMIT 1", [$requestId, $wfId]);
                 if ($instance && class_exists('WorkflowEngine')) {
                     $wfEngine = new WorkflowEngine();
                     $instObj = $wfEngine->getInstance((int)$instance['wfi_id']);
-                    if ($instObj['wfi_stage_id'] == 101) {
+                    if ((int)$instObj['wfi_stage_id'] === $startStageId) {
                         // Pending -> In Progress (Transition ID 101)
-                        $wfEngine->advance((int)$instance['wfi_id'], 101, (int)$currentUser['usr_id'], 'Auto start service from staff service log');
+                        $wfEngine->advance((int)$instance['wfi_id'], $trans1Id, (int)$currentUser['usr_id'], 'Auto start service from staff service log');
                     }
                     // Now In Progress -> Completed (Transition ID 102)
-                    $wfEngine->advance((int)$instance['wfi_id'], 102, (int)$currentUser['usr_id'], 'Completed service: ' . $notes);
+                    $wfEngine->advance((int)$instance['wfi_id'], $trans2Id, (int)$currentUser['usr_id'], 'Completed service: ' . $notes);
                     $msg = "Logged service action and updated Customer Request status to 'Completed' via Workflow transitions and transition action hooks.";
                 } else {
                     $msg = "Logged service action. (No active workflow found to transition).";
@@ -165,7 +191,8 @@ $staffServices = $db->fetchAll("SELECT s.*, r.customer_name FROM demo_staff_serv
 // Fetch active workflow instances
 $instances = [];
 try {
-    $instances = $db->fetchAll("SELECT i.*, w.wf_name, s.wfs_name as stage_name, s.wfs_color as stage_color, r.customer_name FROM nu_workflow_instances i JOIN nu_workflows w ON w.wf_id = i.wfi_wf_id JOIN nu_workflow_stages s ON s.wfs_id = i.wfi_stage_id JOIN demo_customer_requests r ON r.request_id = i.wfi_record_id WHERE i.wfi_wf_id = 100 ORDER BY i.wfi_id DESC");
+    list($wfId, $startStageId, $trans1Id, $trans2Id) = demo_get_workflow_info($db);
+    $instances = $db->fetchAll("SELECT i.*, w.wf_name, s.wfs_name as stage_name, s.wfs_color as stage_color, r.customer_name FROM nu_workflow_instances i JOIN nu_workflows w ON w.wf_id = i.wfi_wf_id JOIN nu_workflow_stages s ON s.wfs_id = i.wfi_stage_id JOIN demo_customer_requests r ON r.request_id = i.wfi_record_id WHERE i.wfi_wf_id = ? ORDER BY i.wfi_id DESC", [$wfId]);
 } catch (Throwable $ignored) {}
 ?>
 
