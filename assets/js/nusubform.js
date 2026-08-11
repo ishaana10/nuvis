@@ -617,6 +617,7 @@
       var lDisplayCol = lookup.display_column || lookup.displayCol || 'name';
       var lFilter = lookup.filter || '';
       var lExtra = lookup.extra || '';
+      var lAdditional = lookup.additional_fields || '';
 
       var dispVal = displayVal || '';
       if (value && !dispVal) {
@@ -642,10 +643,11 @@
           + ' data-lookup-display="' + esc(lDisplayCol) + '"'
           + ' data-lookup-filter="' + esc(lFilter) + '"'
           + ' data-lookup-extra="' + esc(lExtra) + '"'
+          + ' data-lookup-additional-fields="' + esc(lAdditional) + '"'
           + ' data-last-val="' + esc(dispVal) + '"'
           + '>'
           + '<button type="button" class="nu-btn nu-btn-ghost" style="white-space:nowrap;padding:4px 8px;" onclick="openLookupModal('
-          + '\'' + escJsArg(name) + '\',\'' + escJsArg(lTable) + '\',\'' + escJsArg(lIdCol) + '\',\'' + escJsArg(lDisplayCol) + '\',\'' + escJsArg(lFilter) + '\',\'' + escJsArg(lExtra) + '\''
+          + '\'' + escJsArg(name) + '\',\'' + escJsArg(lTable) + '\',\'' + escJsArg(lIdCol) + '\',\'' + escJsArg(lDisplayCol) + '\',\'' + escJsArg(lFilter) + '\',\'' + escJsArg(lExtra) + '\',\'' + escJsArg(lAdditional) + '\''
           + ')">&#x1F50D;</button>'
           + '<button type="button" class="nu-btn nu-btn-ghost" style="padding:4px 8px;" onclick="clearLookup(\'' + escJsArg(name) + '\')">&#x2715;</button>'
           + '</div>';

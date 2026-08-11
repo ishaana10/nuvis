@@ -1134,6 +1134,7 @@ function nu_render_field($field, $value = '', $record = []) {
                 $lDisplayCol = nu_resolve_lookup_display_col($lookup);
                 $lFilter     = $lookup['filter'] ?? '';
                 $lExtra      = $lookup['extra']  ?? '';
+                $lAdditional = $lookup['additional_fields'] ?? '';
                 $displayVal  = nu_render_lookup_display($field, $value);
                 if ($isReadonly) {
                     $control = '<div style="display:flex;gap:6px;align-items:center;">'
@@ -1150,10 +1151,11 @@ function nu_render_field($field, $value = '', $record = []) {
                         . ' data-lookup-display="' . nu_attr($lDisplayCol) . '"'
                         . ' data-lookup-filter="' . nu_attr($lFilter) . '"'
                         . ' data-lookup-extra="' . nu_attr($lExtra) . '"'
+                        . ' data-lookup-additional-fields="' . nu_attr($lAdditional) . '"'
                         . ' data-last-val="' . nu_attr($displayVal) . '"'
                         . '>'
                         . '<button type="button" class="nu-btn nu-btn-ghost" style="white-space:nowrap;" onclick="openLookupModal('
-                        . '\'' . addslashes($name) . '\',\'' . addslashes($lTable) . '\',\'' . addslashes($lIdCol) . '\',\'' . addslashes($lDisplayCol) . '\',\'' . addslashes($lFilter) . '\',\'' . addslashes($lExtra) . '\''
+                        . '\'' . addslashes($name) . '\',\'' . addslashes($lTable) . '\',\'' . addslashes($lIdCol) . '\',\'' . addslashes($lDisplayCol) . '\',\'' . addslashes($lFilter) . '\',\'' . addslashes($lExtra) . '\',\'' . addslashes($lAdditional) . '\''
                         . ')">&#x1F50D;</button>'
                         . '<button type="button" class="nu-btn nu-btn-ghost" onclick="clearLookup(\'' . addslashes($name) . '\')">&#x2715;</button>'
                         . '</div>';
@@ -2215,6 +2217,16 @@ function nu_handle_subform_save() {
 
     $pk     = nu_get_pk($table);
     $pkType = nu_form_pk_type($form);
+
+    // Sync table columns for the subform table at runtime if it is not existing_no_sync
+    $tableMode = $form[$c['table_mode']] ?? 'new';
+    if ($tableMode !== 'existing_no_sync') {
+        if (!nu_table_exists($table)) {
+            nu_create_form_table($table, $pkType, $fields);
+        } else {
+            nu_sync_form_table_columns($table, $fields);
+        }
+    }
 
     $save = [];
 

@@ -710,6 +710,29 @@ function actionSave($db) {
             error_log('[forms.php] actionSave: table_mode=existing_no_sync — skipping DDL for ' . $formTable);
         }
 
+        // Sync any subforms' tables as well
+        try {
+            $subforms = nu_flatten_subforms_from_layout($formLayout);
+            foreach ($subforms as $sfField) {
+                $sf = $sfField['subform'] ?? [];
+                $sfCode = trim((string)($sf['form_code'] ?? $sf['formcode'] ?? ''));
+                if ($sfCode !== '') {
+                    $childForm = $db->fetchOne('SELECT * FROM nu_forms WHERE form_code = ?', [$sfCode]);
+                    if ($childForm) {
+                        $childTable = trim((string)($childForm['form_table'] ?? ''));
+                        $childPkType = trim((string)($childForm['form_pk_type'] ?? 'autoincrement'));
+                        $childLayout = $childForm['form_layout'] ?? '';
+                        $childTableMode = trim((string)($childForm['form_table_mode'] ?? 'new'));
+                        if ($childTable !== '' && $childTableMode !== 'existing_no_sync') {
+                            nu_sync_table_from_layout($db, $childTable, $childLayout, $childPkType);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('[forms.php] Recursive subform DDL sync FAILED: ' . $e->getMessage());
+        }
+
         echo json_encode([
             'success'        => true,
             'form_id'        => $savedId,
