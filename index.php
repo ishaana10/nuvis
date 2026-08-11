@@ -625,7 +625,7 @@ try {
                     </button>
                     <div class="nu-user-dropdown-menu" id="nuUserDropdownMenu">
                         <div class="nu-user-dropdown-header">
-                            <div class="nu-dropdown-user-name"><?= h($currentUser['usr_name'] ?: ($currentUser['usr_username'] ?? 'User')) ?></div>
+                            <div class="nu-dropdown-user-name"><?= h(($currentUser['usr_name'] ?? '') ?: ($currentUser['usr_username'] ?? 'User')) ?></div>
                             <div class="nu-dropdown-user-role"><?= h($currentUser['usr_role'] ?? '') ?></div>
                         </div>
                         <div class="nu-user-dropdown-divider"></div>
