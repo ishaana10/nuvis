@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
+require_once dirname(__DIR__, 2) . '/core/Workflow.php';
 
 // Restricted to globeadmin only
 $currentUser = $auth->getCurrentUser();
