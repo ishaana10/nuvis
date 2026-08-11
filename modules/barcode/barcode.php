@@ -934,12 +934,12 @@ $userRole = strtolower($currentUser['usr_role'] ?? '');
           <div class="label-box">
             ${printContents}
           </div>
-          <script>
+          \x3Cscript>
             window.onload = function() {
               window.focus();
               window.print();
             };
-          </script>
+          \x3C/script>
         </body>
       </html>
     `);
