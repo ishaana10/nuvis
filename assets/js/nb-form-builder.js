@@ -1661,6 +1661,22 @@ fields.forEach(function (f) {
     var h = card.querySelector('.nu-canvas-height');
     if (h) { h.value = fd.canvas_height || ''; h.setAttribute('value', h.value); }
   }
+
+  if (type === 'lookup') {
+    var lk = (fd.lookup && typeof fd.lookup === 'object') ? fd.lookup : {};
+    var tbl = card.querySelector('.nu-lookup-table');
+    if (tbl) { tbl.value = lk.table || fd.lookup_form || ''; tbl.setAttribute('value', tbl.value); }
+    var dsp = card.querySelector('.nu-lookup-display');
+    if (dsp) { dsp.value = lk.display_column || fd.lookup_display || ''; dsp.setAttribute('value', dsp.value); }
+    var store = card.querySelector('.nu-lookup-store');
+    if (store) { store.value = lk.id_column || fd.lookup_store || ''; store.setAttribute('value', store.value); }
+    var addf = card.querySelector('.nu-lookup-additional-fields');
+    if (addf) { addf.value = lk.additional_fields || ''; addf.setAttribute('value', addf.value); }
+    var flt = card.querySelector('.nu-lookup-filter');
+    if (flt) { flt.value = lk.filter || fd.lookup_filter || ''; flt.setAttribute('value', flt.value); }
+    var ext = card.querySelector('.nu-lookup-extra');
+    if (ext) { ext.value = lk.extra || fd.lookup_extra || ''; ext.setAttribute('value', ext.value); }
+  }
 }
     /* ════════════════════════════════════════════════════════════════════
      nbFormBuilder public API

@@ -315,6 +315,8 @@ function nu_resolve_lookup_store_col($field) {
         ?? $lookup['storefield']
         ?? $lookup['store_col']
         ?? $lookup['storeCol']
+        ?? $lookup['id_column']
+        ?? $lookup['idcolumn']
         ?? '';
     $col = nu_safe_ident($col);
     if ($col !== '') return $col;
