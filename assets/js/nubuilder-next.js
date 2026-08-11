@@ -314,10 +314,16 @@ window.NuApp = {
 
   _execModuleScripts(container) {
     container.querySelectorAll('script').forEach(function (oldScript) {
-      const s = document.createElement('script');
-      Array.from(oldScript.attributes).forEach(function (attr) { s.setAttribute(attr.name, attr.value); });
-      s.textContent = oldScript.textContent;
-      oldScript.parentNode.replaceChild(s, oldScript);
+      try {
+        const s = document.createElement('script');
+        Array.from(oldScript.attributes).forEach(function (attr) { s.setAttribute(attr.name, attr.value); });
+        s.textContent = oldScript.textContent;
+        if (oldScript.parentNode) {
+          oldScript.parentNode.replaceChild(s, oldScript);
+        }
+      } catch (err) {
+        console.error('Error executing module script:', err, oldScript);
+      }
     });
   },
 
