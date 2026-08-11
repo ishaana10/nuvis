@@ -75,3 +75,61 @@ function nu_flatten_layout_fields($layout) {
 function nu_flatten_layout($layout) {
     return nu_flatten_layout_fields($layout);
 }
+
+function nu_flatten_subforms_from_layout($layout) {
+    if (is_string($layout)) {
+        $decoded = json_decode($layout, true);
+        $layout = is_array($decoded) ? $decoded : [];
+    }
+
+    $out = [];
+
+    $walk = function($items) use (&$walk, &$out) {
+        if (!is_array($items)) return;
+
+        foreach ($items as $item) {
+            if (!is_array($item)) continue;
+
+            $type = strtolower(trim((string)($item['type'] ?? '')));
+
+            if ($type === 'subform') {
+                $out[] = $item;
+                continue;
+            }
+
+            // ── Tab container ──────────────────────────────────────────────
+            if ($type === 'tab') {
+                foreach (($item['tabs'] ?? []) as $tab) {
+                    if (!is_array($tab)) continue;
+                    foreach (($tab['rows'] ?? []) as $row) {
+                        $rowType = strtolower(trim((string)($row['type'] ?? 'row')));
+                        if ($rowType === 'group') {
+                            $walk($row['rows'] ?? []);
+                        } else {
+                            $walk($row['fields'] ?? []);
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // ── Section or Group (uses children[] at top level) ────────────
+            if ($type === 'section' || $type === 'group') {
+                $walk($item['children'] ?? []);
+                foreach (($item['rows'] ?? []) as $row) {
+                    $walk($row['fields'] ?? []);
+                }
+                continue;
+            }
+
+            // ── Plain row (uses fields[]) ──────────────────────────────────
+            if ($type === 'row' || isset($item['fields'])) {
+                $walk($item['fields'] ?? []);
+                continue;
+            }
+        }
+    };
+
+    $walk($layout);
+    return $out;
+}

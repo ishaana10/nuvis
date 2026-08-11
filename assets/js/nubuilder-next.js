@@ -2336,7 +2336,7 @@ window.runProcedure = function(code, params, callback) {
   return NuApp.runProcedure(code, params, callback);
 };
 
-window.openLookupModal = function(name, table, idCol, displayCol, filter, extra) {
+window.openLookupModal = function(name, table, idCol, displayCol, filter, extra, additionalFields) {
   // Try to find target inputs relative to the active overlay first
   const activeOverlay = document.querySelector('[data-sf-overlay]') || document.querySelector('.nu-form-overlay');
   const container = activeOverlay || document;
@@ -2414,7 +2414,16 @@ window.openLookupModal = function(name, table, idCol, displayCol, filter, extra)
       const filtered = records.filter(r => {
         const disp = String(r[displayCol] || '').toLowerCase();
         const idVal = String(r[idCol] || '').toLowerCase();
-        return disp.indexOf(q) !== -1 || idVal.indexOf(q) !== -1;
+        let addFieldsMatch = false;
+        if (additionalFields && typeof additionalFields === 'string') {
+          const addCols = additionalFields.split(',').map(s => s.trim()).filter(Boolean);
+          addCols.forEach(col => {
+            if (r[col] !== undefined && r[col] !== null && String(r[col]).toLowerCase().indexOf(q) !== -1) {
+              addFieldsMatch = true;
+            }
+          });
+        }
+        return disp.indexOf(q) !== -1 || idVal.indexOf(q) !== -1 || addFieldsMatch;
       });
 
       if (!filtered.length) {
@@ -2428,7 +2437,21 @@ window.openLookupModal = function(name, table, idCol, displayCol, filter, extra)
       filtered.forEach(r => {
         const item = document.createElement('div');
         item.style.cssText = 'padding:8px 12px;font-size:13px;border-radius:4px;cursor:pointer;transition:all 0.15s;color:var(--text-primary,#333);';
-        item.textContent = r[displayCol] || r[idCol] || 'Item';
+        let displayText = r[displayCol] || r[idCol] || 'Item';
+        if (additionalFields && typeof additionalFields === 'string') {
+          const addCols = additionalFields.split(',').map(s => s.trim()).filter(Boolean);
+          const addVals = [];
+          addCols.forEach(col => {
+            if (r[col] !== undefined && r[col] !== null && String(r[col]).trim() !== '') {
+              const colLabel = col.replace(/_/g, ' ').toUpperCase();
+              addVals.push(colLabel + ': ' + r[col]);
+            }
+          });
+          if (addVals.length > 0) {
+            displayText += ' (' + addVals.join(', ') + ')';
+          }
+        }
+        item.textContent = displayText;
         item.addEventListener('mouseover', () => item.style.background = 'var(--bg-hover,#f5f7ff)');
         item.addEventListener('mouseout', () => item.style.background = 'none');
         item.onclick = () => {
@@ -2514,6 +2537,7 @@ window.triggerAutoLookup = function(el) {
   const displayCol = el.dataset.lookupDisplay;
   const filter = el.dataset.lookupFilter || '';
   const extra = el.dataset.lookupExtra || '';
+  const additionalFields = el.dataset.lookupAdditionalFields || '';
 
   const query = el.value.trim();
 
@@ -2599,7 +2623,7 @@ window.triggerAutoLookup = function(el) {
       }
     } else {
       // Open modal automatically
-      window.openLookupModal(name, table, idCol, displayCol, filter, extra);
+      window.openLookupModal(name, table, idCol, displayCol, filter, extra, additionalFields);
       setTimeout(() => {
         // Find newly opened lookup overlay (z-index: 200000)
         const allOverlays = document.querySelectorAll('div[style*="z-index"]');
