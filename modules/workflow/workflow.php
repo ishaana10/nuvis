@@ -280,6 +280,57 @@ $totalRun     = array_sum(array_column($workflows, 'total_instances'));
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════════
+     HOOK CONFIGURATION MODAL
+═══════════════════════════════════════════════════════════════════════════════ -->
+<div id="wfHookConfigModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:910;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-primary,#fff);border-radius:12px;width:min(620px,94vw);max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;background:var(--bg-primary,#fff);z-index:1;">
+      <div>
+        <h3 style="font-size:15px;font-weight:600;margin:0 0 2px;">Transition Hook Configuration</h3>
+        <p style="font-size:11px;color:var(--text-tertiary);margin:0;">Configure custom actions, target tables, update fields, or email templates.</p>
+      </div>
+      <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.closeHookConfig()">✕</button>
+    </div>
+    <div style="padding:20px;flex:1;overflow-y:auto;">
+      <input type="hidden" id="wfHookConfigIdx">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">JSON Configuration Payload</label>
+        <textarea class="nu-input" id="wfHookConfigPayload" rows="10" style="font-family:monospace;font-size:12px;width:100%;tab-size:2;height:200px;" placeholder='{ "action": "update_record", "field": "status", "value": "In Progress" }'></textarea>
+      </div>
+
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Choose a Quick Template to Load:</label>
+        <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+          <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.loadHookTemplate(&#39;update_status&#39;)" style="text-align:left;font-size:11px;display:flex;align-items:center;justify-content:space-between;">
+            <span>📝 Update status to "In Progress" (Linked Request)</span>
+            <span style="font-size:10px;color:var(--text-tertiary);">Load</span>
+          </button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.loadHookTemplate(&#39;update_field&#39;)" style="text-align:left;font-size:11px;display:flex;align-items:center;justify-content:space-between;">
+            <span>📝 Update any arbitrary custom table & field</span>
+            <span style="font-size:10px;color:var(--text-tertiary);">Load</span>
+          </button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.loadHookTemplate(&#39;send_custom_email&#39;)" style="text-align:left;font-size:11px;display:flex;align-items:center;justify-content:space-between;">
+            <span>📧 Send Custom email notification</span>
+            <span style="font-size:10px;color:var(--text-tertiary);">Load</span>
+          </button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.loadHookTemplate(&#39;multiple_actions&#39;)" style="text-align:left;font-size:11px;display:flex;align-items:center;justify-content:space-between;">
+            <span>⚙️ Combined: Update field + Send email notification</span>
+            <span style="font-size:10px;color:var(--text-tertiary);">Load</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px 20px;border-top:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;background:var(--bg-secondary);">
+      <span id="wfHookConfigError" style="font-size:11px;color:var(--color-danger);font-family:monospace;"></span>
+      <div style="display:flex;gap:8px;">
+        <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.closeHookConfig()">Cancel</button>
+        <button class="nu-btn nu-btn-primary nu-btn-sm" onclick="WF.saveHookConfig()">Apply Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
      HISTORY TIMELINE MODAL
 ═══════════════════════════════════════════════════════════════════════════════ -->
 <div id="wfHistoryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;align-items:center;justify-content:center;">
@@ -593,12 +644,16 @@ window.WF = (() => {
           </div>
           <div style="display:flex;align-items:center;gap:4px;">
             <span style="font-size:11px;font-weight:600;color:var(--text-tertiary);white-space:nowrap;">Trigger Hook:</span>
-            <select class="nu-input" onchange="WF._patchTrans(${i},'hook',this.value)" style="font-size:11px;padding:4px 8px;flex:1;">
-              <option value="">None (Just advance)</option>
-              <option value="send_email" ${t.wft_hook==='send_email'?'selected':''}>📧 Send Email</option>
-              <option value="call_webhook" ${t.wft_hook==='call_webhook'?'selected':''}>🔗 Call Webhook API</option>
-              <option value="update_record" ${t.wft_hook==='update_record'?'selected':''}>📝 Update Record Status</option>
-            </select>
+            <div style="display:flex;gap:4px;align-items:center;flex:1;">
+              <select class="nu-input" onchange="WF._patchTrans(${i},'hook',this.value); WF._renderTransitions();" style="font-size:11px;padding:4px 8px;flex:1;max-width:140px;">
+                <option value="">None</option>
+                <option value="send_email" ${t.wft_hook==='send_email'?'selected':''}>📧 Send Email</option>
+                <option value="call_webhook" ${t.wft_hook==='call_webhook'?'selected':''}>🔗 Webhook</option>
+                <option value="update_record" ${t.wft_hook==='update_record'?'selected':''}>📝 Update Record</option>
+                <option value="custom_json" ${String(t.wft_hook).startsWith('{') || String(t.wft_hook).startsWith('[') ? 'selected' : ''}>⚙️ Custom JSON</option>
+              </select>
+              <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="WF.openHookConfig(${i})" style="padding:4px 8px;font-size:11px;" title="Configure Hook Action Details">⚙️ Config</button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -1083,6 +1138,88 @@ window.WF = (() => {
     }
   }
 
+  function openHookConfig(idx) {
+    const t = _transitions[idx];
+    if (!t) return;
+    $('wfHookConfigIdx').value = idx;
+    $('wfHookConfigError').textContent = '';
+
+    let hookVal = t.wft_hook || '';
+    if (hookVal && (hookVal.startsWith('{') || hookVal.startsWith('['))) {
+      try {
+        hookVal = JSON.stringify(JSON.parse(hookVal), null, 2);
+      } catch (e) {}
+    }
+    $('wfHookConfigPayload').value = hookVal;
+    $('wfHookConfigModal').style.display = 'flex';
+  }
+
+  function closeHookConfig() {
+    $('wfHookConfigModal').style.display = 'none';
+  }
+
+  function saveHookConfig() {
+    const idx = parseInt($('wfHookConfigIdx').value);
+    if (isNaN(idx) || !_transitions[idx]) return;
+
+    const payload = $('wfHookConfigPayload').value.trim();
+    if (payload && (payload.startsWith('{') || payload.startsWith('['))) {
+      try {
+        JSON.parse(payload); // Validate JSON
+      } catch (e) {
+        $('wfHookConfigError').textContent = 'Invalid JSON: ' + e.message;
+        return;
+      }
+    }
+
+    _transitions[idx].wft_hook = payload || null;
+    closeHookConfig();
+    _renderTransitions();
+    toast('Hook configuration applied! Click Save to persist changes.', 'success');
+  }
+
+  function loadHookTemplate(type) {
+    let payload = '';
+    if (type === 'update_status') {
+      payload = {
+        action: "update_record",
+        field: "status",
+        value: "In Progress"
+      };
+    } else if (type === 'update_field') {
+      payload = {
+        action: "update_record",
+        table: "demo_customer_requests",
+        field: "assigned_user",
+        value: "Assigned to {{actor_name}}"
+      };
+    } else if (type === 'send_custom_email') {
+      payload = {
+        action: "send_email",
+        to: "manager@example.com",
+        subject: "Approval Request: {{record.customer_name}}",
+        body: "<h2>Request Approved</h2><p>Hi, request for {{record.customer_name}} was approved by {{actor_name}} with comments: {{comment}}.</p>"
+      };
+    } else if (type === 'multiple_actions') {
+      payload = [
+        {
+          action: "update_record",
+          field: "status",
+          value: "Approved"
+        },
+        {
+          action: "send_email",
+          to: "manager@example.com",
+          subject: "Approved: {{record.customer_name}}",
+          body: "<h2>Request Approved</h2><p>Hi, request for {{record.customer_name}} was approved by {{actor_name}}.</p>"
+        }
+      ];
+    }
+
+    $('wfHookConfigPayload').value = JSON.stringify(payload, null, 2);
+    $('wfHookConfigError').textContent = '';
+  }
+
   function autoCode() {
     if ($('wfEditId').value) return;
     const name = $('wfName').value;
@@ -1104,6 +1241,7 @@ window.WF = (() => {
     openHistory, doTransition, doReject, closeHistory,
     toggleSimulation, resetSimulation, runSimulation,
     _renderStages, _renderTransitions, _renderMermaidDiagram, _cleanup,
+    openHookConfig, closeHookConfig, saveHookConfig, loadHookTemplate
   };
 })();
 } // end if (!window.WF)
