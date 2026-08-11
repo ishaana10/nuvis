@@ -2434,58 +2434,127 @@ window.openLookupModal = function(name, table, idCol, displayCol, filter, extra,
         return;
       }
 
-      filtered.forEach(r => {
-        const item = document.createElement('div');
-        item.style.cssText = 'padding:8px 12px;font-size:13px;border-radius:4px;cursor:pointer;transition:all 0.15s;color:var(--text-primary,#333);';
-        let displayText = r[displayCol] || r[idCol] || 'Item';
-        if (additionalFields && typeof additionalFields === 'string') {
-          const addCols = additionalFields.split(',').map(s => s.trim()).filter(Boolean);
-          const addVals = [];
-          addCols.forEach(col => {
-            if (r[col] !== undefined && r[col] !== null && String(r[col]).trim() !== '') {
-              const colLabel = col.replace(/_/g, ' ').toUpperCase();
-              addVals.push(colLabel + ': ' + r[col]);
-            }
-          });
-          if (addVals.length > 0) {
-            displayText += ' (' + addVals.join(', ') + ')';
-          }
-        }
-        item.textContent = displayText;
-        item.addEventListener('mouseover', () => item.style.background = 'var(--bg-hover,#f5f7ff)');
-        item.addEventListener('mouseout', () => item.style.background = 'none');
-        item.onclick = () => {
-          overlay.remove();
-          if (hiddenEl) {
-            hiddenEl.value = r[idCol];
-            hiddenEl.dispatchEvent(new Event('change', { bubbles: true }));
-            hiddenEl.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-          if (displayEl) {
-            displayEl.value = r[displayCol] || r[idCol];
-            displayEl.dispatchEvent(new Event('change', { bubbles: true }));
-            displayEl.dispatchEvent(new Event('input', { bubbles: true }));
-          }
+      if (additionalFields && typeof additionalFields === 'string' && additionalFields.trim() !== '') {
+        // Expand the container box's width dynamically for table layout
+        box.style.maxWidth = '800px';
 
-          if (extra && typeof extra === 'string' && extra.trim() !== '') {
-            const mappings = extra.split(',');
-            mappings.forEach(m => {
-              const parts = m.split(':');
-              if (parts.length === 2) {
-                const sourceField = parts[0].trim();
-                const targetField = parts[1].trim();
-                const targetEl = container.querySelector('input[name="' + targetField + '"]') || container.querySelector('[data-field="' + targetField + '"]') || document.querySelector('input[name="' + targetField + '"]');
-                if (targetEl && r[sourceField] !== undefined) {
-                  targetEl.value = r[sourceField];
-                  targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-                  targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+        const tableEl = document.createElement('table');
+        tableEl.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px;text-align:left;';
+
+        const thead = document.createElement('thead');
+        thead.style.cssText = 'position:sticky;top:0;background:var(--bg-elevated,#fafafa);z-index:10;border-bottom:2px solid var(--border-color,#ddd);';
+        const hRow = document.createElement('tr');
+
+        const thMain = document.createElement('th');
+        thMain.style.cssText = 'padding:8px 12px;font-weight:600;color:var(--text-secondary,#555);';
+        thMain.textContent = (displayCol || 'NAME').replace(/_/g, ' ').toUpperCase();
+        hRow.appendChild(thMain);
+
+        const addCols = additionalFields.split(',').map(s => s.trim()).filter(Boolean);
+        addCols.forEach(col => {
+          const thAdd = document.createElement('th');
+          thAdd.style.cssText = 'padding:8px 12px;font-weight:600;color:var(--text-secondary,#555);';
+          thAdd.textContent = col.replace(/_/g, ' ').toUpperCase();
+          hRow.appendChild(thAdd);
+        });
+        thead.appendChild(hRow);
+        tableEl.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        filtered.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.style.cssText = 'border-bottom:1px solid var(--border-color,#eee);cursor:pointer;transition:background 0.15s;';
+          tr.addEventListener('mouseover', () => tr.style.background = 'var(--bg-hover,#f5f7ff)');
+          tr.addEventListener('mouseout', () => tr.style.background = 'none');
+
+          const tdMain = document.createElement('td');
+          tdMain.style.cssText = 'padding:8px 12px;color:var(--text-primary,#333);font-weight:500;';
+          tdMain.textContent = r[displayCol] || r[idCol] || '';
+          tr.appendChild(tdMain);
+
+          addCols.forEach(col => {
+            const tdAdd = document.createElement('td');
+            tdAdd.style.cssText = 'padding:8px 12px;color:var(--text-secondary,#666);';
+            tdAdd.textContent = r[col] !== undefined && r[col] !== null ? String(r[col]) : '';
+            tr.appendChild(tdAdd);
+          });
+
+          tr.onclick = () => {
+            overlay.remove();
+            if (hiddenEl) {
+              hiddenEl.value = r[idCol];
+              hiddenEl.dispatchEvent(new Event('change', { bubbles: true }));
+              hiddenEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (displayEl) {
+              displayEl.value = r[displayCol] || r[idCol];
+              displayEl.dispatchEvent(new Event('change', { bubbles: true }));
+              displayEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            if (extra && typeof extra === 'string' && extra.trim() !== '') {
+              const mappings = extra.split(',');
+              mappings.forEach(m => {
+                const parts = m.split(':');
+                if (parts.length === 2) {
+                  const sourceField = parts[0].trim();
+                  const targetField = parts[1].trim();
+                  const targetEl = container.querySelector('input[name="' + targetField + '"]') || container.querySelector('[data-field="' + targetField + '"]') || document.querySelector('input[name="' + targetField + '"]');
+                  if (targetEl && r[sourceField] !== undefined) {
+                    targetEl.value = r[sourceField];
+                    targetEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+                  }
                 }
-              }
-            });
-          }
-        };
-        listArea.appendChild(item);
-      });
+              });
+            }
+          };
+
+          tbody.appendChild(tr);
+        });
+        tableEl.appendChild(tbody);
+        listArea.appendChild(tableEl);
+      } else {
+        box.style.maxWidth = '500px';
+        filtered.forEach(r => {
+          const item = document.createElement('div');
+          item.style.cssText = 'padding:8px 12px;font-size:13px;border-radius:4px;cursor:pointer;transition:all 0.15s;color:var(--text-primary,#333);';
+          item.textContent = r[displayCol] || r[idCol] || 'Item';
+          item.addEventListener('mouseover', () => item.style.background = 'var(--bg-hover,#f5f7ff)');
+          item.addEventListener('mouseout', () => item.style.background = 'none');
+          item.onclick = () => {
+            overlay.remove();
+            if (hiddenEl) {
+              hiddenEl.value = r[idCol];
+              hiddenEl.dispatchEvent(new Event('change', { bubbles: true }));
+              hiddenEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (displayEl) {
+              displayEl.value = r[displayCol] || r[idCol];
+              displayEl.dispatchEvent(new Event('change', { bubbles: true }));
+              displayEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            if (extra && typeof extra === 'string' && extra.trim() !== '') {
+              const mappings = extra.split(',');
+              mappings.forEach(m => {
+                const parts = m.split(':');
+                if (parts.length === 2) {
+                  const sourceField = parts[0].trim();
+                  const targetField = parts[1].trim();
+                  const targetEl = container.querySelector('input[name="' + targetField + '"]') || container.querySelector('[data-field="' + targetField + '"]') || document.querySelector('input[name="' + targetField + '"]');
+                  if (targetEl && r[sourceField] !== undefined) {
+                    targetEl.value = r[sourceField];
+                    targetEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+                  }
+                }
+              });
+            }
+          };
+          listArea.appendChild(item);
+        });
+      }
     };
 
     searchInput.oninput = () => renderList(searchInput.value);
