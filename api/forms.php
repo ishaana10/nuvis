@@ -67,10 +67,17 @@ function nu_resolve_col_name(array $field): string {
     $name = trim($field['name'] ?? $field['fieldname'] ?? '');
     $type = $field['type'] ?? $field['fieldtype'] ?? 'text';
     if ($type === 'lookup') {
+        if ($name !== '' && !preg_match('/^lookup_\d+$/', $name)) {
+            return preg_replace('/[^a-zA-Z0-9_]/', '', $name);
+        }
         $lk  = $field['lookup'] ?? [];
         $col = trim($lk['store_field'] ?? $lk['storefield'] ?? $lk['store_col'] ?? $lk['storeCol'] ?? $lk['id_column'] ?? $lk['idcolumn'] ?? '');
-        if ($col !== '') return preg_replace('/[^a-zA-Z0-9_]/', '', $col);
-        if ($name !== '' && !preg_match('/^lookup_\d+$/', $name)) return preg_replace('/[^a-zA-Z0-9_]/', '', $name);
+        if ($col !== '') {
+            return preg_replace('/[^a-zA-Z0-9_]/', '', $col);
+        }
+        if ($name !== '') {
+            return preg_replace('/[^a-zA-Z0-9_]/', '', $name);
+        }
         return '';
     }
     return preg_replace('/[^a-zA-Z0-9_]/', '', $name);

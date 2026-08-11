@@ -310,6 +310,10 @@ function nu_resolve_lookup_id_col($lookup) {
 }
 
 function nu_resolve_lookup_store_col($field) {
+    $name = nu_safe_ident(nu_field_name($field));
+    if ($name !== '' && !preg_match('/^lookup_\d+$/', $name)) {
+        return $name;
+    }
     $lookup = $field['lookup'] ?? [];
     $col = $lookup['store_field']
         ?? $lookup['storefield']
@@ -319,9 +323,12 @@ function nu_resolve_lookup_store_col($field) {
         ?? $lookup['idcolumn']
         ?? '';
     $col = nu_safe_ident($col);
-    if ($col !== '') return $col;
-    $name = nu_safe_ident(nu_field_name($field));
-    if ($name !== '' && !preg_match('/^lookup_\d+$/', $name)) return $name;
+    if ($col !== '') {
+        return $col;
+    }
+    if ($name !== '') {
+        return $name;
+    }
     return '';
 }
 
