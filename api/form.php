@@ -2165,8 +2165,14 @@ function nu_handle_subform_list() {
         foreach ($allFields as $field) {
             if (nu_field_type($field) !== 'lookup') continue;
             $fname = nu_field_name($field);
-            if ($fname === '' || !isset($row[$fname])) continue;
-            $row[$fname . '_display'] = nu_render_lookup_display($field, $row[$fname]);
+            if ($fname === '') continue;
+
+            // Map the database store field value to the layout field name
+            $val = nu_field_value($row, $field);
+            $row[$fname] = $val;
+
+            // Render the lookup human-readable display label
+            $row[$fname . '_display'] = nu_render_lookup_display($field, $val);
         }
     }
     unset($row);
