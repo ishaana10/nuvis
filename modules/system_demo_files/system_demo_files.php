@@ -137,16 +137,50 @@ if (isset($_GET['ajax_action'])) {
                 // Simulate/trigger Workflow transition to Completed
                 list($wfId, $startStageId, $trans1Id, $trans2Id) = demo_get_workflow_info($db);
                 $instance = $db->fetchOne("SELECT wfi_id FROM nu_workflow_instances WHERE wfi_record_id = ? AND wfi_wf_id = ? ORDER BY wfi_id DESC LIMIT 1", [$requestId, $wfId]);
-                if ($instance && class_exists('WorkflowEngine')) {
+
+                if (class_exists('WorkflowEngine')) {
                     $wfEngine = new WorkflowEngine();
-                    $instObj = $wfEngine->getInstance((int)$instance['wfi_id']);
-                    if ((int)$instObj['wfi_stage_id'] === $startStageId) {
-                        // Pending -> In Progress (Transition ID 101)
-                        $wfEngine->advance((int)$instance['wfi_id'], $trans1Id, (int)$currentUser['usr_id'], 'Auto start service from staff service log');
+
+                    // Self-healing: if no workflow instance exists, automatically start one first
+                    if (!$instance) {
+                        try {
+                            $wfEngine->start($wfId, (int)$currentUser['usr_id'], 'demo_customer_requests', $requestId);
+                            $instance = $db->fetchOne("SELECT wfi_id FROM nu_workflow_instances WHERE wfi_record_id = ? AND wfi_wf_id = ? ORDER BY wfi_id DESC LIMIT 1", [$requestId, $wfId]);
+                        } catch (Throwable $ignored) {}
                     }
-                    // Now In Progress -> Completed (Transition ID 102)
-                    $wfEngine->advance((int)$instance['wfi_id'], $trans2Id, (int)$currentUser['usr_id'], 'Completed service: ' . $notes);
-                    $msg = "Logged service action and updated Customer Request status to 'Completed' via Workflow transitions and transition action hooks.";
+
+                    if ($instance) {
+                        $instObj = $wfEngine->getInstance((int)$instance['wfi_id']);
+
+                        // Self-healing: if the instance is not active (completed/cancelled/rejected), reactivate it to start stage
+                        if ($instObj && $instObj['wfi_status'] !== 'active') {
+                            $db->update(
+                                'nu_workflow_instances',
+                                [
+                                    'wfi_stage_id' => $startStageId,
+                                    'wfi_status'   => 'active',
+                                    'wfi_completed_at' => null
+                                ],
+                                'wfi_id = ?',
+                                [$instance['wfi_id']]
+                            );
+                            $instObj = $wfEngine->getInstance((int)$instance['wfi_id']);
+                        }
+
+                        if ($instObj) {
+                            if ((int)$instObj['wfi_stage_id'] === $startStageId) {
+                                // Pending -> In Progress (Transition ID 101)
+                                $wfEngine->advance((int)$instance['wfi_id'], $trans1Id, (int)$currentUser['usr_id'], 'Auto start service from staff service log');
+                            }
+                            // Now In Progress -> Completed (Transition ID 102)
+                            $wfEngine->advance((int)$instance['wfi_id'], $trans2Id, (int)$currentUser['usr_id'], 'Completed service: ' . $notes);
+                            $msg = "Logged service action and updated Customer Request status to 'Completed' via Workflow transitions and transition action hooks.";
+                        } else {
+                            $msg = "Logged service action. (No active workflow found to transition).";
+                        }
+                    } else {
+                        $msg = "Logged service action. (No active workflow found to transition).";
+                    }
                 } else {
                     $msg = "Logged service action. (No active workflow found to transition).";
                 }
