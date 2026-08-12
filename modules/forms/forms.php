@@ -2788,6 +2788,12 @@ if (!nbFormBuilder._groupTabPatched) {
   if (field.max_value != null && extra.max_value == null) extra.max_value = field.max_value;
   if (field.step != null && extra.step == null) extra.step = field.step;
 
+  if (field.sequence_code != null && extra.sequence_code == null) extra.sequence_code = field.sequence_code;
+  if (field.prefix_pattern != null && extra.prefix_pattern == null) extra.prefix_pattern = field.prefix_pattern;
+  if (field.suffix_pattern != null && extra.suffix_pattern == null) extra.suffix_pattern = field.suffix_pattern;
+  if (field.padding_length != null && extra.padding_length == null) extra.padding_length = field.padding_length;
+  if (field.prefix_map != null && extra.prefix_map == null) extra.prefix_map = field.prefix_map;
+
   try {
     console.log('[nb patch] _makeFieldCard start', {
       incomingType: type,
