@@ -215,6 +215,39 @@ function nu_get_pk($table) {
     return 'id';
 }
 
+function nu_is_pk_string_type($table, $pk) {
+    try {
+        $driver = nu_db()->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'sqlite') {
+            $stmt = nu_q("PRAGMA table_info(`{$table}`)");
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                if (strtolower($r['name']) === strtolower($pk)) {
+                    $type = strtolower($r['type']);
+                    if (strpos($type, 'char') !== false || strpos($type, 'text') !== false || strpos($type, 'uuid') !== false || strpos($type, 'string') !== false) {
+                        return true;
+                    }
+                }
+            }
+        } else {
+            // MySQL / MariaDB
+            $stmt = nu_q("DESCRIBE `{$table}`");
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                if (strtolower($r['Field']) === strtolower($pk)) {
+                    $type = strtolower($r['Type']);
+                    if (strpos($type, 'char') !== false || strpos($type, 'text') !== false || strpos($type, 'uuid') !== false || strpos($type, 'varchar') !== false) {
+                        return true;
+                    }
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        // Fallback or ignore
+    }
+    return false;
+}
+
 function nu_get_record($table, $id) {
     $table = nu_safe_ident($table);
     if (!$table || !$id) return [];
@@ -2232,8 +2265,15 @@ function nu_handle_subform_save() {
 
     $save = [];
 
-    if (!$id && $pkType === 'uuid') {
-        $save[$pk] = nu_generate_uuid();
+    $suppliedPk = !empty($data[$pk]) ? $data[$pk] : (!empty($data['id']) ? $data['id'] : null);
+    if ($suppliedPk !== null && $suppliedPk !== '') {
+        $save[$pk] = $suppliedPk;
+    }
+
+    if (!$id) {
+        if (empty($save[$pk]) && ($pkType === 'uuid' || nu_is_pk_string_type($table, $pk))) {
+            $save[$pk] = nu_generate_uuid();
+        }
     }
 
     foreach ($fields as $field) {
@@ -2244,7 +2284,6 @@ function nu_handle_subform_save() {
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
 
         if ($type === 'uuid') {
-            if (!$id) continue;
             if (!empty($data[$name])) $save[$name] = $data[$name];
             continue;
         }
@@ -2340,7 +2379,7 @@ function nu_handle_subform_save() {
         $cols = array_keys($save);
         $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
-        $newId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
+        $newId = (!empty($save[$pk])) ? $save[$pk] : (($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId());
 
         // Auto-start workflow if bound to this form code
         try {
@@ -2712,8 +2751,15 @@ function nu_handle_save() {
 
     $save = [];
 
-    if (!$id && $pkType === 'uuid') {
-        $save[$pk] = nu_generate_uuid();
+    $suppliedPk = !empty($data[$pk]) ? $data[$pk] : (!empty($data['id']) ? $data['id'] : null);
+    if ($suppliedPk !== null && $suppliedPk !== '') {
+        $save[$pk] = $suppliedPk;
+    }
+
+    if (!$id) {
+        if (empty($save[$pk]) && ($pkType === 'uuid' || nu_is_pk_string_type($table, $pk))) {
+            $save[$pk] = nu_generate_uuid();
+        }
     }
 
     foreach ($fields as $field) {
@@ -2723,7 +2769,6 @@ function nu_handle_save() {
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
 
         if ($type === 'uuid') {
-            if (!$id) continue;
             if (!empty($data[$name])) $save[$name] = $data[$name];
             continue;
         }
@@ -2828,7 +2873,7 @@ function nu_handle_save() {
         $cols = array_keys($save);
         $placeholders = array_fill(0, count($cols), '?');
         nu_q("INSERT INTO `{$table}` (`" . implode('`,`', $cols) . "`) VALUES (" . implode(',', $placeholders) . ")", array_values($save));
-        $finalId = ($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId();
+        $finalId = (!empty($save[$pk])) ? $save[$pk] : (($pkType === 'uuid') ? ($save[$pk] ?? nu_db()->lastInsertId()) : nu_db()->lastInsertId());
 
         // Trigger Outgoing Webhooks for form_insert
         try {
