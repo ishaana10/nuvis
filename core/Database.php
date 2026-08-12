@@ -54,7 +54,36 @@ class NuDatabase {
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
             // Create essential tables to support mock/visual preview gracefully
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_forms (form_id INTEGER PRIMARY KEY, form_code TEXT UNIQUE, form_table TEXT, form_layout TEXT, browse_layout TEXT, form_active INTEGER, form_type TEXT, form_name TEXT, form_description TEXT, form_pk_type TEXT, form_table_mode TEXT, browse_search_enabled INTEGER, browse_search_placeholder TEXT, browse_search_fields TEXT, browse_page_size INTEGER, browse_default_sort TEXT, browse_php TEXT, browse_conditions TEXT, browse_delete_enabled INTEGER)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_forms (
+                form_id INTEGER PRIMARY KEY,
+                form_code TEXT UNIQUE,
+                form_table TEXT,
+                form_layout TEXT,
+                browse_layout TEXT,
+                form_active INTEGER,
+                form_type TEXT,
+                form_name TEXT,
+                form_description TEXT,
+                form_pk_type TEXT,
+                form_table_mode TEXT,
+                browse_search_enabled INTEGER,
+                browse_search_placeholder TEXT,
+                browse_search_fields TEXT,
+                browse_page_size INTEGER,
+                browse_default_sort TEXT,
+                browse_php TEXT,
+                browse_conditions TEXT,
+                browse_delete_enabled INTEGER,
+                browse_display_mode TEXT,
+                form_custom_js TEXT,
+                form_custom_php TEXT,
+                form_custom_php_after TEXT,
+                form_custom_css TEXT,
+                browse_sql TEXT,
+                browse_columns TEXT,
+                form_js_before_save TEXT,
+                form_js_after_save TEXT
+            )");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_system_settings (setting_key VARCHAR(50) PRIMARY KEY, setting_value TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_error_log (err_id INTEGER PRIMARY KEY, err_message TEXT, err_file TEXT, err_line INTEGER, err_severity TEXT, err_user_id TEXT, err_created_at TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_audit_log (audit_id INTEGER PRIMARY KEY, audit_action TEXT, audit_table TEXT, audit_username TEXT, audit_timestamp TEXT)");

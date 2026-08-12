@@ -457,6 +457,102 @@ function nu_customnumber_display_value($value, $field = []) {
     return $prefix . number_format((float)$num, $decimals, $decimal, $thousand) . $suffix;
 }
 
+function nu_generate_autonumber($field, $data, $formCode) {
+    $db = nu_db();
+
+    // 1. Ensure table exists
+    static $tableChecked = false;
+    if (!$tableChecked) {
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS nu_sequence_counters (
+                seq_code VARCHAR(100) NOT NULL PRIMARY KEY,
+                seq_value INT UNSIGNED NOT NULL DEFAULT 0
+            )");
+        } catch (Throwable $t) {
+            try {
+                $db->exec("CREATE TABLE IF NOT EXISTS nu_sequence_counters (
+                    seq_code VARCHAR(100) NOT NULL,
+                    seq_value INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (seq_code)
+                )");
+            } catch (Throwable $t2) {
+                nu_log("Failed to create autonumber sequence table: " . $t2->getMessage());
+            }
+        }
+        $tableChecked = true;
+    }
+
+    // 2. Resolve Sequence Code
+    $seqCode = trim($field['sequence_code'] ?? '');
+    if ($seqCode === '') {
+        $fieldName = nu_field_name($field);
+        $seqCode = $formCode . '_' . $fieldName;
+    }
+    $seqCode = preg_replace('/[^a-zA-Z0-9_]/', '_', $seqCode);
+
+    // Parse Prefix Map if present
+    $prefixMap = [];
+    if (!empty($field['prefix_map'])) {
+        $lines = explode("\n", $field['prefix_map']);
+        foreach ($lines as $line) {
+            $parts = explode(":", $line, 2);
+            if (count($parts) === 2) {
+                $prefixMap[trim(strtolower($parts[0]))] = trim($parts[1]);
+            }
+        }
+    }
+
+    // Helper to evaluate pattern
+    $evalPattern = function($pattern) use ($data, $prefixMap) {
+        if ($pattern === '') return '';
+
+        // Find placeholders like {field_name} or {{field_name}}
+        return preg_replace_callback('/\{+([a-zA-Z0-9_]+)\}+/', function($matches) use ($data, $prefixMap) {
+            $fieldName = $matches[1];
+            $val = isset($data[$fieldName]) ? trim((string)$data[$fieldName]) : '';
+
+            // Check in map
+            $valLower = strtolower($val);
+            if (isset($prefixMap[$valLower])) {
+                return $prefixMap[$valLower];
+            }
+            return $val;
+        }, $pattern);
+    };
+
+    // 3. Resolve Prefix & Suffix
+    $prefix = $evalPattern($field['prefix_pattern'] ?? '');
+    $suffix = $evalPattern($field['suffix_pattern'] ?? '');
+
+    // 4. Atomic Increment and Fetch Counter
+    $stmt = $db->prepare("SELECT seq_value FROM nu_sequence_counters WHERE seq_code = ?");
+    $stmt->execute([$seqCode]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        try {
+            $stmtIns = $db->prepare("INSERT INTO nu_sequence_counters (seq_code, seq_value) VALUES (?, 0)");
+            $stmtIns->execute([$seqCode]);
+        } catch (Throwable $e) {
+            // ignore parallel insert errors
+        }
+    }
+
+    $stmtUpd = $db->prepare("UPDATE nu_sequence_counters SET seq_value = seq_value + 1 WHERE seq_code = ?");
+    $stmtUpd->execute([$seqCode]);
+
+    $stmtSel = $db->prepare("SELECT seq_value FROM nu_sequence_counters WHERE seq_code = ?");
+    $stmtSel->execute([$seqCode]);
+    $counter = (int)$stmtSel->fetchColumn();
+    if ($counter <= 0) $counter = 1;
+
+    // 5. Padding
+    $paddingLen = isset($field['padding_length']) ? (int)$field['padding_length'] : 6;
+    if ($paddingLen < 0) $paddingLen = 0;
+    $paddedCounter = str_pad((string)$counter, $paddingLen, '0', STR_PAD_LEFT);
+
+    return $prefix . $paddedCounter . $suffix;
+}
+
 function nu_render_field($field, $value = '', $record = []) {
     $type  = nu_field_type($field);
      if ($type === 'signaturepad') {
@@ -739,6 +835,25 @@ function nu_render_field($field, $value = '', $record = []) {
           });
         })();
         </script>';
+
+        return $html;
+    }
+
+    if ($type === 'autonumber') {
+        $displayValue = $value !== null ? (string)$value : '';
+        if ($displayValue === '') {
+            $displayValue = '[Auto-Generated]';
+        }
+
+        $html = '<div class="nu-field-wrap nu-field-autonumber">';
+        $html .= '<input type="text" class="' . nu_attr($cssClass) . '" ' .
+                 'name="' . nu_attr($name) . '" ' .
+                 'id="' . nu_attr($name) . '" ' .
+                 'value="' . nu_attr($displayValue) . '"' .
+                 ' style="background:var(--bg-offset,#f5f5f5);color:#888;cursor:default;"' .
+                 ' readonly>';
+        $html .= $helpHtml;
+        $html .= '</div>';
 
         return $html;
     }
@@ -1760,7 +1875,12 @@ function nu_create_form_table($tableName, $pkType, array $fields) {
         $added[$name] = true;
     }
 
-    $sql = 'CREATE TABLE `' . $tableName . '` (' . implode(', ', $colDefs) . ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+    $driver = strtolower(nu_db()->getAttribute(PDO::ATTR_DRIVER_NAME));
+    if ($driver === 'sqlite') {
+        $sql = 'CREATE TABLE `' . $tableName . '` (' . implode(', ', $colDefs) . ')';
+    } else {
+        $sql = 'CREATE TABLE `' . $tableName . '` (' . implode(', ', $colDefs) . ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
+    }
     nu_log('Creating table: ' . $tableName . ' | SQL: ' . $sql, 'DDL');
 
     try {
@@ -2301,6 +2421,13 @@ function nu_handle_subform_save() {
             continue;
         }
 
+        if ($type === 'autonumber') {
+            if (!$id) {
+                $save[$name] = nu_generate_autonumber($field, $data, $code);
+            }
+            continue;
+        }
+
         // skip readonly fields on save (both server_readonly and readonly flags)
         if (nu_field_server_readonly($field) || nu_field_is_fk($field) || nu_field_readonly($field)) continue;
 
@@ -2793,6 +2920,13 @@ function nu_handle_save() {
             continue;
         }
 
+        if ($type === 'autonumber') {
+            if (!$id) {
+                $save[$name] = nu_generate_autonumber($field, $data, $code);
+            }
+            continue;
+        }
+
         // skip readonly and hidden_for_normal_users (non-admin) on save
         if (nu_field_server_readonly($field)) continue;
         if (nu_field_readonly($field)) continue;
@@ -2986,6 +3120,8 @@ function nu_handle_save_form() {
         $c['browse_page_size']         => (int)($data['browse_page_size']   ?? 20),
         $c['browse_default_sort']      => $data['browse_default_sort']      ?? '',
         $c['browse_php']               => $data['browse_php']               ?? '',
+        $c['browse_layout']            => is_array($data['browse_layout'] ?? null) ? json_encode($data['browse_layout']) : ($data['browse_layout'] ?? ''),
+        $c['browse_delete_enabled']    => isset($data['browse_delete_enabled']) ? (int)$data['browse_delete_enabled'] : 1,
     ];
 
     $formTableCols = nu_get_table_columns($ftable);
@@ -3091,26 +3227,28 @@ function nu_handle_load_form() {
 }
 
 /* ── Router ─────────────────────────────────────────── */
-try {
-    $action = $_GET['action'] ?? '';
-    nu_log('action=' . $action, 'router');
-    switch ($action) {
-        case 'render':           nu_handle_render();          break;
-        case 'fields':           nu_handle_fields();          break;
-        case 'events':           nu_handle_events();          break;
-        case 'list':             nu_handle_list();            break;
-        case 'save':             nu_handle_save();            break;
-        case 'save_form':        nu_handle_save_form();       break;
-        case 'load_form':        nu_handle_load_form();       break;
-        case 'subform_fields':   nu_handle_subform_fields();  break;
-        case 'subform_list':     nu_handle_subform_list();    break;
-        case 'subform_save':     nu_handle_subform_save();    break;
-        case 'subform_delete':   nu_handle_subform_delete();  break;
-        default:
-            nu_log('Unknown action: ' . $action, 'router');
-            nu_json(['success' => false, 'error' => 'Invalid action'], 400);
+if (PHP_SAPI !== 'cli' || isset($_GET['action'])) {
+    try {
+        $action = $_GET['action'] ?? '';
+        nu_log('action=' . $action, 'router');
+        switch ($action) {
+            case 'render':           nu_handle_render();          break;
+            case 'fields':           nu_handle_fields();          break;
+            case 'events':           nu_handle_events();          break;
+            case 'list':             nu_handle_list();            break;
+            case 'save':             nu_handle_save();            break;
+            case 'save_form':        nu_handle_save_form();       break;
+            case 'load_form':        nu_handle_load_form();       break;
+            case 'subform_fields':   nu_handle_subform_fields();  break;
+            case 'subform_list':     nu_handle_subform_list();    break;
+            case 'subform_save':     nu_handle_subform_save();    break;
+            case 'subform_delete':   nu_handle_subform_delete();  break;
+            default:
+                nu_log('Unknown action: ' . $action, 'router');
+                nu_json(['success' => false, 'error' => 'Invalid action'], 400);
+        }
+    } catch (Throwable $e) {
+        nu_log('Unhandled exception in action=' . ($_GET['action'] ?? '') . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine(), 'router');
+        nu_json(['success' => false, 'error' => $e->getMessage()], 500);
     }
-} catch (Throwable $e) {
-    nu_log('Unhandled exception in action=' . ($_GET['action'] ?? '') . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine(), 'router');
-    nu_json(['success' => false, 'error' => $e->getMessage()], 500);
 }
