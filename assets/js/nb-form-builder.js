@@ -1688,6 +1688,8 @@ fields.forEach(function (f) {
     if (suff) { suff.value = fd.suffix_pattern || ''; suff.setAttribute('value', suff.value); }
     var pad = card.querySelector('.nu-input[data-prop="padding_length"]');
     if (pad) { pad.value = fd.padding_length != null ? fd.padding_length : 6; pad.setAttribute('value', pad.value); }
+    var startVal = card.querySelector('.nu-input[data-prop="starting_value"]');
+    if (startVal) { startVal.value = fd.starting_value != null ? fd.starting_value : 1; startVal.setAttribute('value', startVal.value); }
     var mapText = card.querySelector('textarea[data-prop="prefix_map"]');
     if (mapText) { mapText.value = fd.prefix_map || ''; mapText.textContent = mapText.value; }
   }

@@ -25,7 +25,11 @@ When you drag the **Auto-Number** field onto the Form Builder canvas and open th
    - *Description*: Defines the minimum length of the numeric counter. Shorter numbers are left-padded with zeros.
    - *Example*: `5` (yields `00001`, `00002`... etc.)
 
-5. **Prefix Map**
+5. **Starting Number**
+   - *Description*: The initial sequence value to start from when no counter has been created yet. You can also increase this value in the future to fast-forward / bump the counter to a higher starting point automatically.
+   - *Example*: `1418082026` (the first generated record will receive `1418082026`, followed by `1418082027`... etc.)
+
+6. **Prefix Map**
    - *Description*: A case-insensitive newline-separated mapping (`source:target`) that translates dynamic placeholder values (e.g. from select fields) to custom abbreviations.
    - *Example*:
      ```text
@@ -86,25 +90,33 @@ The Auto-Number generator supports dynamic, real-time date tokens inside both **
 
 ---
 
-## 3. Continuing from an Existing Table
+## 3. Continuing from an Existing Table / Sequence
 
-If you are migrating an existing system or table and want the Auto-Number to continue numbering from a specific offset:
+If you are migrating an existing system or table and want the Auto-Number to continue numbering from a specific offset (e.g., continuing from `PB1418082026`):
 
-Nuvis statefully tracks all sequential counters inside a dedicated database table named `nu_sequence_counters`. It uses a transaction-safe incrementation process.
+### Option A: Via Form Builder UI (Recommended)
+You do not need database access! Simply enter the starting offset directly in the Form Builder:
+1. Click your Auto-Number field on the canvas.
+2. Go to the **Advanced** tab in the properties sidebar.
+3. In **Starting Number**, enter your desired beginning sequence number (e.g. `1418082026`).
+4. Click **Save Form**.
+5. When the very first record is saved, it will automatically start at `1418082026`, followed by `1418082027`, and so on.
+6. If you ever need to bump/jump the sequence to a higher number in the future (e.g., `1500000000`), simply update the **Starting Number** config in the sidebar and save the form!
 
-To offset or manually set the next number:
+### Option B: Via Direct SQL Query
+Nuvis statefully tracks all sequential counters inside a dedicated database table named `nu_sequence_counters`. If you prefer to set the offset manually via SQL:
 
 1. Locate the **Sequence Code** used by your Auto-Number field (e.g., `invoice_seq`).
-2. Run a simple database `INSERT` or `UPDATE` query on your SQLite or MySQL database:
+2. Run an `INSERT` or `UPDATE` query on your database:
 
 ```sql
--- To continue sequence from 1250 (the next generated record will receive 1251)
+-- To continue sequence from 1418082025 (the next generated record will receive 1418082026)
 INSERT INTO nu_sequence_counters (seq_code, seq_value)
-VALUES ('invoice_seq', 1250)
-ON DUPLICATE KEY UPDATE seq_value = 1250; -- For MySQL
+VALUES ('invoice_seq', 1418082025)
+ON DUPLICATE KEY UPDATE seq_value = 1418082025; -- For MySQL
 
 -- For SQLite / MySQL cross-compatible update if row already exists:
-UPDATE nu_sequence_counters SET seq_value = 1250 WHERE seq_code = 'invoice_seq';
+UPDATE nu_sequence_counters SET seq_value = 1418082025 WHERE seq_code = 'invoice_seq';
 ```
 
 ---

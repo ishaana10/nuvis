@@ -537,16 +537,30 @@ function nu_generate_autonumber($field, $data, $formCode) {
     $prefix = $evalPattern($field['prefix_pattern'] ?? '');
     $suffix = $evalPattern($field['suffix_pattern'] ?? '');
 
+    $startVal = isset($field['starting_value']) ? (int)$field['starting_value'] : 1;
+    if ($startVal < 1) $startVal = 1;
+    $initVal = $startVal - 1;
+
     // 4. Atomic Increment and Fetch Counter
     $stmt = $db->prepare("SELECT seq_value FROM nu_sequence_counters WHERE seq_code = ?");
     $stmt->execute([$seqCode]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$row) {
         try {
-            $stmtIns = $db->prepare("INSERT INTO nu_sequence_counters (seq_code, seq_value) VALUES (?, 0)");
-            $stmtIns->execute([$seqCode]);
+            $stmtIns = $db->prepare("INSERT INTO nu_sequence_counters (seq_code, seq_value) VALUES (?, ?)");
+            $stmtIns->execute([$seqCode, $initVal]);
         } catch (Throwable $e) {
             // ignore parallel insert errors
+        }
+    } else {
+        $currentVal = (int)$row['seq_value'];
+        if ($currentVal < $initVal) {
+            try {
+                $stmtUpdStart = $db->prepare("UPDATE nu_sequence_counters SET seq_value = ? WHERE seq_code = ? AND seq_value < ?");
+                $stmtUpdStart->execute([$initVal, $seqCode, $initVal]);
+            } catch (Throwable $e) {
+                // ignore parallel updates
+            }
         }
     }
 

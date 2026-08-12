@@ -2793,6 +2793,7 @@ if (!nbFormBuilder._groupTabPatched) {
   if (field.suffix_pattern != null && extra.suffix_pattern == null) extra.suffix_pattern = field.suffix_pattern;
   if (field.padding_length != null && extra.padding_length == null) extra.padding_length = field.padding_length;
   if (field.prefix_map != null && extra.prefix_map == null) extra.prefix_map = field.prefix_map;
+  if (field.starting_value != null && extra.starting_value == null) extra.starting_value = field.starting_value;
 
   try {
     console.log('[nb patch] _makeFieldCard start', {
@@ -3045,6 +3046,11 @@ if (!nbFormBuilder._groupTabPatched) {
           <div class="nb-fp">
             <label>Padding Length</label>
             <input type="number" class="nu-input nb-adv-prop" data-prop="padding_length" value="${esc(field.padding_length != null ? field.padding_length : 6)}" min="0" max="20">
+          </div>
+
+          <div class="nb-fp">
+            <label>Starting Number</label>
+            <input type="number" class="nu-input nb-adv-prop" data-prop="starting_value" value="${esc(field.starting_value != null ? field.starting_value : 1)}" min="1">
           </div>
 
           <div class="nb-fp nb-fp-full">
@@ -3358,6 +3364,7 @@ nbFormBuilder._makeDefaultField = function(type) {
         made.suffix_pattern = made.suffix_pattern || '';
         made.padding_length = made.padding_length != null ? made.padding_length : 6;
         made.prefix_map = made.prefix_map || '';
+        made.starting_value = made.starting_value != null ? made.starting_value : 1;
         made.hide_in_grid = made.hide_in_grid !== undefined ? made.hide_in_grid : false;
         made.required = !!made.required;
       }
@@ -3439,6 +3446,7 @@ nbFormBuilder._makeDefaultField = function(type) {
     base.suffix_pattern = '';
     base.padding_length = 6;
     base.prefix_map = '';
+    base.starting_value = 1;
     base.hide_in_grid = false;
     return base;
   }
