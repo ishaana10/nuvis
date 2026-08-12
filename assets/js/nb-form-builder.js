@@ -1678,6 +1678,19 @@ fields.forEach(function (f) {
     var ext = card.querySelector('.nu-lookup-extra');
     if (ext) { ext.value = lk.extra || fd.lookup_extra || ''; ext.setAttribute('value', ext.value); }
   }
+
+  if (type === 'autonumber') {
+    var seq = card.querySelector('.nu-input[data-prop="sequence_code"]');
+    if (seq) { seq.value = fd.sequence_code || ''; seq.setAttribute('value', seq.value); }
+    var pref = card.querySelector('.nu-input[data-prop="prefix_pattern"]');
+    if (pref) { pref.value = fd.prefix_pattern || ''; pref.setAttribute('value', pref.value); }
+    var suff = card.querySelector('.nu-input[data-prop="suffix_pattern"]');
+    if (suff) { suff.value = fd.suffix_pattern || ''; suff.setAttribute('value', suff.value); }
+    var pad = card.querySelector('.nu-input[data-prop="padding_length"]');
+    if (pad) { pad.value = fd.padding_length != null ? fd.padding_length : 6; pad.setAttribute('value', pad.value); }
+    var mapText = card.querySelector('textarea[data-prop="prefix_map"]');
+    if (mapText) { mapText.value = fd.prefix_map || ''; mapText.textContent = mapText.value; }
+  }
 }
     /* ════════════════════════════════════════════════════════════════════
      nbFormBuilder public API
