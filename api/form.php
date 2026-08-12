@@ -509,6 +509,19 @@ function nu_generate_autonumber($field, $data, $formCode) {
         // Find placeholders like {field_name} or {{field_name}}
         return preg_replace_callback('/\{+([a-zA-Z0-9_]+)\}+/', function($matches) use ($data, $prefixMap) {
             $fieldName = $matches[1];
+            $fieldNameLower = strtolower($fieldName);
+
+            // Dynamic date/time placeholders support
+            if ($fieldNameLower === 'year') {
+                return date('Y');
+            }
+            if ($fieldNameLower === 'month') {
+                return date('m');
+            }
+            if ($fieldNameLower === 'day') {
+                return date('d');
+            }
+
             $val = isset($data[$fieldName]) ? trim((string)$data[$fieldName]) : '';
 
             // Check in map
