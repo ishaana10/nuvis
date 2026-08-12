@@ -2336,6 +2336,47 @@ window.runProcedure = function(code, params, callback) {
   return NuApp.runProcedure(code, params, callback);
 };
 
+window.nuApplyExtraMappings = function(extra, r, container) {
+  if (!extra || typeof extra !== 'string' || extra.trim() === '') return;
+  const activeContainer = container || document;
+  const mappings = extra.split(',');
+  mappings.forEach(m => {
+    const parts = m.split(':');
+    if (parts.length === 2) {
+      const part0 = parts[0].trim();
+      const part1 = parts[1].trim();
+
+      // Check if part1 is the target element (standard sourceField:targetField)
+      let targetEl = activeContainer.querySelector('input[name="' + part1 + '"]') || activeContainer.querySelector('[data-field="' + part1 + '"]') || document.querySelector('input[name="' + part1 + '"]');
+      if (targetEl) {
+        if (r && r[part0] !== undefined) {
+          targetEl.value = r[part0];
+        } else {
+          // Treat part0 as a constant default value
+          targetEl.value = part0;
+        }
+        targetEl.dispatchEvent(new Event('change', { bubbles: true }));
+        targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      // Check if part0 is the target element (alternative targetField:defaultValue or vice versa)
+      targetEl = activeContainer.querySelector('input[name="' + part0 + '"]') || activeContainer.querySelector('[data-field="' + part0 + '"]') || document.querySelector('input[name="' + part0 + '"]');
+      if (targetEl) {
+        if (r && r[part1] !== undefined) {
+          targetEl.value = r[part1];
+        } else {
+          // Treat part1 as a constant default value
+          targetEl.value = part1;
+        }
+        targetEl.dispatchEvent(new Event('change', { bubbles: true }));
+        targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+    }
+  });
+};
+
 window.openLookupModal = function(name, table, idCol, displayCol, filter, extra, additionalFields) {
   // Try to find target inputs relative to the active overlay first
   const activeOverlay = document.querySelector('[data-sf-overlay]') || document.querySelector('.nu-form-overlay');
@@ -2492,22 +2533,7 @@ window.openLookupModal = function(name, table, idCol, displayCol, filter, extra,
               displayEl.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            if (extra && typeof extra === 'string' && extra.trim() !== '') {
-              const mappings = extra.split(',');
-              mappings.forEach(m => {
-                const parts = m.split(':');
-                if (parts.length === 2) {
-                  const sourceField = parts[0].trim();
-                  const targetField = parts[1].trim();
-                  const targetEl = container.querySelector('input[name="' + targetField + '"]') || container.querySelector('[data-field="' + targetField + '"]') || document.querySelector('input[name="' + targetField + '"]');
-                  if (targetEl && r[sourceField] !== undefined) {
-                    targetEl.value = r[sourceField];
-                    targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-                    targetEl.dispatchEvent(new Event('input', { bubbles: true }));
-                  }
-                }
-              });
-            }
+            window.nuApplyExtraMappings(extra, r, container);
           };
 
           tbody.appendChild(tr);
@@ -2535,22 +2561,7 @@ window.openLookupModal = function(name, table, idCol, displayCol, filter, extra,
               displayEl.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            if (extra && typeof extra === 'string' && extra.trim() !== '') {
-              const mappings = extra.split(',');
-              mappings.forEach(m => {
-                const parts = m.split(':');
-                if (parts.length === 2) {
-                  const sourceField = parts[0].trim();
-                  const targetField = parts[1].trim();
-                  const targetEl = container.querySelector('input[name="' + targetField + '"]') || container.querySelector('[data-field="' + targetField + '"]') || document.querySelector('input[name="' + targetField + '"]');
-                  if (targetEl && r[sourceField] !== undefined) {
-                    targetEl.value = r[sourceField];
-                    targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-                    targetEl.dispatchEvent(new Event('input', { bubbles: true }));
-                  }
-                }
-              });
-            }
+            window.nuApplyExtraMappings(extra, r, container);
           };
           listArea.appendChild(item);
         });
@@ -2674,22 +2685,7 @@ window.triggerAutoLookup = function(el) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
 
       // Extra mapping
-      if (extra && typeof extra === 'string' && extra.trim() !== '') {
-        const mappings = extra.split(',');
-        mappings.forEach(m => {
-          const parts = m.split(':');
-          if (parts.length === 2) {
-            const sourceField = parts[0].trim();
-            const targetField = parts[1].trim();
-            const targetEl = container.querySelector('input[name="' + targetField + '"]') || container.querySelector('[data-field="' + targetField + '"]') || document.querySelector('input[name="' + targetField + '"]');
-            if (targetEl && r[sourceField] !== undefined) {
-              targetEl.value = r[sourceField];
-              targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-              targetEl.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-          }
-        });
-      }
+      window.nuApplyExtraMappings(extra, r, container);
     } else {
       // Open modal automatically
       window.openLookupModal(name, table, idCol, displayCol, filter, extra, additionalFields);
