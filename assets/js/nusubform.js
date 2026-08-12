@@ -338,7 +338,12 @@
       return r;
     });
     var allRecords = records.concat(pendingRecords);
+    container._sfAllRecords = allRecords;
+    container._sfPk         = pk;
     render(container, gridFields, allFields, allRecords, pk);
+    if (typeof window.nuCalculateFields === 'function') {
+      window.nuCalculateFields(document);
+    }
   }
 
   function render(container, gridFields, allFields, records, pk) {

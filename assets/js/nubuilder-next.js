@@ -78,8 +78,54 @@
 
       var localScope = calcEl.closest('.nu-sf-inline-row') || calcEl.closest('[data-sf-overlay]') || calcEl.closest('.nu-form-overlay') || scope;
 
+      var resolvedExpr = expr;
+
+      // 0. Resolve SUM(subform_code.field_name) or SUM(field_name) functions
+      resolvedExpr = resolvedExpr.replace(/SUM\((?:([a-zA-Z0-9_]+)\.)?([a-zA-Z0-9_]+)\)/gi, function (match, subformCode, fieldName) {
+        var subformContainer = null;
+        if (subformCode) {
+          subformContainer = document.querySelector('.nu-subform-container[data-subform-code="' + subformCode + '"]');
+        } else {
+          // Find the first subform container that has this field in its fields list
+          var containers = document.querySelectorAll('.nu-subform-container');
+          for (var i = 0; i < containers.length; i++) {
+            if (containers[i]._sfAllFields && containers[i]._sfAllFields.some(function (f) { return (f.name || f.fieldname || '') === fieldName; })) {
+              subformContainer = containers[i];
+              break;
+            }
+          }
+          if (!subformContainer) {
+            subformContainer = document.querySelector('.nu-subform-container');
+          }
+        }
+
+        if (subformContainer && subformContainer._sfAllRecords) {
+          var sum = 0;
+          subformContainer._sfAllRecords.forEach(function (r) {
+            var val = null;
+            var rowId = r[subformContainer._sfPk || 'id'];
+            var inlineRow = subformContainer.querySelector('.nu-sf-inline-row[data-sf-row-id="' + CSS.escape(rowId) + '"]');
+            if (inlineRow) {
+              var inp = inlineRow.querySelector('[name="' + CSS.escape(fieldName) + '"], [data-field="' + CSS.escape(fieldName) + '"]');
+              if (inp) {
+                val = inp.value;
+              }
+            }
+            if (val === null || val === undefined || val === '') {
+              val = r[fieldName];
+            }
+            var num = parseFloat(val);
+            if (!isNaN(num)) {
+              sum += num;
+            }
+          });
+          return String(sum);
+        }
+        return '0';
+      });
+
       // 1. Resolve SQL-style hashes (e.g. ##tax_rate##) from window.nuUserMeta
-      var resolvedExpr = expr.replace(/##([a-zA-Z0-9_]+)##/g, function (match, hashName) {
+      resolvedExpr = resolvedExpr.replace(/##([a-zA-Z0-9_]+)##/g, function (match, hashName) {
         if (window.nuUserMeta && window.nuUserMeta[hashName] !== undefined) {
           var val = window.nuUserMeta[hashName];
           var num = parseFloat(val);
@@ -127,6 +173,9 @@
     if (target && target.matches('input, select, textarea')) {
       var scope = target.closest('[data-sf-overlay]') || target.closest('.nu-sf-inline-row') || target.closest('.nu-form-overlay') || document;
       nuCalculateFields(scope);
+      if (scope !== document) {
+        nuCalculateFields(document);
+      }
     }
   });
   document.addEventListener('change', function (e) {
@@ -134,6 +183,9 @@
     if (target && target.matches('input, select, textarea')) {
       var scope = target.closest('[data-sf-overlay]') || target.closest('.nu-sf-inline-row') || target.closest('.nu-form-overlay') || document;
       nuCalculateFields(scope);
+      if (scope !== document) {
+        nuCalculateFields(document);
+      }
     }
   });
 
