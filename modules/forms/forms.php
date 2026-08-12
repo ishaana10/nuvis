@@ -8,7 +8,12 @@ $forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY fo
 
 // Fetch all tables in the current DB for the "existing table" dropdown
 $pdo         = $db->getPdo();
-$tablesStmt  = $pdo->query('SHOW TABLES');
+$driver      = strtolower($pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+if ($driver === 'sqlite') {
+    $tablesStmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table'");
+} else {
+    $tablesStmt = $pdo->query('SHOW TABLES');
+}
 $allTables   = $tablesStmt ? $tablesStmt->fetchAll(PDO::FETCH_COLUMN) : [];
 // Filter out system tables
 $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
@@ -18,7 +23,12 @@ $userTables  = array_values(array_filter($allTables, fn($t) => !in_array($t, [
 ], true)));
 
 // Fetch all roles for the condition builder
-$roles = $db->fetchAll("SELECT role_code, role_name FROM nu_roles ORDER BY role_name");
+$roles = [];
+try {
+    $roles = $db->fetchAll("SELECT role_code, role_name FROM nu_roles ORDER BY role_name");
+} catch (Throwable $e) {
+    // Table may not exist on newly initialized databases or lightweight sqlite testing
+}
 
 // Group forms by type
 $formsByType = ['main' => [], 'subform' => [], 'popup' => [], 'report' => []];
@@ -1013,6 +1023,7 @@ foreach ($forms as $f) {
                 <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="uploadbutton" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Upload Button</div>
                 <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="signaturepad" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 14 4-4M16 11V7a4 4 0 0 0-8 0v4"/></svg>Signature Pad</div>
                 <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="customnumber" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17v-4M15 17v-4M9 11v-4M15 11v-4"/></svg>Custom Number</div>
+                <div class="nb-tool hover:scale-[1.02] hover:shadow-sm" data-type="autonumber" draggable="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 11h10M7 15h10M7 7h10"/></svg>Auto-Number</div>
               </div>
             </div>
 
@@ -3005,6 +3016,39 @@ if (!nbFormBuilder._groupTabPatched) {
       `;
     }
 
+    if (field.type === 'autonumber') {
+      blockHtml += `
+        <div class="nb-adv-field-ext nb-fp-grid" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-color);grid-column:1/-1;">
+          <div class="nb-fp nb-fp-full" style="font-size:10px;font-weight:700;color:var(--text-tertiary);letter-spacing:.05em;text-transform:uppercase;">Auto-Number Settings</div>
+
+          <div class="nb-fp">
+            <label>Sequence Code</label>
+            <input type="text" class="nu-input nb-adv-prop" data-prop="sequence_code" value="${esc(field.sequence_code || '')}" placeholder="e.g. invoice_seq">
+          </div>
+
+          <div class="nb-fp">
+            <label>Prefix Pattern</label>
+            <input type="text" class="nu-input nb-adv-prop" data-prop="prefix_pattern" value="${esc(field.prefix_pattern || '')}" placeholder="e.g. INV- or {section}">
+          </div>
+
+          <div class="nb-fp">
+            <label>Suffix Pattern</label>
+            <input type="text" class="nu-input nb-adv-prop" data-prop="suffix_pattern" value="${esc(field.suffix_pattern || '')}" placeholder="e.g. -A">
+          </div>
+
+          <div class="nb-fp">
+            <label>Padding Length</label>
+            <input type="number" class="nu-input nb-adv-prop" data-prop="padding_length" value="${esc(field.padding_length != null ? field.padding_length : 6)}" min="0" max="20">
+          </div>
+
+          <div class="nb-fp nb-fp-full">
+            <label>Prefix Map</label>
+            <textarea class="nu-input nb-adv-prop" data-prop="prefix_map" style="height:60px;font-family:monospace;font-size:11px;" placeholder="post border:PB&#10;border:B">${esc(field.prefix_map || '')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
     if (!blockHtml) return;
 
     var grid = body.querySelector('.nb-fp-grid');
@@ -3298,6 +3342,18 @@ nbFormBuilder._makeDefaultField = function(type) {
         made.step = made.step != null ? made.step : '1';
         made.hide_in_grid = made.hide_in_grid !== undefined ? made.hide_in_grid : false;
         made.required = !!made.required;
+      } else if (type === 'autonumber') {
+        made.type = 'autonumber';
+        made.label = made.label || 'Auto-Number';
+        made.name = made.name || ('number_' + Math.random().toString(36).slice(2, 6));
+        made.col = made.col || 6;
+        made.sequence_code = made.sequence_code || '';
+        made.prefix_pattern = made.prefix_pattern || '';
+        made.suffix_pattern = made.suffix_pattern || '';
+        made.padding_length = made.padding_length != null ? made.padding_length : 6;
+        made.prefix_map = made.prefix_map || '';
+        made.hide_in_grid = made.hide_in_grid !== undefined ? made.hide_in_grid : false;
+        made.required = !!made.required;
       }
       return made;
     }
@@ -3364,6 +3420,19 @@ nbFormBuilder._makeDefaultField = function(type) {
     base.min_value = '';
     base.max_value = '';
     base.step = '1';
+    base.hide_in_grid = false;
+    return base;
+  }
+
+  if (type === 'autonumber') {
+    base.type = 'autonumber';
+    base.label = 'Auto-Number';
+    base.name = 'number_' + Math.random().toString(36).slice(2, 6);
+    base.sequence_code = '';
+    base.prefix_pattern = '';
+    base.suffix_pattern = '';
+    base.padding_length = 6;
+    base.prefix_map = '';
     base.hide_in_grid = false;
     return base;
   }

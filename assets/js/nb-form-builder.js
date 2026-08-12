@@ -501,6 +501,7 @@ function _renderPropsInPanel(card, body) {
       { value: 'color', label: 'Color' },
       { value: 'range', label: 'Range' },
       { value: 'customnumber', label: 'Custom Number' },
+      { value: 'autonumber', label: 'Auto-Number' },
       { value: 'uploadbutton', label: 'Upload Button' },
       { value: 'signaturepad', label: 'Signature Pad' }
     ];
