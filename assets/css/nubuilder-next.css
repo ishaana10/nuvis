@@ -1167,6 +1167,21 @@ body {
     padding: 12px 14px !important;
     font-size: 16px !important; /* Prevents auto-zoom on iOS on focus */
   }
+
+  /* Force form labels to sit on top of the input fields on smaller screens */
+  .nu-field-wrapper > div {
+    display: block !important;
+  }
+  .nu-field-wrapper label {
+    text-align: left !important;
+    padding-right: 0 !important;
+    padding-bottom: 6px !important;
+    padding-top: 0 !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    white-space: normal !important;
+    display: block !important;
+  }
   .nu-btn {
     padding: 12px 20px !important;
     font-size: 15px !important;
