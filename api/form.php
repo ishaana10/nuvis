@@ -2289,6 +2289,13 @@ function nu_handle_subform_save() {
 
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
 
+        if ($name === $pk) {
+            if (!empty($data[$name])) {
+                $save[$name] = $data[$name];
+            }
+            continue;
+        }
+
         if ($type === 'uuid') {
             if (!empty($data[$name])) $save[$name] = $data[$name];
             continue;
@@ -2773,6 +2780,13 @@ function nu_handle_save() {
         if ($name === '') continue;
         $type = nu_field_type($field);
         if (in_array($type, ['html','heading','divider','fieldset','subform','button'], true)) continue;
+
+        if ($name === $pk) {
+            if (!empty($data[$name])) {
+                $save[$name] = $data[$name];
+            }
+            continue;
+        }
 
         if ($type === 'uuid') {
             if (!empty($data[$name])) $save[$name] = $data[$name];
