@@ -1097,6 +1097,7 @@ foreach ($forms as $f) {
             <span class="nb-canvas-title text-[10px] font-bold uppercase tracking-wider text-slate-500">Form Layout</span>
             <div class="nb-canvas-topbar-actions flex items-center gap-3">
               <span class="text-[10px] text-slate-400">Drag components into rows · Click to configure</span>
+              <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" id="nbToggleGridLines" onclick="nbFormBuilder.toggleGridLines()">📐 Grid Lines</button>
               <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" id="nbToggleLivePreview" onclick="nbToggleLivePreviewSplit()">👁 Split Preview</button>
               <button type="button" class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nbFormBuilder.addRow()">+ Add Row</button>
             </div>

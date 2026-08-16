@@ -448,19 +448,29 @@ body {
   margin-bottom: 8px;
   background: var(--bg-card);
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .nb-cfield-header {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; cursor: pointer; user-select: none;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .nb-cfield-header:hover { background: var(--bg-hover); border-radius: var(--radius-sm); }
-.nb-cfield-drag { cursor: grab; color: var(--text-muted); font-size: 16px; }
+.nb-cfield-drag { cursor: grab; color: var(--text-muted); font-size: 16px; flex-shrink: 0; }
 .nb-cfield-type-badge {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
   background: var(--primary); color: #fff; padding: 2px 7px; border-radius: 10px;
   flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.nb-cfield-label  { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-cfield-label  { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nb-cfield-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .nb-cfield-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; padding: 2px 6px; border-radius: 4px; }
 .nb-cfield-btn:hover { background: var(--bg-hover); }
@@ -555,6 +565,31 @@ body {
   align-items: start;
 }
 .nb-row-drop > .nb-cfield { margin-bottom: 0; }
+
+/* ══ Form Designer — 12-Column Grid Lines Overlay & Alignment Guides ═════════ */
+.nb-show-gridlines .nb-row-body,
+.nb-show-gridlines .nb-row-drop {
+  position: relative;
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(79, 107, 237, 0.08) 0,
+    rgba(79, 107, 237, 0.08) calc((100% - 44px) / 12),
+    transparent calc((100% - 44px) / 12),
+    transparent calc((100% - 44px) / 12 + 4px)
+  ) !important;
+  background-size: 100% 100%;
+}
+
+.nb-show-gridlines #formCanvas {
+  background-image: linear-gradient(to right, rgba(79, 107, 237, 0.05) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(79, 107, 237, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.nb-show-gridlines .nb-cfield {
+  outline: 1px dashed rgba(79, 107, 237, 0.35);
+  outline-offset: -1px;
+}
 
 /* ══ Builder canvas — SECTION container ════════════════════════════════════ */
 .nb-section {
