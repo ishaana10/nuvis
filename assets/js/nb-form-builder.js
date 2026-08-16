@@ -47,8 +47,8 @@
       '.nb-row.drag-row-over,.nb-container.drag-row-over{outline:2px dashed var(--color-primary,#4f6bed);outline-offset:2px;}',
       '.nb-row.drag-row-source,.nb-container.drag-row-source{opacity:.45;}',
       '.nb-row-drop-hint{color:var(--text-muted,#aaa);font-size:12px;text-align:center;padding:10px 0;width:100%;}',
-      '.nb-row-body{display:flex;flex-wrap:nowrap;align-items:stretch;gap:4px;padding:6px;min-height:48px;position:relative;}',
-      '.nb-cfield{position:relative;display:flex;flex-direction:column;min-width:80px;background:var(--bg-card,#fff);border:1.5px solid var(--border,#dde1f0);border-radius:7px;overflow:visible;cursor:pointer;transition:border-color .15s;}',
+      '.nb-row-body{display:flex;flex-wrap:nowrap;align-items:stretch;gap:4px;padding:6px;min-height:48px;position:relative;max-width:100%;overflow-x:hidden;}',
+      '.nb-cfield{position:relative;display:flex;flex-direction:column;min-width:80px;max-width:100%;box-sizing:border-box;background:var(--bg-card,#fff);border:1.5px solid var(--border,#dde1f0);border-radius:7px;overflow:hidden;cursor:pointer;transition:border-color .15s;}',
       '.nb-cfield:hover{border-color:var(--color-primary,#4f6bed);}',
       '.nb-cfield.nb-cfield-selected{border-color:var(--color-primary,#4f6bed);box-shadow:0 0 0 2px rgba(79,107,237,.18);}',
       '.nb-cfield-resize{position:absolute;top:0;right:-4px;width:8px;height:100%;cursor:col-resize;z-index:10;display:flex;align-items:center;justify-content:center;}',
@@ -970,6 +970,9 @@ function _openPropsPanel(card) {
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        if (card.dataset.col) {
+          window.nbFormBuilder._applyColSpan(card, card.dataset.col);
+        }
         window.nbFormBuilder._isDirty = true;
       }
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
@@ -1729,6 +1732,35 @@ fields.forEach(function (f) {
       } else {
         document.body.style.overflow = '';
       }
+    },
+
+    toggleGridLines: function (forceState) {
+      var canvas = document.getElementById('formCanvas');
+      var btn = document.getElementById('nbToggleGridLines');
+      var show = forceState !== undefined ? forceState : !document.body.classList.contains('nb-show-gridlines');
+      if (show) {
+        document.body.classList.add('nb-show-gridlines');
+        if (canvas) canvas.classList.add('nb-show-gridlines');
+        if (btn) {
+          btn.classList.add('nu-btn-primary');
+          btn.classList.remove('nu-btn-ghost');
+        }
+        localStorage.setItem('nu_form_builder_gridlines', 'true');
+      } else {
+        document.body.classList.remove('nb-show-gridlines');
+        if (canvas) canvas.classList.remove('nb-show-gridlines');
+        if (btn) {
+          btn.classList.remove('nu-btn-primary');
+          btn.classList.add('nu-btn-ghost');
+        }
+        localStorage.setItem('nu_form_builder_gridlines', 'false');
+      }
+    },
+
+    initGridLines: function () {
+      var saved = localStorage.getItem('nu_form_builder_gridlines');
+      var enabled = saved === 'true';
+      this.toggleGridLines(enabled);
     },
 
     showCustomJoinsHelp: function () {
@@ -3703,6 +3735,7 @@ entry.fields.forEach(function (f) {
       }
     });
     _ensurePropsPanel();
+    window.nbFormBuilder.initGridLines();
 
     var builderCard = document.getElementById('formBuilderCard');
     if (builderCard) {
