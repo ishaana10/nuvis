@@ -69,21 +69,24 @@ $mem0ApiKey = $mem0KeyRow['setting_value'] ?? '';
 <div class="nu-ai-wrap">
     <div class="nu-ai-header">
         <div>
-            <h3 class="nu-ai-title"><i class="fas fa-robot text-primary mr-2"></i>AI Agents Builder & Studio</h3>
+            <h3 class="nu-ai-title" style="display:flex; align-items:center; gap:8px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+                AI Agents Builder & Studio
+            </h3>
             <div class="nu-ai-sub">Configure autonomous agent definitions, prompt systems, tools, memory, and monitor execution traces.</div>
         </div>
-        <div>
-            <button class="nu-ai-btn" onclick="nuAiStudio.openAgentModal()"><i class="fas fa-plus"></i> New Agent</button>
-            <button class="nu-ai-btn-outline" onclick="nuAiStudio.openSettingsModal()"><i class="fas fa-key"></i> API Keys (Gemini / Mem0)</button>
-            <button class="nu-ai-btn-outline" onclick="nuAiStudio.switchTab('runs')"><i class="fas fa-history"></i> Activity Logs</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <button class="nu-ai-btn" onclick="nuAiStudio.openAgentModal()">+ New Agent</button>
+            <button class="nu-ai-btn-outline" onclick="nuAiStudio.openSettingsModal()">🔑 API Keys (Gemini / Mem0)</button>
+            <button class="nu-ai-btn-outline" onclick="nuAiStudio.switchTab('runs')">📋 Activity Logs</button>
         </div>
     </div>
 
     <!-- Navigation Tabs -->
     <div class="nu-ai-nav">
-        <div class="nu-ai-nav-item active" id="nav-agents" onclick="nuAiStudio.switchTab('agents')"><i class="fas fa-cubes"></i> Agent Definitions</div>
-        <div class="nu-ai-nav-item" id="nav-runs" onclick="nuAiStudio.switchTab('runs')"><i class="fas fa-tasks"></i> Execution Runs & Traces</div>
-        <div class="nu-ai-nav-item" id="nav-playground" onclick="nuAiStudio.switchTab('playground')"><i class="fas fa-vial"></i> Test Playground</div>
+        <div class="nu-ai-nav-item active" id="nav-agents" onclick="nuAiStudio.switchTab('agents')">🤖 Agent Definitions</div>
+        <div class="nu-ai-nav-item" id="nav-runs" onclick="nuAiStudio.switchTab('runs')">📊 Execution Runs & Traces</div>
+        <div class="nu-ai-nav-item" id="nav-playground" onclick="nuAiStudio.switchTab('playground')">🧪 Test Playground</div>
     </div>
 
     <!-- Tab 1: Agent Definitions -->
@@ -252,17 +255,23 @@ Select an agent, enter a prompt, and click Run Execution.
         <div class="nu-ai-modal-body">
             <div class="nu-ai-form-group">
                 <label>Google Gemini API Key</label>
-                <input type="password" class="nu-ai-input" id="gemini_api_key" value="<?= htmlspecialchars($geminiApiKey) ?>" placeholder="AIzaSy...">
+                <div style="position:relative; display:flex; align-items:center;">
+                    <input type="password" class="nu-ai-input" id="gemini_api_key" value="<?= htmlspecialchars($geminiApiKey) ?>" placeholder="AIzaSy..." style="padding-right:65px;">
+                    <button type="button" class="nu-ai-btn-outline" style="position:absolute; right:4px; padding:3px 8px; font-size:11px;" onclick="nuAiStudio.toggleKeyVisibility('gemini_api_key', this)">Show</button>
+                </div>
             </div>
             <div class="nu-ai-form-group">
                 <label>Mem0.ai API Key</label>
-                <input type="password" class="nu-ai-input" id="mem0_api_key" value="<?= htmlspecialchars($mem0ApiKey) ?>" placeholder="m0-...">
-                <div class="nu-ai-sub">Mem0 provides persistent long-term memory for AI agents.</div>
+                <div style="position:relative; display:flex; align-items:center;">
+                    <input type="password" class="nu-ai-input" id="mem0_api_key" value="<?= htmlspecialchars($mem0ApiKey) ?>" placeholder="m0-..." style="padding-right:65px;">
+                    <button type="button" class="nu-ai-btn-outline" style="position:absolute; right:4px; padding:3px 8px; font-size:11px;" onclick="nuAiStudio.toggleKeyVisibility('mem0_api_key', this)">Show</button>
+                </div>
+                <div class="nu-ai-sub" style="margin-top:6px;">Mem0 provides persistent long-term memory for AI agents.</div>
             </div>
         </div>
         <div class="nu-ai-modal-footer">
             <button class="nu-ai-btn-outline" onclick="nuAiStudio.closeSettingsModal()">Cancel</button>
-            <button class="nu-ai-btn" onclick="nuAiStudio.saveSettings()"><i class="fas fa-check"></i> Save Keys</button>
+            <button class="nu-ai-btn" onclick="nuAiStudio.saveSettings()">Save Keys</button>
         </div>
     </div>
 </div>
@@ -329,12 +338,12 @@ window.nuAiStudio = {
                 <td><code>${a.agent_code}</code></td>
                 <td style="font-weight:600;">${a.agent_name}</td>
                 <td><span class="nu-ai-badge nu-badge-info">${a.agent_model || 'gemini-1.5-flash'}</span></td>
-                <td>${(a.agent_tools || []).map(t => `<span class="nu-ai-badge nu-badge-inactive" style="margin-right:4px;">${t}</span>`).join('')}</td>
+                <td>${(a.agent_tools || []).map(t => `<span class="nu-ai-badge nu-badge-inactive" style="margin-right:4px; margin-bottom:4px; display:inline-block;">${t}</span>`).join('')}</td>
                 <td>${a.agent_memory_type || 'conversation'}</td>
                 <td>${a.agent_active == 1 ? '<span class="nu-ai-badge nu-badge-active">Active</span>' : '<span class="nu-ai-badge nu-badge-inactive">Inactive</span>'}</td>
-                <td style="text-align:right;">
-                    <button class="nu-ai-btn-outline" style="padding:4px 8px;" onclick="nuAiStudio.editAgent(${a.agent_id})"><i class="fas fa-edit"></i></button>
-                    <button class="nu-ai-btn-outline" style="padding:4px 8px; color:#e11d48;" onclick="nuAiStudio.deleteAgent(${a.agent_id})"><i class="fas fa-trash"></i></button>
+                <td style="text-align:right; white-space:nowrap;">
+                    <button class="nu-ai-btn-outline" style="padding:4px 10px; font-size:12px; margin-right:4px;" onclick="nuAiStudio.editAgent(${a.agent_id})">Edit</button>
+                    <button class="nu-ai-btn-outline" style="padding:4px 10px; font-size:12px; color:#e11d48; border-color:#fca5a5;" onclick="nuAiStudio.deleteAgent(${a.agent_id})">Delete</button>
                 </td>
             </tr>
         `).join('');
@@ -437,7 +446,30 @@ window.nuAiStudio = {
     },
 
     openSettingsModal: function() {
-        document.getElementById('settingsModalOverlay').classList.add('open');
+        fetch('api/agent.php?action=get_settings')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('gemini_api_key').value = data.gemini_api_key || '';
+                    document.getElementById('mem0_api_key').value = data.mem0_api_key || '';
+                }
+                document.getElementById('settingsModalOverlay').classList.add('open');
+            })
+            .catch(() => {
+                document.getElementById('settingsModalOverlay').classList.add('open');
+            });
+    },
+
+    toggleKeyVisibility: function(inputId, btn) {
+        const inp = document.getElementById(inputId);
+        if (!inp) return;
+        if (inp.type === 'password') {
+            inp.type = 'text';
+            btn.innerText = 'Hide';
+        } else {
+            inp.type = 'password';
+            btn.innerText = 'Show';
+        }
     },
 
     closeSettingsModal: function() {

@@ -53,38 +53,21 @@ try {
             echo json_encode(['success' => true, 'data' => $agent]);
             break;
 
+        case 'get_settings':
+            $geminiKeyRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'gemini_api_key'");
+            $mem0KeyRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'mem0_api_key'");
+            echo json_encode([
+                'success' => true,
+                'gemini_api_key' => $geminiKeyRow['setting_value'] ?? '',
+                'mem0_api_key' => $mem0KeyRow['setting_value'] ?? ''
+            ]);
+            break;
+
         case 'save':
             $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
             $id = (int)($input['agent_id'] ?? 0);
-            $code = trim($input['agent_code'] ?? 'agent_' . time());
-            $name = trim($input['agent_name'] ?? 'New Agent');
-            $prompt = $input['agent_system_prompt'] ?? '';
-            $model = $input['agent_model'] ?? 'gemini-1.5-flash';
-            $tools = is_array($input['agent_tools'] ?? null) ? json_encode($input['agent_tools']) : ($input['agent_tools'] ?? '[]');
-            $memoryType = $input['agent_memory_type'] ?? 'conversation';
-            $maxTokens = (int)($input['agent_max_tokens'] ?? 2000);
-            $active = isset($input['agent_active']) ? (int)$input['agent_active'] : 1;
 
-            $saveData = [
-                'agent_code' => $code,
-                'agent_name' => $name,
-                'agent_system_prompt' => $prompt,
-                'agent_model' => $model,
-                'agent_tools' => $tools,
-                'agent_memory_type' => $memoryType,
-                'agent_max_tokens' => $maxTokens,
-                'agent_active' => $active,
-                'agent_updated_at' => date('Y-m-d H:i:s')
-            ];
-
-            if ($id > 0) {
-                $db->update('nu_agents', $saveData, 'agent_id = ?', [$id]);
-            } else {
-                $saveData['agent_created_at'] = date('Y-m-d H:i:s');
-                $id = $db->insert('nu_agents', $saveData);
-            }
-
-            // Check if API keys were provided in settings save
+            // Save system settings if keys are supplied
             if (isset($input['gemini_api_key'])) {
                 $apiKey = trim($input['gemini_api_key']);
                 $hasSetting = $db->fetchOne("SELECT setting_key FROM nu_system_settings WHERE setting_key = 'gemini_api_key'");
@@ -102,6 +85,37 @@ try {
                     $db->update('nu_system_settings', ['setting_value' => $mem0Key], "setting_key = 'mem0_api_key'");
                 } else {
                     $db->insert('nu_system_settings', ['setting_key' => 'mem0_api_key', 'setting_value' => $mem0Key]);
+                }
+            }
+
+            // Only save/insert agent definition if agent fields are present
+            if (isset($input['agent_name']) || isset($input['agent_code']) || $id > 0) {
+                $code = trim($input['agent_code'] ?? 'agent_' . time());
+                $name = trim($input['agent_name'] ?? 'New Agent');
+                $prompt = $input['agent_system_prompt'] ?? '';
+                $model = $input['agent_model'] ?? 'gemini-1.5-flash';
+                $tools = is_array($input['agent_tools'] ?? null) ? json_encode($input['agent_tools']) : ($input['agent_tools'] ?? '[]');
+                $memoryType = $input['agent_memory_type'] ?? 'conversation';
+                $maxTokens = (int)($input['agent_max_tokens'] ?? 2000);
+                $active = isset($input['agent_active']) ? (int)$input['agent_active'] : 1;
+
+                $saveData = [
+                    'agent_code' => $code,
+                    'agent_name' => $name,
+                    'agent_system_prompt' => $prompt,
+                    'agent_model' => $model,
+                    'agent_tools' => $tools,
+                    'agent_memory_type' => $memoryType,
+                    'agent_max_tokens' => $maxTokens,
+                    'agent_active' => $active,
+                    'agent_updated_at' => date('Y-m-d H:i:s')
+                ];
+
+                if ($id > 0) {
+                    $db->update('nu_agents', $saveData, 'agent_id = ?', [$id]);
+                } else {
+                    $saveData['agent_created_at'] = date('Y-m-d H:i:s');
+                    $id = $db->insert('nu_agents', $saveData);
                 }
             }
 
