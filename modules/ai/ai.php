@@ -9,6 +9,9 @@ require_once __DIR__ . '/../../core/Database.php';
 $db = NuDatabase::getInstance();
 $geminiKeyRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'gemini_api_key'");
 $geminiApiKey = $geminiKeyRow['setting_value'] ?? '';
+
+$mem0KeyRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'mem0_api_key'");
+$mem0ApiKey = $mem0KeyRow['setting_value'] ?? '';
 ?>
 
 <style>
@@ -71,7 +74,7 @@ $geminiApiKey = $geminiKeyRow['setting_value'] ?? '';
         </div>
         <div>
             <button class="nu-ai-btn" onclick="nuAiStudio.openAgentModal()"><i class="fas fa-plus"></i> New Agent</button>
-            <button class="nu-ai-btn-outline" onclick="nuAiStudio.openSettingsModal()"><i class="fas fa-key"></i> Gemini API Key</button>
+            <button class="nu-ai-btn-outline" onclick="nuAiStudio.openSettingsModal()"><i class="fas fa-key"></i> API Keys (Gemini / Mem0)</button>
             <button class="nu-ai-btn-outline" onclick="nuAiStudio.switchTab('runs')"><i class="fas fa-history"></i> Activity Logs</button>
         </div>
     </div>
@@ -198,7 +201,8 @@ Select an agent, enter a prompt, and click Run Execution.
                     <label>Memory Strategy</label>
                     <select class="nu-ai-select" id="agent_memory_type">
                         <option value="conversation">Conversation Window</option>
-                        <option value="entity">Entity / Context Facts</option>
+                        <option value="mem0">Mem0.ai Persistent Memory</option>
+                        <option value="entity">Entity / Local Facts</option>
                         <option value="none">Stateless / None</option>
                     </select>
                 </div>
@@ -220,6 +224,8 @@ Select an agent, enter a prompt, and click Run Execution.
                     <label class="nu-tool-item"><input type="checkbox" class="tool-cb" value="call_webhook"> call_webhook</label>
                     <label class="nu-tool-item"><input type="checkbox" class="tool-cb" value="start_workflow"> start_workflow</label>
                     <label class="nu-tool-item"><input type="checkbox" class="tool-cb" value="advance_workflow"> advance_workflow</label>
+                    <label class="nu-tool-item"><input type="checkbox" class="tool-cb" value="add_memory"> add_memory</label>
+                    <label class="nu-tool-item"><input type="checkbox" class="tool-cb" value="search_memory"> search_memory</label>
                 </div>
             </div>
 
@@ -236,23 +242,27 @@ Select an agent, enter a prompt, and click Run Execution.
     </div>
 </div>
 
-<!-- Modal: Gemini Settings -->
+<!-- Modal: Settings (Gemini & Mem0) -->
 <div class="nu-ai-modal-overlay" id="settingsModalOverlay">
-    <div class="nu-ai-modal" style="width: 480px;">
+    <div class="nu-ai-modal" style="width: 520px;">
         <div class="nu-ai-modal-header">
-            <span>Gemini API Key Configuration</span>
+            <span>API Keys Configuration</span>
             <button class="nu-ai-modal-close" onclick="nuAiStudio.closeSettingsModal()">&times;</button>
         </div>
         <div class="nu-ai-modal-body">
             <div class="nu-ai-form-group">
                 <label>Google Gemini API Key</label>
                 <input type="password" class="nu-ai-input" id="gemini_api_key" value="<?= htmlspecialchars($geminiApiKey) ?>" placeholder="AIzaSy...">
-                <div class="nu-ai-sub">Provided API keys are securely saved in `nu_system_settings`.</div>
+            </div>
+            <div class="nu-ai-form-group">
+                <label>Mem0.ai API Key</label>
+                <input type="password" class="nu-ai-input" id="mem0_api_key" value="<?= htmlspecialchars($mem0ApiKey) ?>" placeholder="m0-...">
+                <div class="nu-ai-sub">Mem0 provides persistent long-term memory for AI agents.</div>
             </div>
         </div>
         <div class="nu-ai-modal-footer">
             <button class="nu-ai-btn-outline" onclick="nuAiStudio.closeSettingsModal()">Cancel</button>
-            <button class="nu-ai-btn" onclick="nuAiStudio.saveSettings()"><i class="fas fa-check"></i> Save Key</button>
+            <button class="nu-ai-btn" onclick="nuAiStudio.saveSettings()"><i class="fas fa-check"></i> Save Keys</button>
         </div>
     </div>
 </div>
@@ -436,15 +446,16 @@ window.nuAiStudio = {
 
     saveSettings: function() {
         const key = document.getElementById('gemini_api_key').value;
+        const mem0Key = document.getElementById('mem0_api_key').value;
         fetch('api/agent.php?action=save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({agent_id: 0, gemini_api_key: key})
+            body: JSON.stringify({agent_id: 0, gemini_api_key: key, mem0_api_key: mem0Key})
         })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                alert('API Key saved successfully!');
+                alert('API Keys saved successfully!');
                 this.closeSettingsModal();
             }
         });
