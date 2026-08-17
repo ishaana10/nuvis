@@ -34,8 +34,8 @@ class NuAuth {
         if (!$user) return ['success' => false, 'message' => 'Invalid credentials'];
 
         if ($user['usr_failed_attempts'] >= $this->config['maxLoginAttempts']) {
-            $lastAttempt = strtotime($user['usr_last_attempt']);
-            if (time() - $lastAttempt < $this->config['lockoutDuration']) {
+            $lastAttempt = strtotime((string)($user['usr_last_attempt'] ?? ''));
+            if ($lastAttempt && (time() - $lastAttempt < $this->config['lockoutDuration'])) {
                 return ['success' => false, 'message' => 'Account locked. Try again later.'];
             }
             $this->resetAttempts($user['usr_id']);
@@ -362,9 +362,10 @@ class NuAuth {
     }
 
     private function incrementAttempts($userId) {
+        $nowStr = date('Y-m-d H:i:s');
         $this->db->query(
-            "UPDATE nu_users SET usr_failed_attempts = usr_failed_attempts + 1, usr_last_attempt = NOW() WHERE usr_id = :id",
-            [':id' => $userId]
+            "UPDATE nu_users SET usr_failed_attempts = usr_failed_attempts + 1, usr_last_attempt = :now WHERE usr_id = :id",
+            [':now' => $nowStr, ':id' => $userId]
         );
     }
 
