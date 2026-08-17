@@ -49,7 +49,7 @@ class GeminiClient implements LLMClientInterface
         return $this->sendChatRequest($model, $params);
     }
 
-    private function sendChatRequest(string $model, array $params, bool $isRetry = false): array
+    private function sendChatRequest(string $model, array $params, int $retryIndex = 0): array
     {
         $url = $this->baseUrl . $model . ':generateContent?key=' . urlencode($this->apiKey);
 
@@ -152,9 +152,19 @@ class GeminiClient implements LLMClientInterface
             $errData = json_decode((string)$response, true);
             $msg = $errData['error']['message'] ?? $error ?: "HTTP Error {$httpCode}";
 
-            // If model is not found or unsupported on v1beta, try fallback to gemini-2.0-flash once
-            if (!$isRetry && (str_contains($msg, 'not found') || str_contains($msg, 'not supported')) && $model !== 'gemini-2.0-flash') {
-                return $this->sendChatRequest('gemini-2.0-flash', $params, true);
+            // Multi-model fallback sequence if model is unavailable/deprecated
+            $fallbackModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'];
+            $isModelError = str_contains($msg, 'not found') || str_contains($msg, 'not supported') || str_contains($msg, 'no longer available');
+
+            if ($isModelError && $retryIndex < count($fallbackModels)) {
+                // Find next distinct model in sequence
+                while ($retryIndex < count($fallbackModels) && $fallbackModels[$retryIndex] === $model) {
+                    $retryIndex++;
+                }
+                if ($retryIndex < count($fallbackModels)) {
+                    $nextModel = $fallbackModels[$retryIndex];
+                    return $this->sendChatRequest($nextModel, $params, $retryIndex + 1);
+                }
             }
 
             throw new RuntimeException("Gemini API Error: " . $msg);

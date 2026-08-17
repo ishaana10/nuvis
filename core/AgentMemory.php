@@ -191,6 +191,55 @@ class AgentMemory
         } catch (Throwable $e) {}
     }
 
+    public function searchMemories(string $query): array
+    {
+        $entityKey = $this->context['record_id'] ?? $this->context['user_id'] ?? 'global';
+
+        // Check if Mem0 is configured
+        if ($this->definition->memoryType === 'mem0') {
+            $apiKey = $this->getMem0ApiKey();
+            if (!empty($apiKey)) {
+                try {
+                    $url = 'https://api.mem0.ai/v1/memories/search/';
+                    $payload = [
+                        'user_id' => (string)$entityKey,
+                        'agent_id' => (string)$this->definition->id,
+                        'query' => $query
+                    ];
+
+                    $ch = curl_init($url);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        'Content-Type: application/json',
+                        'Authorization: Token ' . $apiKey
+                    ]);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($httpCode === 200 && !empty($response)) {
+                        $data = json_decode($response, true);
+                        return is_array($data) ? ($data['results'] ?? $data) : [];
+                    }
+                } catch (Throwable $e) {}
+            }
+        }
+
+        // Local DB search fallback
+        try {
+            return $this->db->fetchAll(
+                "SELECT mem_key, mem_value FROM nu_agent_memory WHERE agent_id = :aid AND entity_key = :ek AND (mem_key LIKE :q OR mem_value LIKE :q) ORDER BY mem_updated_at DESC LIMIT 10",
+                [':aid' => $this->definition->id, ':ek' => (string)$entityKey, ':q' => '%' . $query . '%']
+            );
+        } catch (Throwable $e) {
+            return [];
+        }
+    }
+
     public function saveMem0Memory(string $apiKey, string $entityKey, string $text): bool
     {
         try {

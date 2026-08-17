@@ -485,6 +485,10 @@ class WorkflowEngine
                         $promptTemplate = $hookConfig['prompt'] ?? $hookConfig['instruction'] ?? "Process record #{{record.id}} for workflow instance #{{instance.wfi_id}}";
                         $userPrompt = $this->replacePlaceholders($promptTemplate, $record, $instance, $actorName, $comment);
 
+                        if (!class_exists('AgentRuntime') && file_exists(__DIR__ . '/AgentRuntime.php')) {
+                            require_once __DIR__ . '/AgentRuntime.php';
+                        }
+
                         if ($agentId && class_exists('AgentRuntime')) {
                             $auth = class_exists('NuAuth') ? new NuAuth() : null;
                             $runtime = new AgentRuntime($this->db, $auth);
