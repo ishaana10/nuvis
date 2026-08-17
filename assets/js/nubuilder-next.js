@@ -389,6 +389,9 @@ window.NuApp = {
       window.nuSubform.initAll(box);
     }
     document.dispatchEvent(new CustomEvent('nu:form:opened', { detail: { scope: box } }));
+    if (window.nuInitAskAgent) {
+      window.nuInitAskAgent(box);
+    }
   },
 
   _renderBreadcrumb(crumbs) {
@@ -2773,6 +2776,125 @@ document.addEventListener('change', function(e) {
     }
   }
 });
+
+// AI Agent Form Assistant ("Ask Agent") Injection
+window.nuInitAskAgent = function(scope) {
+  scope = scope || document;
+  const isGlobeAdmin = (window.nuUserRole || '').toLowerCase() === 'globeadmin' || (window.nuUserMeta && window.nuUserMeta.role === 'globeadmin');
+  if (!isGlobeAdmin) return;
+
+  const formEl = scope.querySelector('.nu-generated-form');
+  if (!formEl) return;
+
+  const actionsBar = formEl.querySelector('.nu-form-actions') || formEl.querySelector('.form-actions') || formEl;
+  if (actionsBar.querySelector('.nu-ask-agent-btn')) return;
+
+  const askBtn = document.createElement('button');
+  askBtn.type = 'button';
+  askBtn.className = 'btn btn-outline-info btn-sm mr-2 nu-ask-agent-btn';
+  askBtn.innerHTML = '<i class="fas fa-robot mr-1"></i> Ask Agent';
+  askBtn.style.cssText = 'margin-left:8px;font-weight:600;display:inline-flex;align-items:center;gap:4px;';
+
+  askBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    window.nuOpenAgentChatOverlay(formEl);
+  });
+
+  if (actionsBar.lastChild) {
+    actionsBar.appendChild(askBtn);
+  } else {
+    actionsBar.prepend(askBtn);
+  }
+};
+
+window.nuOpenAgentChatOverlay = function(formEl) {
+  let existingOverlay = document.getElementById('nuAgentChatOverlay');
+  if (existingOverlay) existingOverlay.remove();
+
+  const formCode = formEl.dataset.formCode || '';
+  const pkInput = formEl.querySelector('input[type="hidden"][name^="id"], input[type="hidden"][name$="_id"], input[name="id"]');
+  const recordId = pkInput ? pkInput.value : '';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'nuAgentChatOverlay';
+  overlay.style.cssText = 'position:fixed;bottom:20px;right:20px;width:380px;height:520px;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.25);z-index:99999;display:flex;flex-direction:column;overflow:hidden;border:1px solid #e2e8f0;font-family:sans-serif;';
+
+  overlay.innerHTML = `
+    <div style="background:#1e293b;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;">
+        <i class="fas fa-robot text-info"></i> Nuvis AI Assistant
+      </div>
+      <button type="button" onclick="document.getElementById('nuAgentChatOverlay').remove()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">&times;</button>
+    </div>
+    <div id="nuAgentChatMessages" style="flex:1;padding:12px;overflow-y:auto;background:#f8fafc;display:flex;flex-direction:column;gap:8px;font-size:13px;">
+      <div style="background:#e2e8f0;color:#334155;padding:8px 12px;border-radius:8px;align-self:flex-start;max-width:85%;">
+        Hello! I am your AI assistant. How can I help you with this record (${formCode} #${recordId || 'New'})?
+      </div>
+    </div>
+    <div style="padding:10px;background:#fff;border-top:1px solid #e2e8f0;display:flex;gap:6px;">
+      <input type="text" id="nuAgentChatInput" placeholder="Ask agent..." style="flex:1;border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;">
+      <button type="button" id="nuAgentSendBtn" style="background:#0284c7;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Send</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const inputEl = document.getElementById('nuAgentChatInput');
+  const sendBtn = document.getElementById('nuAgentSendBtn');
+  const msgArea = document.getElementById('nuAgentChatMessages');
+
+  const sendMessage = function() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    const userBubble = document.createElement('div');
+    userBubble.style.cssText = 'background:#0284c7;color:#fff;padding:8px 12px;border-radius:8px;align-self:flex-end;max-width:85%;';
+    userBubble.textContent = text;
+    msgArea.appendChild(userBubble);
+    inputEl.value = '';
+    msgArea.scrollTop = msgArea.scrollHeight;
+
+    const botBubble = document.createElement('div');
+    botBubble.style.cssText = 'background:#e2e8f0;color:#334155;padding:8px 12px;border-radius:8px;align-self:flex-start;max-width:85%;';
+    botBubble.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking...';
+    msgArea.appendChild(botBubble);
+    msgArea.scrollTop = msgArea.scrollHeight;
+
+    fetch('api/agent.php?action=run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        agent_id: 1,
+        message: text,
+        context: {
+          form_code: formCode,
+          record_id: recordId,
+          user_role: window.nuUserRole || 'globeadmin'
+        }
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        botBubble.textContent = data.answer || 'Done.';
+      } else {
+        botBubble.textContent = 'Error: ' + (data.error || 'Request failed');
+      }
+      msgArea.scrollTop = msgArea.scrollHeight;
+    })
+    .catch(err => {
+      botBubble.textContent = 'Network error occurred.';
+    });
+  };
+
+  sendBtn.addEventListener('click', sendMessage);
+  inputEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+};
 
 // window.nuGroupToggle function for collapsible layout sections
 window.nuGroupToggle = function(headerEl) {

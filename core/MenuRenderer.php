@@ -106,6 +106,23 @@ class NuMenuRenderer
                     ]);
                 }
 
+                $existsAi = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'ai'");
+                if (!$existsAi) {
+                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
+                    $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : null;
+                    $db->insert('nu_menus', [
+                        'menu_label' => 'AI Agents Studio',
+                        'menu_type'  => 'module',
+                        'menu_target' => 'ai',
+                        'menu_parent_id' => $parentId,
+                        'menu_order' => 12,
+                        'menu_roles' => 'globeadmin',
+                        'menu_role_access' => '["globeadmin"]',
+                        'menu_active' => 1,
+                        'menu_icon' => 'fas fa-robot'
+                    ]);
+                }
+
                 $existsApi = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'api_manager'");
                 if (!$existsApi) {
                     $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");

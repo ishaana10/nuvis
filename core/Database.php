@@ -100,6 +100,12 @@ class NuDatabase {
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_transitions (wft_id INTEGER PRIMARY KEY, wft_wf_id INTEGER, wft_from_id INTEGER, wft_to_id INTEGER, wft_action TEXT, wft_label TEXT, wft_condition TEXT, wft_hook TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_history (wfh_id INTEGER PRIMARY KEY, wfh_wfi_id INTEGER, wfh_from_id INTEGER, wfh_to_id INTEGER, wfh_action TEXT, wfh_actor_id INTEGER, wfh_comment TEXT, wfh_acted_at TEXT)");
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_webhooks (webhook_id INTEGER PRIMARY KEY, webhook_name TEXT, webhook_url TEXT, webhook_secret TEXT, webhook_events TEXT, webhook_active INTEGER)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agents (agent_id INTEGER PRIMARY KEY, agent_code TEXT UNIQUE, agent_name TEXT, agent_system_prompt TEXT, agent_model TEXT, agent_tools TEXT, agent_tool_config TEXT, agent_memory_type TEXT, agent_max_tokens INTEGER, agent_active INTEGER, agent_created_at TEXT, agent_updated_at TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_runs (run_id INTEGER PRIMARY KEY, agent_id INTEGER, run_status TEXT, input_prompt TEXT, output_text TEXT, error_message TEXT, context TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, total_tokens INTEGER, started_at TEXT, completed_at TEXT, created_at TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_messages (msg_id INTEGER PRIMARY KEY, run_id INTEGER, msg_role TEXT, msg_content TEXT, msg_raw TEXT, created_at TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_tool_calls (tool_id INTEGER PRIMARY KEY, run_id INTEGER, tool_call_id TEXT, tool_name TEXT, tool_arguments TEXT, tool_result TEXT, created_at TEXT)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_memory (mem_id INTEGER PRIMARY KEY, agent_id INTEGER, entity_key TEXT, mem_key TEXT, mem_value TEXT, mem_created_at TEXT, mem_updated_at TEXT)");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_agents (agent_id, agent_code, agent_name, agent_system_prompt, agent_model, agent_tools, agent_active) VALUES (1, 'default_assistant', 'Customer Support & Service Assistant', 'You are a helpful Nuvis enterprise AI assistant.', 'gemini-1.5-flash', '[\"query_records\",\"get_record\",\"create_record\",\"update_record\",\"run_procedure\",\"send_email\",\"call_webhook\",\"start_workflow\",\"advance_workflow\"]', 1)");
 
             // Seed sample data
             $nowStr = date('Y-m-d H:i:s');
@@ -144,6 +150,95 @@ class NuDatabase {
                     if ($sessionActive) {
                         $_SESSION['_nu_menu_columns_ensured'] = true;
                     }
+                }
+            } catch (Exception $ignored) {}
+        }
+
+        // Self-healing: Ensure AI Agent tables exist and are seeded
+        if (!$sessionActive || empty($_SESSION['_nu_agent_tables_ensured'])) {
+            try {
+                $hasAgentsTable = $this->pdo->query("SHOW TABLES LIKE 'nu_agents'")->fetch();
+                if (!$hasAgentsTable) {
+                    $this->pdo->exec("CREATE TABLE `nu_agents` (
+                        `agent_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `agent_code` VARCHAR(100) NOT NULL UNIQUE,
+                        `agent_name` VARCHAR(150) NOT NULL,
+                        `agent_system_prompt` TEXT DEFAULT NULL,
+                        `agent_model` VARCHAR(100) NOT NULL DEFAULT 'gemini-1.5-flash',
+                        `agent_tools` TEXT DEFAULT NULL,
+                        `agent_tool_config` TEXT DEFAULT NULL,
+                        `agent_memory_type` VARCHAR(50) NOT NULL DEFAULT 'conversation',
+                        `agent_max_tokens` INT NOT NULL DEFAULT 2000,
+                        `agent_active` TINYINT(1) NOT NULL DEFAULT 1,
+                        `agent_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        `agent_updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX `idx_agent_code` (`agent_code`),
+                        INDEX `idx_agent_active` (`agent_active`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                    $this->pdo->exec("CREATE TABLE `nu_agent_runs` (
+                        `run_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `agent_id` INT UNSIGNED NOT NULL,
+                        `run_status` VARCHAR(50) NOT NULL DEFAULT 'running',
+                        `input_prompt` TEXT DEFAULT NULL,
+                        `output_text` LONGTEXT DEFAULT NULL,
+                        `error_message` TEXT DEFAULT NULL,
+                        `context` TEXT DEFAULT NULL,
+                        `prompt_tokens` INT DEFAULT 0,
+                        `completion_tokens` INT DEFAULT 0,
+                        `total_tokens` INT DEFAULT 0,
+                        `started_at` DATETIME DEFAULT NULL,
+                        `completed_at` DATETIME DEFAULT NULL,
+                        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        INDEX `idx_run_agent` (`agent_id`),
+                        INDEX `idx_run_status` (`run_status`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                    $this->pdo->exec("CREATE TABLE `nu_agent_messages` (
+                        `msg_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `run_id` INT UNSIGNED NOT NULL,
+                        `msg_role` VARCHAR(50) NOT NULL,
+                        `msg_content` LONGTEXT DEFAULT NULL,
+                        `msg_raw` LONGTEXT DEFAULT NULL,
+                        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        INDEX `idx_msg_run` (`run_id`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                    $this->pdo->exec("CREATE TABLE `nu_agent_tool_calls` (
+                        `tool_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `run_id` INT UNSIGNED NOT NULL,
+                        `tool_call_id` VARCHAR(100) NOT NULL,
+                        `tool_name` VARCHAR(150) NOT NULL,
+                        `tool_arguments` LONGTEXT DEFAULT NULL,
+                        `tool_result` LONGTEXT DEFAULT NULL,
+                        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        INDEX `idx_tool_run` (`run_id`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                    $this->pdo->exec("CREATE TABLE `nu_agent_memory` (
+                        `mem_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `agent_id` INT UNSIGNED NOT NULL,
+                        `entity_key` VARCHAR(150) NOT NULL,
+                        `mem_key` VARCHAR(150) NOT NULL,
+                        `mem_value` TEXT DEFAULT NULL,
+                        `mem_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        `mem_updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX `idx_mem_agent_entity` (`agent_id`, `entity_key`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                    // Seed default agent definition
+                    $defaultTools = json_encode(['query_records', 'get_record', 'create_record', 'update_record', 'run_procedure', 'send_email', 'call_webhook', 'start_workflow', 'advance_workflow']);
+                    $this->pdo->prepare("INSERT INTO `nu_agents` (`agent_code`, `agent_name`, `agent_system_prompt`, `agent_model`, `agent_tools`) VALUES (?, ?, ?, ?, ?)")
+                        ->execute([
+                            'default_assistant',
+                            'Customer Support & Service Assistant',
+                            'You are a helpful Nuvis enterprise AI assistant. You process customer requests, query status details, run procedures, and manage workflow transitions.',
+                            'gemini-1.5-flash',
+                            $defaultTools
+                        ]);
+                }
+                if ($sessionActive) {
+                    $_SESSION['_nu_agent_tables_ensured'] = true;
                 }
             } catch (Exception $ignored) {}
         }

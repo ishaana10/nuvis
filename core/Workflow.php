@@ -306,34 +306,197 @@ class WorkflowEngine
                     }
                     break;
 
+                case 'run_procedure':
+                    try {
+                        $procCode = $hookConfig['procedure'] ?? $hookConfig['code'] ?? null;
+                        if ($procCode) {
+                            $params = $hookConfig['params'] ?? $hookConfig['arguments'] ?? [];
+                            if (is_array($params)) {
+                                array_walk_recursive($params, function(&$val) use ($record, $instance, $actorName, $comment) {
+                                    if (is_string($val)) {
+                                        $val = $this->replacePlaceholders($val, $record, $instance, $actorName, $comment);
+                                    }
+                                });
+                            } else {
+                                $params = [];
+                            }
+                            $params['_workflow_instance'] = $instance;
+                            $params['_record'] = $record;
+                            if (function_exists('nu_run_procedure')) {
+                                nu_run_procedure($procCode, $params);
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - Run Procedure] ' . $e->getMessage());
+                    }
+                    break;
+
+                case 'create_record':
+                    try {
+                        $targetTable = $hookConfig['table'] ?? null;
+                        $data = $hookConfig['data'] ?? [];
+                        if ($targetTable && is_array($data) && !empty($data)) {
+                            $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $targetTable);
+                            $insertData = [];
+                            foreach ($data as $k => $v) {
+                                $cleanKey = preg_replace('/[^a-zA-Z0-9_]/', '', (string)$k);
+                                if (is_string($v)) {
+                                    $v = $this->replacePlaceholders($v, $record, $instance, $actorName, $comment);
+                                }
+                                $insertData[$cleanKey] = $v;
+                            }
+                            if (!empty($insertData)) {
+                                $this->db->insert($cleanTable, $insertData);
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - Create Record] ' . $e->getMessage());
+                    }
+                    break;
+
                 case 'update_record':
                     try {
                         $targetTable = $hookConfig['table'] ?? $instance['wfi_record_table'];
-                        $targetField = $hookConfig['field'] ?? 'status';
-                        $targetVal = $hookConfig['value'] ?? null;
+                        $targetRecordId = $hookConfig['record_id'] ?? $instance['wfi_record_id'];
+                        $data = $hookConfig['data'] ?? null;
 
-                        if ($targetVal !== null) {
-                            $targetVal = $this->replacePlaceholders($targetVal, $record, $instance, $actorName, $comment);
-                        } else {
-                            $toStage = $this->db->fetchOne('SELECT wfs_code FROM nu_workflow_stages WHERE wfs_id = :id', [':id' => $transition['wft_to_id']]);
-                            $targetVal = $toStage['wfs_code'] ?? '';
-                        }
-
-                        if ($targetTable && $targetField) {
+                        if ($targetTable) {
                             $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $targetTable);
-                            $cleanField = preg_replace('/[^a-zA-Z0-9_]/', '', $targetField);
                             $pkCol = $this->getPrimaryKeyColumn($cleanTable);
 
-                            $recordId = $instance['wfi_record_id'];
-                            if ($recordId) {
-                                $this->db->query(
-                                    "UPDATE `{$cleanTable}` SET `{$cleanField}` = :val WHERE `{$pkCol}` = :id",
-                                    [':val' => $targetVal, ':id' => $recordId]
-                                );
+                            if (is_array($data) && !empty($data)) {
+                                $updateData = [];
+                                foreach ($data as $k => $v) {
+                                    $cleanKey = preg_replace('/[^a-zA-Z0-9_]/', '', (string)$k);
+                                    if (is_string($v)) {
+                                        $v = $this->replacePlaceholders($v, $record, $instance, $actorName, $comment);
+                                    }
+                                    $updateData[$cleanKey] = $v;
+                                }
+                                if (!empty($updateData) && $targetRecordId) {
+                                    $this->db->update($cleanTable, $updateData, "`{$pkCol}` = :id", [':id' => $targetRecordId]);
+                                }
+                            } else {
+                                $targetField = $hookConfig['field'] ?? 'status';
+                                $targetVal = $hookConfig['value'] ?? null;
+
+                                if ($targetVal !== null) {
+                                    $targetVal = $this->replacePlaceholders($targetVal, $record, $instance, $actorName, $comment);
+                                } else {
+                                    $toStage = $this->db->fetchOne('SELECT wfs_code FROM nu_workflow_stages WHERE wfs_id = :id', [':id' => $transition['wft_to_id']]);
+                                    $targetVal = $toStage['wfs_code'] ?? '';
+                                }
+
+                                if ($targetField && $targetRecordId) {
+                                    $cleanField = preg_replace('/[^a-zA-Z0-9_]/', '', $targetField);
+                                    $this->db->query(
+                                        "UPDATE `{$cleanTable}` SET `{$cleanField}` = :val WHERE `{$pkCol}` = :id",
+                                        [':val' => $targetVal, ':id' => $targetRecordId]
+                                    );
+                                }
                             }
                         }
                     } catch (Throwable $e) {
                         error_log('[Workflow Hook Error - Update Record] ' . $e->getMessage());
+                    }
+                    break;
+
+                case 'http_request':
+                    try {
+                        $url = $hookConfig['url'] ?? null;
+                        if ($url) {
+                            $method = strtoupper($hookConfig['method'] ?? 'POST');
+                            $headers = $hookConfig['headers'] ?? ['Content-Type: application/json'];
+                            $body = $hookConfig['body'] ?? $hookConfig['payload'] ?? [];
+
+                            if (is_string($url)) {
+                                $url = $this->replacePlaceholders($url, $record, $instance, $actorName, $comment);
+                            }
+
+                            if (is_array($body)) {
+                                array_walk_recursive($body, function(&$val) use ($record, $instance, $actorName, $comment) {
+                                    if (is_string($val)) {
+                                        $val = $this->replacePlaceholders($val, $record, $instance, $actorName, $comment);
+                                    }
+                                });
+                                $bodyStr = json_encode($body);
+                            } elseif (is_string($body)) {
+                                $bodyStr = $this->replacePlaceholders($body, $record, $instance, $actorName, $comment);
+                            } else {
+                                $bodyStr = '';
+                            }
+
+                            $ch = curl_init();
+                            curl_setopt($ch, CURLOPT_URL, $url);
+                            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+                            if ($method !== 'GET' && !empty($bodyStr)) {
+                                curl_setopt($ch, CURLOPT_POSTFIELDS, $bodyStr);
+                            }
+                            if (!empty($headers) && is_array($headers)) {
+                                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                            }
+                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                            curl_exec($ch);
+                            curl_close($ch);
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - HTTP Request] ' . $e->getMessage());
+                    }
+                    break;
+
+                case 'notify_user':
+                    try {
+                        $targetUserId = $hookConfig['user_id'] ?? null;
+                        if (!$targetUserId && !empty($hookConfig['user_field']) && isset($record[$hookConfig['user_field']])) {
+                            $targetUserId = $record[$hookConfig['user_field']];
+                        }
+                        if (!$targetUserId) {
+                            $targetUserId = $instance['wfi_started_by'];
+                        }
+
+                        $messageTemplate = $hookConfig['message'] ?? $hookConfig['content'] ?? "Workflow notification for instance #{{instance.wfi_id}}";
+                        $message = $this->replacePlaceholders($messageTemplate, $record, $instance, $actorName, $comment);
+
+                        if ($targetUserId) {
+                            // Insert into nu_notifications if exists or log error
+                            $hasNotifTable = false;
+                            try {
+                                $hasNotifTable = (bool)$this->db->fetchOne("SHOW TABLES LIKE 'nu_notifications'");
+                            } catch (Throwable $ignored) {}
+
+                            if ($hasNotifTable) {
+                                $this->db->insert('nu_notifications', [
+                                    'user_id' => $targetUserId,
+                                    'message' => $message,
+                                    'status'  => 'unread',
+                                    'created_at' => date('Y-m-d H:i:s')
+                                ]);
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - Notify User] ' . $e->getMessage());
+                    }
+                    break;
+
+                case 'call_agent':
+                    try {
+                        $agentId = $hookConfig['agent_id'] ?? null;
+                        $promptTemplate = $hookConfig['prompt'] ?? $hookConfig['instruction'] ?? "Process record #{{record.id}} for workflow instance #{{instance.wfi_id}}";
+                        $userPrompt = $this->replacePlaceholders($promptTemplate, $record, $instance, $actorName, $comment);
+
+                        if ($agentId && class_exists('AgentRuntime')) {
+                            $auth = class_exists('NuAuth') ? new NuAuth() : null;
+                            $runtime = new AgentRuntime($this->db, $auth);
+                            $runtime->run($agentId, $userPrompt, [
+                                'workflow_instance_id' => $instance['wfi_id'],
+                                'record_id' => $recId,
+                                'table' => $table,
+                                'triggered_by' => 'workflow_transition'
+                            ]);
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[Workflow Hook Error - Call Agent] ' . $e->getMessage());
                     }
                     break;
             }
