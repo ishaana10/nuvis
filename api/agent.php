@@ -7,20 +7,21 @@ declare(strict_types=1);
 
 header('Content-Type: application/json');
 
+require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../core/Database.php';
 require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../core/AgentRuntime.php';
 
 $db = NuDatabase::getInstance();
-$auth = class_exists('NuAuth') ? NuAuth::getInstance() : null;
+$auth = new NuAuth();
 
-if (!$auth || !$auth->checkAuth()) {
+if (!$auth->checkAuth()) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'Authentication required']);
     exit;
 }
 
-$user = $auth->getUser();
+$user = $auth->getCurrentUser();
 $role = strtolower((string)($user['usr_role'] ?? ''));
 
 if ($role !== 'globeadmin' && $role !== 'admin') {
