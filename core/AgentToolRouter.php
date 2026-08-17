@@ -273,18 +273,61 @@ class AgentToolRouter
         return 'id';
     }
 
+    private function checkTableAccess(string $table): void
+    {
+        $restrictedTables = ['nu_users', 'nu_system_settings', 'nu_roles', 'nu_permissions', 'nu_role_permissions', 'nu_role_form_permissions'];
+        if (in_array(strtolower($table), $restrictedTables, true)) {
+            throw new RuntimeException("Access to system table '{$table}' is restricted for security.");
+        }
+    }
+
     private function tool_query_records(array $args): array
     {
         $table = preg_replace('/[^a-zA-Z0-9_]/', '', $args['table'] ?? '');
         if (empty($table)) return ['success' => false, 'error' => 'Table name is required'];
 
+        $this->checkTableAccess($table);
+
         $limit = min(50, max(1, (int)($args['limit'] ?? 10)));
         $search = trim($args['search'] ?? '');
 
         if (!empty($search)) {
-            $sql = "SELECT * FROM `{$table}` WHERE 1=1 LIMIT {$limit}";
-            // Simple generic query
-            $rows = $this->db->fetchAll($sql);
+            // Find text columns in table to search against
+            $whereClause = "1=1";
+            $params = [];
+            try {
+                $pdo = $this->db->getPdo();
+                $driver = strtolower((string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+                $cols = [];
+                if ($driver === 'sqlite') {
+                    $st = $pdo->query("PRAGMA table_info(`{$table}`)");
+                    if ($st) {
+                        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                            $cols[] = $c['name'];
+                        }
+                    }
+                } else {
+                    $st = $pdo->query("DESCRIBE `{$table}`");
+                    if ($st) {
+                        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                            $cols[] = $c['Field'];
+                        }
+                    }
+                }
+
+                if (!empty($cols)) {
+                    $orParts = [];
+                    foreach ($cols as $idx => $col) {
+                        $paramKey = ":search_{$idx}";
+                        $orParts[] = "`{$col}` LIKE {$paramKey}";
+                        $params[$paramKey] = '%' . $search . '%';
+                    }
+                    $whereClause = '(' . implode(' OR ', $orParts) . ')';
+                }
+            } catch (Throwable $e) {}
+
+            $sql = "SELECT * FROM `{$table}` WHERE {$whereClause} LIMIT {$limit}";
+            $rows = $this->db->fetchAll($sql, $params);
         } else {
             $rows = $this->db->fetchAll("SELECT * FROM `{$table}` LIMIT {$limit}");
         }
@@ -298,6 +341,8 @@ class AgentToolRouter
         $recId = $args['record_id'] ?? null;
         if (empty($table) || empty($recId)) return ['success' => false, 'error' => 'Table and record_id are required'];
 
+        $this->checkTableAccess($table);
+
         $pkCol = $this->getPrimaryKeyColumn($table);
         $record = $this->db->fetchOne("SELECT * FROM `{$table}` WHERE `{$pkCol}` = :id", [':id' => $recId]);
 
@@ -310,6 +355,8 @@ class AgentToolRouter
         $data = $args['data'] ?? [];
         if (empty($table) || empty($data) || !is_array($data)) return ['success' => false, 'error' => 'Table and data array are required'];
 
+        $this->checkTableAccess($table);
+
         $insertedId = $this->db->insert($table, $data);
         return ['success' => true, 'inserted_id' => $insertedId];
     }
@@ -320,6 +367,8 @@ class AgentToolRouter
         $recId = $args['record_id'] ?? null;
         $data = $args['data'] ?? [];
         if (empty($table) || empty($recId) || empty($data)) return ['success' => false, 'error' => 'Table, record_id, and data are required'];
+
+        $this->checkTableAccess($table);
 
         $pkCol = $this->getPrimaryKeyColumn($table);
         $count = $this->db->update($table, $data, "`{$pkCol}` = :id", [':id' => $recId]);
@@ -432,7 +481,8 @@ class AgentToolRouter
 
         require_once __DIR__ . '/AgentMemory.php';
         $memory = new AgentMemory($this->db, $this->definition, $this->context);
+        $results = $memory->searchMemories($query);
 
-        return ['success' => true, 'query' => $query, 'message' => 'Memory query complete.'];
+        return ['success' => true, 'query' => $query, 'count' => count($results), 'memories' => $results];
     }
 }

@@ -195,9 +195,9 @@ Select an agent, enter a prompt, and click Run Execution.
                 <div class="nu-ai-form-group">
                     <label>Model</label>
                     <select class="nu-ai-select" id="agent_model">
-                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Recommended)</option>
-                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Recommended)</option>
                         <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                     </select>
                 </div>
                 <div class="nu-ai-form-group">
@@ -337,7 +337,7 @@ window.nuAiStudio = {
                 <td>${a.agent_id}</td>
                 <td><code>${a.agent_code}</code></td>
                 <td style="font-weight:600;">${a.agent_name}</td>
-                <td><span class="nu-ai-badge nu-badge-info">${a.agent_model || 'gemini-2.0-flash'}</span></td>
+                <td><span class="nu-ai-badge nu-badge-info">${a.agent_model || 'gemini-1.5-flash'}</span></td>
                 <td>${(a.agent_tools || []).map(t => `<span class="nu-ai-badge nu-badge-inactive" style="margin-right:4px; margin-bottom:4px; display:inline-block;">${t}</span>`).join('')}</td>
                 <td>${a.agent_memory_type || 'conversation'}</td>
                 <td>${a.agent_active == 1 ? '<span class="nu-ai-badge nu-badge-active">Active</span>' : '<span class="nu-ai-badge nu-badge-inactive">Inactive</span>'}</td>
@@ -360,7 +360,7 @@ window.nuAiStudio = {
         document.getElementById('agent_name').value = '';
         document.getElementById('agent_code').value = '';
         document.getElementById('agent_system_prompt').value = '';
-        document.getElementById('agent_model').value = 'gemini-2.0-flash';
+        document.getElementById('agent_model').value = 'gemini-1.5-flash';
         document.getElementById('agent_memory_type').value = 'conversation';
         document.getElementById('agent_max_tokens').value = '2000';
         document.getElementById('agent_active').checked = true;
@@ -381,7 +381,7 @@ window.nuAiStudio = {
         document.getElementById('agent_name').value = agent.agent_name;
         document.getElementById('agent_code').value = agent.agent_code;
         document.getElementById('agent_system_prompt').value = agent.agent_system_prompt;
-        document.getElementById('agent_model').value = agent.agent_model || 'gemini-2.0-flash';
+        document.getElementById('agent_model').value = agent.agent_model || 'gemini-1.5-flash';
         document.getElementById('agent_memory_type').value = agent.agent_memory_type || 'conversation';
         document.getElementById('agent_max_tokens').value = agent.agent_max_tokens || 2000;
         document.getElementById('agent_active').checked = agent.agent_active == 1;
