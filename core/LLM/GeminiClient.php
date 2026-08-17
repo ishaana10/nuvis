@@ -33,17 +33,25 @@ class GeminiClient implements LLMClientInterface
 
     public function chat(array $params): array
     {
-        $model = $params['model'] ?? 'gemini-1.5-flash';
-        if (empty($model)) {
-            $model = 'gemini-1.5-flash';
+        $rawModel = trim($params['model'] ?? 'gemini-1.5-flash');
+        if (empty($rawModel)) {
+            $rawModel = 'gemini-1.5-flash';
         }
+
+        // Clean model name (strip leading 'models/' if user or API passed it)
+        $model = preg_replace('/^models\//i', '', $rawModel);
 
         // Handle offline / unconfigured mock mode gracefully if no API key is set
         if (empty($this->apiKey)) {
             return $this->mockResponse($params);
         }
 
-        $url = $this->baseUrl . urlencode($model) . ':generateContent?key=' . urlencode($this->apiKey);
+        return $this->sendChatRequest($model, $params);
+    }
+
+    private function sendChatRequest(string $model, array $params, bool $isRetry = false): array
+    {
+        $url = $this->baseUrl . $model . ':generateContent?key=' . urlencode($this->apiKey);
 
         // Convert messages format to Gemini contents schema
         $contents = [];
@@ -141,9 +149,14 @@ class GeminiClient implements LLMClientInterface
         curl_close($ch);
 
         if ($error || $httpCode !== 200) {
-            // Fallback or throw
             $errData = json_decode((string)$response, true);
             $msg = $errData['error']['message'] ?? $error ?: "HTTP Error {$httpCode}";
+
+            // If model is not found or unsupported on v1beta, try fallback to gemini-2.0-flash once
+            if (!$isRetry && (str_contains($msg, 'not found') || str_contains($msg, 'not supported')) && $model !== 'gemini-2.0-flash') {
+                return $this->sendChatRequest('gemini-2.0-flash', $params, true);
+            }
+
             throw new RuntimeException("Gemini API Error: " . $msg);
         }
 
