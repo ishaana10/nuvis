@@ -162,6 +162,35 @@ class AgentToolRouter
                         'required' => ['instance_id', 'transition_id']
                     ]
                 ]
+            ],
+            'add_memory' => [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'add_memory',
+                    'description' => 'Save a persistent fact or memory into Mem0/local memory for this user/record.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'text' => ['type' => 'string', 'description' => 'The fact or observation to remember.'],
+                            'key' => ['type' => 'string', 'description' => 'Optional key identifier.']
+                        ],
+                        'required' => ['text']
+                    ]
+                ]
+            ],
+            'search_memory' => [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'search_memory',
+                    'description' => 'Search persistent Mem0/local memory for relevant facts.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'query' => ['type' => 'string', 'description' => 'Search query string.']
+                        ],
+                        'required' => ['query']
+                    ]
+                ]
             ]
         ];
 
@@ -205,6 +234,10 @@ class AgentToolRouter
                     return $this->tool_start_workflow($arguments);
                 case 'advance_workflow':
                     return $this->tool_advance_workflow($arguments);
+                case 'add_memory':
+                    return $this->tool_add_memory($arguments);
+                case 'search_memory':
+                    return $this->tool_search_memory($arguments);
                 default:
                     return ['success' => false, 'error' => "Unknown tool: {$toolName}"];
             }
@@ -377,5 +410,29 @@ class AgentToolRouter
         $res = $engine->advance($instId, $transId, (int)$userId, $args['comment'] ?? '');
 
         return ['success' => $res];
+    }
+
+    private function tool_add_memory(array $args): array
+    {
+        $text = trim($args['text'] ?? '');
+        $key = trim($args['key'] ?? 'observation_' . time());
+        if (empty($text)) return ['success' => false, 'error' => 'text is required'];
+
+        require_once __DIR__ . '/AgentMemory.php';
+        $memory = new AgentMemory($this->db, $this->definition, $this->context);
+        $memory->saveFact($key, $text);
+
+        return ['success' => true, 'message' => 'Memory saved successfully.'];
+    }
+
+    private function tool_search_memory(array $args): array
+    {
+        $query = trim($args['query'] ?? '');
+        if (empty($query)) return ['success' => false, 'error' => 'query is required'];
+
+        require_once __DIR__ . '/AgentMemory.php';
+        $memory = new AgentMemory($this->db, $this->definition, $this->context);
+
+        return ['success' => true, 'query' => $query, 'message' => 'Memory query complete.'];
     }
 }

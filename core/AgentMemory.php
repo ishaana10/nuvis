@@ -60,16 +60,36 @@ class AgentMemory
         return $this->messages;
     }
 
+    private function getMem0ApiKey(): ?string
+    {
+        try {
+            $setting = $this->db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'mem0_api_key'");
+            if ($setting && !empty($setting['setting_value'])) {
+                return $setting['setting_value'];
+            }
+        } catch (Throwable $e) {}
+        return getenv('MEM0_API_KEY') ?: null;
+    }
+
     private function loadLongTermMemory(): void
     {
         if ($this->definition->memoryType === 'none') {
             return;
         }
 
-        try {
-            $entityKey = $this->context['record_id'] ?? $this->context['user_id'] ?? null;
-            if (!$entityKey) return;
+        $entityKey = $this->context['record_id'] ?? $this->context['user_id'] ?? 'global';
 
+        // Check if Mem0.ai integration is active
+        if ($this->definition->memoryType === 'mem0') {
+            $apiKey = $this->getMem0ApiKey();
+            if (!empty($apiKey)) {
+                $this->loadMem0Memory($apiKey, (string)$entityKey);
+                return;
+            }
+        }
+
+        // Default local DB memory fallback
+        try {
             $memories = $this->db->fetchAll(
                 "SELECT mem_key, mem_value FROM nu_agent_memory WHERE agent_id = :aid AND entity_key = :ek ORDER BY mem_updated_at DESC LIMIT 10",
                 [':aid' => $this->definition->id, ':ek' => (string)$entityKey]
@@ -86,9 +106,65 @@ class AgentMemory
         } catch (Throwable $e) {}
     }
 
+    private function loadMem0Memory(string $apiKey, string $entityKey): void
+    {
+        try {
+            $url = 'https://api.mem0.ai/v1/memories/search/';
+            $payload = [
+                'user_id' => $entityKey,
+                'agent_id' => (string)$this->definition->id,
+                'query' => 'relevant background facts and context'
+            ];
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Authorization: Token ' . $apiKey
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode === 200 && !empty($response)) {
+                $data = json_decode($response, true);
+                $memories = is_array($data) ? ($data['results'] ?? $data) : [];
+                if (!empty($memories)) {
+                    $facts = [];
+                    foreach ($memories as $m) {
+                        $text = $m['memory'] ?? $m['text'] ?? (is_string($m) ? $m : '');
+                        if (!empty($text)) {
+                            $facts[] = "- " . $text;
+                        }
+                    }
+                    if (!empty($facts)) {
+                        $this->messages[0]['content'] .= "\n\nMem0 Persistent Context:\n" . implode("\n", $facts);
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('[Mem0 Memory Load Error] ' . $e->getMessage());
+        }
+    }
+
     public function saveFact(string $key, string $value): void
     {
         $entityKey = $this->context['record_id'] ?? $this->context['user_id'] ?? 'global';
+
+        // Check if Mem0 is configured
+        if ($this->definition->memoryType === 'mem0') {
+            $apiKey = $this->getMem0ApiKey();
+            if (!empty($apiKey)) {
+                $this->saveMem0Memory($apiKey, (string)$entityKey, "{$key}: {$value}");
+                return;
+            }
+        }
+
+        // Local DB fallback
         try {
             $existing = $this->db->fetchOne(
                 "SELECT mem_id FROM nu_agent_memory WHERE agent_id = :aid AND entity_key = :ek AND mem_key = :k",
@@ -113,5 +189,36 @@ class AgentMemory
                 ]);
             }
         } catch (Throwable $e) {}
+    }
+
+    public function saveMem0Memory(string $apiKey, string $entityKey, string $text): bool
+    {
+        try {
+            $url = 'https://api.mem0.ai/v1/memories/';
+            $payload = [
+                'messages' => [['role' => 'user', 'content' => $text]],
+                'user_id' => $entityKey,
+                'agent_id' => (string)$this->definition->id
+            ];
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Authorization: Token ' . $apiKey
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            return $httpCode >= 200 && $httpCode < 300;
+        } catch (Throwable $e) {
+            error_log('[Mem0 Memory Save Error] ' . $e->getMessage());
+            return false;
+        }
     }
 }

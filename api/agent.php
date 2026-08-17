@@ -84,7 +84,7 @@ try {
                 $id = $db->insert('nu_agents', $saveData);
             }
 
-            // Also check if Gemini API key setting was provided
+            // Check if API keys were provided in settings save
             if (isset($input['gemini_api_key'])) {
                 $apiKey = trim($input['gemini_api_key']);
                 $hasSetting = $db->fetchOne("SELECT setting_key FROM nu_system_settings WHERE setting_key = 'gemini_api_key'");
@@ -92,6 +92,16 @@ try {
                     $db->update('nu_system_settings', ['setting_value' => $apiKey], "setting_key = 'gemini_api_key'");
                 } else {
                     $db->insert('nu_system_settings', ['setting_key' => 'gemini_api_key', 'setting_value' => $apiKey]);
+                }
+            }
+
+            if (isset($input['mem0_api_key'])) {
+                $mem0Key = trim($input['mem0_api_key']);
+                $hasMem0 = $db->fetchOne("SELECT setting_key FROM nu_system_settings WHERE setting_key = 'mem0_api_key'");
+                if ($hasMem0) {
+                    $db->update('nu_system_settings', ['setting_value' => $mem0Key], "setting_key = 'mem0_api_key'");
+                } else {
+                    $db->insert('nu_system_settings', ['setting_key' => 'mem0_api_key', 'setting_value' => $mem0Key]);
                 }
             }
 
