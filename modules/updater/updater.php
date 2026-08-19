@@ -139,9 +139,9 @@ require_once __DIR__ . '/../../core/module_bootstrap.php';
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                 <div class="nu-field">
                     <label style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px;">Git Remote Repository URL</label>
-                    <input type="text" id="init_repo_url" class="nu-input" placeholder="e.g. git@github.com:username/repository.git" style="font-family: monospace;">
+                    <input type="text" id="init_repo_url" class="nu-input" value="https://github.com/ishaana10/websitebuilder.git" placeholder="https://github.com/ishaana10/websitebuilder.git" style="font-family: monospace;">
                     <span style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 6px;">
-                        Specify the Git URL (SSH or HTTPS) of your remote repository.
+                        Specify the Git URL (SSH or HTTPS) of your remote repository (e.g. <code>https://github.com/ishaana10/websitebuilder.git</code>).
                     </span>
                 </div>
                 <div class="nu-field">
