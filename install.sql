@@ -297,7 +297,7 @@ CREATE TABLE IF NOT EXISTS `nu_menus` (
     `menu_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
     `menu_label` VARCHAR(120) NOT NULL DEFAULT '',
-    `menu_type` ENUM('form','report','query','url','group','divider') NOT NULL DEFAULT 'form',
+    `menu_type` VARCHAR(30) NOT NULL DEFAULT 'form',
     `menu_target` VARCHAR(255) NOT NULL DEFAULT '',
     `menu_parent_id` INT UNSIGNED NOT NULL DEFAULT 0,
     `menu_order` SMALLINT NOT NULL DEFAULT 0,

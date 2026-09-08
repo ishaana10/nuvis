@@ -147,6 +147,10 @@ class NuDatabase {
                     if (!in_array('menu_default_view', $columns, true)) {
                         $this->pdo->exec("ALTER TABLE `nu_menus` ADD COLUMN `menu_default_view` VARCHAR(10) NOT NULL DEFAULT 'browse'");
                     }
+                    // Ensure menu_type column is VARCHAR(30) so 'module' works on MySQL ENUMs
+                    try {
+                        $this->pdo->exec("ALTER TABLE `nu_menus` MODIFY COLUMN `menu_type` VARCHAR(30) NOT NULL DEFAULT 'form'");
+                    } catch (Exception $ex) {}
                     if ($sessionActive) {
                         $_SESSION['_nu_menu_columns_ensured'] = true;
                     }

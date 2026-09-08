@@ -82,12 +82,13 @@ class NuMenuRenderer
         $rows = array();
         try {
             $db  = NuDatabase::getInstance();
+            $pid = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
 
             // Self-healing: Ensure Import / Export and Developer Settings menu items exist in nu_menus table
             try {
-                $exists = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'import_export'");
+                $exists = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'import_export' AND project_id = ?", [$pid]);
                 if (!$exists) {
-                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
+                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group' AND project_id = ?", [$pid]);
                     $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : 0;
                     $db->insert('nu_menus', [
                         'menu_label'        => 'Import / Export',
@@ -102,13 +103,14 @@ class NuMenuRenderer
                         'menu_open_mode'    => 'inline|browse',
                         'menu_browse_mode'  => 'inline',
                         'menu_preview_mode' => 'inline',
-                        'menu_default_view' => 'browse'
+                        'menu_default_view' => 'browse',
+                        'project_id'        => $pid
                     ]);
                 }
 
-                $existsAi = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'ai'");
+                $existsAi = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'ai' AND project_id = ?", [$pid]);
                 if (!$existsAi) {
-                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
+                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group' AND project_id = ?", [$pid]);
                     $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : null;
                     $db->insert('nu_menus', [
                         'menu_label' => 'AI Agents Studio',
@@ -119,13 +121,14 @@ class NuMenuRenderer
                         'menu_roles' => 'globeadmin',
                         'menu_role_access' => '["globeadmin"]',
                         'menu_active' => 1,
-                        'menu_icon' => 'fas fa-robot'
+                        'menu_icon' => 'fas fa-robot',
+                        'project_id' => $pid
                     ]);
                 }
 
-                $existsProjects = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'projects'");
+                $existsProjects = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'projects' AND project_id = ?", [$pid]);
                 if (!$existsProjects) {
-                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
+                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group' AND project_id = ?", [$pid]);
                     $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : 0;
                     $db->insert('nu_menus', [
                         'menu_label'        => 'Projects',
@@ -140,7 +143,8 @@ class NuMenuRenderer
                         'menu_open_mode'    => 'inline|browse',
                         'menu_browse_mode'  => 'inline',
                         'menu_preview_mode' => 'inline',
-                        'menu_default_view' => 'browse'
+                        'menu_default_view' => 'browse',
+                        'project_id'        => $pid
                     ]);
                 } else {
                     // Self-healing: ensure type is module so it loads modules/projects/projects.php rather than searching nu_forms
