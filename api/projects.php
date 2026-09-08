@@ -24,8 +24,8 @@ if (!$auth->isLoggedIn()) {
 }
 
 $user = $auth->getCurrentUser();
-$userId = (int)($user['usr_id'] ?? $user['id'] ?? 0);
-$userRole = $user['usr_role'] ?? $user['role'] ?? 'user';
+$userId = is_array($user) ? (int)($user['usr_id'] ?? $user['id'] ?? 0) : 0;
+$userRole = is_array($user) ? ($user['usr_role'] ?? $user['role'] ?? 'user') : 'user';
 $isGlobeAdmin = ($userRole === 'globeadmin');
 
 $action = $_GET['action'] ?? ($_POST['action'] ?? 'list');

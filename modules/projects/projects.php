@@ -6,7 +6,7 @@ require_once dirname(__DIR__, 2) . '/core/ProjectContext.php';
 $db = NuDatabase::getInstance();
 $auth = NuAuth::getInstance();
 $currentUser = $auth->getCurrentUser();
-$userRole = $currentUser['usr_role'] ?? 'user';
+$userRole = is_array($currentUser) ? ($currentUser['usr_role'] ?? 'user') : 'user';
 $isGlobeAdmin = ($userRole === 'globeadmin');
 
 $currentPid = ProjectContext::getId();
