@@ -129,7 +129,7 @@ class NuMenuRenderer
                     $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : 0;
                     $db->insert('nu_menus', [
                         'menu_label'        => 'Projects',
-                        'menu_type'         => 'form',
+                        'menu_type'         => 'module',
                         'menu_target'       => 'projects',
                         'menu_parent_id'    => $parentId,
                         'menu_order'        => 5,
@@ -142,6 +142,9 @@ class NuMenuRenderer
                         'menu_preview_mode' => 'inline',
                         'menu_default_view' => 'browse'
                     ]);
+                } else {
+                    // Self-healing: ensure type is module so it loads modules/projects/projects.php rather than searching nu_forms
+                    $db->query("UPDATE nu_menus SET menu_type = 'module' WHERE menu_target = 'projects' AND menu_type = 'form'");
                 }
 
                 $existsApi = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'api_manager'");
