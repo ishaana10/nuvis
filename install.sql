@@ -683,7 +683,7 @@ LIMIT 1;
 INSERT IGNORE INTO `nu_menus`
   (`menu_label`, `menu_type`, `menu_target`, `menu_parent_id`, `menu_order`, `menu_roles`, `menu_active`, `menu_icon`, `menu_open_mode`, `menu_browse_mode`, `menu_preview_mode`, `menu_default_view`)
 VALUES
-  ('Projects',              'form', 'projects',          @admin_group,    5,   'globeadmin,admin',  1, 'folder', 'inline|browse', 'inline', 'inline', 'browse'),
+  ('Projects',              'module', 'projects',        @admin_group,    5,   'globeadmin,admin',  1, 'folder', 'inline|browse', 'inline', 'inline', 'browse'),
   ('Menus',                 'form', 'menus',             @admin_group,    10,  'globeadmin,admin',  1, 'menus', 'inline|browse', 'inline', 'inline', 'browse'),
   ('Users',                 'form', 'users',             @admin_group,    20,  'globeadmin,admin',  1, 'users', 'inline|browse', 'inline', 'inline', 'browse'),
   ('Roles',                 'form', 'roles',             @admin_group,    25,  'globeadmin,admin',  1, 'roles', 'inline|browse', 'inline', 'inline', 'browse'),
