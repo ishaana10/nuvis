@@ -24,8 +24,16 @@ if (!$auth->isLoggedIn()) {
 }
 
 $user = $auth->getCurrentUser();
-$userId = is_array($user) ? (int)($user['usr_id'] ?? $user['id'] ?? 0) : 0;
-$userRole = is_array($user) ? ($user['usr_role'] ?? $user['role'] ?? 'user') : 'user';
+if (is_array($user)) {
+    $userId = (int)($user['usr_id'] ?? $user['id'] ?? 0);
+    $userRole = $user['usr_role'] ?? $user['role'] ?? 'user';
+} elseif (is_object($user)) {
+    $userId = (int)($user->usr_id ?? $user->id ?? 0);
+    $userRole = $user->usr_role ?? $user->role ?? 'user';
+} else {
+    $userId = 0;
+    $userRole = 'user';
+}
 $isGlobeAdmin = ($userRole === 'globeadmin');
 
 $action = $_GET['action'] ?? ($_POST['action'] ?? 'list');
@@ -130,6 +138,15 @@ switch ($action) {
             'project_is_default' => 0,
             'project_owner_id' => $userId
         ]);
+
+        // Automatically assign creator to nu_project_members as 'owner'
+        if ($userId > 0) {
+            $db->insert('nu_project_members', [
+                'pm_project_id' => $newId,
+                'pm_user_id'    => $userId,
+                'pm_role'       => 'owner'
+            ]);
+        }
 
         // Auto-switch to newly created project
         ProjectContext::setId($newId);

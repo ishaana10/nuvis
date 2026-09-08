@@ -91,3 +91,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_name('nu5sess');
     session_start();
 }
+
+if (!function_exists('h')) {
+    function h($string, $flags = ENT_QUOTES, $encoding = 'UTF-8') {
+        return htmlspecialchars((string)$string, $flags, $encoding);
+    }
+}
