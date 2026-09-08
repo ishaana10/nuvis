@@ -8,6 +8,7 @@ header('Content-Type: application/json');
 require_once '../config.php';
 require_once '../core/Database.php';
 require_once '../core/Auth.php';
+require_once '../core/ProjectContext.php';
 require_once __DIR__ . '/_form_layout_helpers.php';
 $auth = new NuAuth();
 if (!$auth->checkAuth()) {
@@ -226,6 +227,7 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
     }
 
     $needed = [
+        'project_id'            => "INT UNSIGNED NOT NULL DEFAULT 1",
         'form_panel_mode'       => "VARCHAR(20) NOT NULL DEFAULT 'fixed'",
         'form_panel_width'      => "INT NOT NULL DEFAULT 0",
         'form_custom_js'        => "MEDIUMTEXT NULL DEFAULT NULL",
@@ -252,6 +254,7 @@ function nu_ensure_nu_forms_columns(NuDatabase $db): void {
     try {
         nu_ddl($db, "CREATE TABLE IF NOT EXISTS `nu_form_versions` (
             `ver_id` INT AUTO_INCREMENT PRIMARY KEY,
+            `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
             `ver_form_id` INT NOT NULL,
             `ver_form_code` VARCHAR(50) NOT NULL,
             `ver_layout` LONGTEXT NULL,
@@ -293,8 +296,9 @@ function actionGet($db) {
     $id = $_GET['id'] ?? '';
     if (!$id) { echo json_encode(['success' => false, 'error' => 'Missing id']); return; }
     try {
-        $form = $db->fetchOne('SELECT * FROM nu_forms WHERE form_id = ?', [$id]);
-        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found']); return; }
+        $pid = ProjectContext::getId();
+        $form = $db->fetchOne('SELECT * FROM nu_forms WHERE form_id = ? AND project_id = ?', [$id, $pid]);
+        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found or access denied']); return; }
         echo json_encode(['success' => true, 'form' => $form]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
@@ -483,8 +487,9 @@ function actionGetByCode($db) {
     $code = $_GET['code'] ?? '';
     if (!$code) { echo json_encode(['success' => false, 'error' => 'Missing code']); return; }
     try {
-        $form = $db->fetchOne('SELECT * FROM nu_forms WHERE form_code = ? LIMIT 1', [$code]);
-        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found']); return; }
+        $pid = ProjectContext::getId();
+        $form = $db->fetchOne('SELECT * FROM nu_forms WHERE form_code = ? AND project_id = ? LIMIT 1', [$code, $pid]);
+        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found or access denied']); return; }
         echo json_encode(['success' => true, 'form' => $form]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
@@ -504,8 +509,12 @@ function actionPatchLayout($db) {
     $layout = $data['form_layout'];
     if (is_array($layout)) $layout = json_encode($layout);
     try {
-        $db->update('nu_forms', ['form_layout' => $layout, 'form_updated_at' => date('Y-m-d H:i:s')], 'form_id = ?', [$id]);
-        $form = $db->fetchOne('SELECT form_table, form_pk_type FROM nu_forms WHERE form_id = ?', [$id]);
+        $pid = ProjectContext::getId();
+        $existing = $db->fetchOne('SELECT form_id FROM nu_forms WHERE form_id = ? AND project_id = ?', [$id, $pid]);
+        if (!$existing) { echo json_encode(['success' => false, 'error' => 'Form not found or access denied']); return; }
+
+        $db->update('nu_forms', ['form_layout' => $layout, 'form_updated_at' => date('Y-m-d H:i:s')], 'form_id = ? AND project_id = ?', [$id, $pid]);
+        $form = $db->fetchOne('SELECT form_table, form_pk_type FROM nu_forms WHERE form_id = ? AND project_id = ?', [$id, $pid]);
         if ($form && !empty($form['form_table'])) {
             try {
                 nu_sync_table_from_layout($db, $form['form_table'], $layout, $form['form_pk_type'] ?? 'autoincrement');
@@ -522,11 +531,13 @@ function actionPatchLayout($db) {
 // ── LIST all forms ────────────────────────────────────────────────────────
 function actionList($db) {
     try {
+        $pid = ProjectContext::getId();
         $forms = $db->fetchAll(
             'SELECT form_id, form_name, form_code, form_table, form_type,
                     form_table_mode, form_pk_type, browse_display_mode,
                     form_created_at AS created_at, form_updated_at AS updated_at
-             FROM nu_forms ORDER BY form_updated_at DESC, form_name ASC'
+             FROM nu_forms WHERE project_id = ? ORDER BY form_updated_at DESC, form_name ASC',
+            [$pid]
         );
         echo json_encode(['success' => true, 'forms' => $forms]);
     } catch (Exception $e) {
@@ -640,15 +651,27 @@ function actionSave($db) {
             'form_panel_width'          => isset($data['form_panel_width']) ? (int)$data['form_panel_width'] : 0,
         ];
 
+        $pid = ProjectContext::getId();
+        $row['project_id'] = $pid;
+
+        if (!empty($row['form_table'])) {
+            ProjectContext::registerProjectTable($pid, $row['form_table'], $formCode);
+        }
+
         if ($formId) {
+            $existing = $db->fetchOne('SELECT form_id FROM nu_forms WHERE form_id = ? AND project_id = ?', [$formId, $pid]);
+            if (!$existing) {
+                echo json_encode(['success' => false, 'error' => 'Form not found or access denied in this project'], JSON_UNESCAPED_UNICODE);
+                return;
+            }
             $row['form_updated_at'] = date('Y-m-d H:i:s');
-            $db->update('nu_forms', $row, 'form_id = ?', [$formId]);
+            $db->update('nu_forms', $row, 'form_id = ? AND project_id = ?', [$formId, $pid]);
             $savedId = $formId;
             error_log('[forms.php] actionSave: updated form_id=' . $savedId);
         } else {
-            $existing = $db->fetchOne('SELECT form_id FROM nu_forms WHERE form_code = ?', [$formCode]);
+            $existing = $db->fetchOne('SELECT form_id FROM nu_forms WHERE form_code = ? AND project_id = ?', [$formCode, $pid]);
             if ($existing) {
-                echo json_encode(['success' => false, 'error' => "Form code '{$formCode}' already exists"], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['success' => false, 'error' => "Form code '{$formCode}' already exists in this project"], JSON_UNESCAPED_UNICODE);
                 return;
             }
 
@@ -688,6 +711,7 @@ function actionSave($db) {
             $username = $currentUser['usr_name'] ?? $currentUser['usr_login'] ?? 'globeadmin';
             $db->insert('nu_form_versions', [
                 'ver_form_id'    => $savedId,
+                'project_id'     => $pid,
                 'ver_form_code'  => $formCode,
                 'ver_layout'     => $formLayout,
                 'ver_settings'   => json_encode($verSettings, JSON_UNESCAPED_UNICODE),
@@ -753,12 +777,13 @@ function actionDelete($db) {
     if (!$id) { echo json_encode(['success' => false, 'error' => 'Missing id']); return; }
 
     try {
-        $form = $db->fetchOne('SELECT form_table FROM nu_forms WHERE form_id = ?', [$id]);
-        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found']); return; }
+        $pid = ProjectContext::getId();
+        $form = $db->fetchOne('SELECT form_table FROM nu_forms WHERE form_id = ? AND project_id = ?', [$id, $pid]);
+        if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found or access denied']); return; }
 
         $formTable = preg_replace('/[^a-zA-Z0-9_]/', '', trim($form['form_table'] ?? ''));
 
-        $db->query('DELETE FROM nu_forms WHERE form_id = ?', [$id]);
+        $db->query('DELETE FROM nu_forms WHERE form_id = ? AND project_id = ?', [$id, $pid]);
 
         $dropWarning = null;
         if ($formTable !== '') {

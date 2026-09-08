@@ -64,8 +64,13 @@ class AppCloner {
 
         // Resolve source DB name from connection
         if ($srcDB === null) {
-            $row = $pdo->query('SELECT DATABASE()')->fetch(PDO::FETCH_NUM);
-            $srcDB = $row[0] ?? '';
+            $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+            if ($driver === 'sqlite') {
+                $srcDB = 'sqlite';
+            } else {
+                $row = $pdo->query('SELECT DATABASE()')->fetch(PDO::FETCH_NUM);
+                $srcDB = $row[0] ?? '';
+            }
         }
         $this->srcDB  = $srcDB;
         $this->srcPDO = $pdo;
@@ -742,5 +747,142 @@ class AppCloner {
     private function assertOneOf(string $val, array $allowed, string $label): void {
         if (!in_array($val, $allowed, true))
             throw new InvalidArgumentException("$label must be one of: " . implode(', ', $allowed));
+    }
+
+    /**
+     * Export single project SQL script (metadata + user data tables).
+     */
+    public function exportProject(int $projectId, array $opts = []): string {
+        $db = NuDatabase::getInstance();
+        $pdo = $db->getPdo();
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+        $proj = $db->fetchOne("SELECT * FROM nu_projects WHERE project_id = ?", [$projectId]);
+        if (!$proj) {
+            throw new InvalidArgumentException("Project ID {$projectId} not found.");
+        }
+
+        $includeUserData = $opts['includeUserData'] ?? true;
+        $schemaOnly = $opts['schemaOnly'] ?? false;
+        $zip = $opts['zipExport'] ?? false;
+
+        $parts = [];
+        $ts = date('Y-m-d H:i:s');
+        $parts[] = "-- ========================================\n-- nuBuilder 5 Multi-Project Export\n-- Project: {$proj['project_name']} ({$proj['project_code']})\n-- Exported: {$ts}\n-- ========================================\n";
+        $parts[] = "SET FOREIGN_KEY_CHECKS=0;\n";
+
+        // 1. Export nu_projects row
+        $parts[] = "-- ─── PROJECT METADATA ───────────────────";
+        $parts[] = "INSERT INTO `nu_projects` (`project_id`, `project_code`, `project_name`, `project_description`, `project_settings`, `project_active`, `project_is_default`) VALUES (" .
+            (int)$proj['project_id'] . ", " .
+            $pdo->quote((string)$proj['project_code']) . ", " .
+            $pdo->quote((string)$proj['project_name']) . ", " .
+            ($proj['project_description'] !== null ? $pdo->quote((string)$proj['project_description']) : 'NULL') . ", " .
+            ($proj['project_settings'] !== null ? $pdo->quote((string)$proj['project_settings']) : 'NULL') . ", " .
+            (int)$proj['project_active'] . ", " .
+            (int)$proj['project_is_default'] .
+            ") ON DUPLICATE KEY UPDATE `project_name` = VALUES(`project_name`);\n";
+
+        // 2. Export metadata tables for this project
+        $metaTables = [
+            'nu_forms',
+            'nu_form_versions',
+            'nu_reports',
+            'nu_queries',
+            'nu_procedures',
+            'nu_menus',
+            'nu_workflows',
+            'nu_workflow_stages',
+            'nu_workflow_transitions',
+        ];
+
+        foreach ($metaTables as $tbl) {
+            $hasTbl = false;
+            try {
+                $hasTbl = (bool)($driver === 'sqlite' ?
+                    $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='{$tbl}'")->fetch() :
+                    $pdo->query("SHOW TABLES LIKE '{$tbl}'")->fetch());
+            } catch (Exception $e) {}
+
+            if (!$hasTbl) continue;
+
+            $rows = $db->fetchAll("SELECT * FROM `{$tbl}` WHERE `project_id` = ?", [$projectId]);
+            if (empty($rows)) continue;
+
+            $parts[] = "-- ─── METADATA TABLE: {$tbl} ───────────────";
+            $cols = array_keys($rows[0]);
+            $colList = '(`' . implode('`, `', $cols) . '`)';
+
+            $batch = [];
+            foreach ($rows as $row) {
+                $vals = array_map(fn($v) => $v === null ? 'NULL' : $pdo->quote((string)$v), array_values($row));
+                $batch[] = '(' . implode(', ', $vals) . ')';
+            }
+            $parts[] = "INSERT INTO `{$tbl}` {$colList} VALUES\n" . implode(",\n", $batch) . ";\n";
+        }
+
+        // 3. Export form physical data tables
+        $formTables = [];
+
+        try {
+            $ptRows = $db->fetchAll("SELECT table_name FROM nu_project_tables WHERE project_id = ?", [$projectId]);
+            foreach ($ptRows as $pt) {
+                if (!empty($pt['table_name'])) $formTables[] = trim($pt['table_name']);
+            }
+        } catch (Exception $e) {}
+
+        $fRows = $db->fetchAll("SELECT form_table FROM nu_forms WHERE project_id = ? AND form_table IS NOT NULL AND form_table != ''", [$projectId]);
+        foreach ($fRows as $fr) {
+            $formTables[] = trim($fr['form_table']);
+        }
+
+        $formTables = array_unique(array_filter($formTables));
+
+        foreach ($formTables as $userTbl) {
+            $hasTbl = false;
+            try {
+                $hasTbl = (bool)($driver === 'sqlite' ?
+                    $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='{$userTbl}'")->fetch() :
+                    $pdo->query("SHOW TABLES LIKE '{$userTbl}'")->fetch());
+            } catch (Exception $e) {}
+
+            if (!$hasTbl) continue;
+
+            $parts[] = "-- ─── DATA TABLE STRUCTURE: {$userTbl} ───────────────";
+            if ($driver === 'sqlite') {
+                $createRow = $pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='{$userTbl}'")->fetch(PDO::FETCH_ASSOC);
+                if (!empty($createRow['sql'])) {
+                    $parts[] = $createRow['sql'] . ";\n";
+                }
+            } else {
+                $createRow = $pdo->query("SHOW CREATE TABLE `{$userTbl}`")->fetch(PDO::FETCH_NUM);
+                if (!empty($createRow[1])) {
+                    $parts[] = "DROP TABLE IF EXISTS `{$userTbl}`;\n" . $createRow[1] . ";\n";
+                }
+            }
+
+            if ($includeUserData && !$schemaOnly) {
+                $uRows = $db->fetchAll("SELECT * FROM `{$userTbl}`");
+                if (!empty($uRows)) {
+                    $parts[] = "-- ─── DATA TABLE DATA: {$userTbl} ───────────────";
+                    $cols = array_keys($uRows[0]);
+                    $colList = '(`' . implode('`, `', $cols) . '`)';
+                    $batch = [];
+                    foreach ($uRows as $ur) {
+                        $vals = array_map(fn($v) => $v === null ? 'NULL' : $pdo->quote((string)$v), array_values($ur));
+                        $batch[] = '(' . implode(', ', $vals) . ')';
+                    }
+                    $parts[] = "INSERT INTO `{$userTbl}` {$colList} VALUES\n" . implode(",\n", $batch) . ";\n";
+                }
+            }
+        }
+
+        $parts[] = "SET FOREIGN_KEY_CHECKS=1;\n";
+        $sql = implode("\n", array_filter($parts));
+
+        if ($zip) {
+            return gzencode($sql, 6);
+        }
+        return $sql;
     }
 }

@@ -109,13 +109,13 @@ class NuDatabase {
 
             // Seed sample data
             $nowStr = date('Y-m-d H:i:s');
-            $this->pdo->exec("INSERT OR IGNORE INTO demo_service_types VALUES ('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Plumbing Maintenance', 'General plumbing repairs', 150.0)");
-            $this->pdo->exec("INSERT OR IGNORE INTO demo_service_types VALUES ('b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e', 'Electrical Inspection', 'Safety audit', 120.0)");
-            $this->pdo->exec("INSERT OR IGNORE INTO demo_customer_requests VALUES ('d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'Alice Smith', 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Main drain backing up', 'Pending', '{$nowStr}', '{$nowStr}')");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflows VALUES (100, 'customer_request_wf', 'Customer Request Workflow', 'A demo workflow', 'demo_customer_requests', 1)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages VALUES (101, 100, 'Pending', 'Pending Service', 'The service request is created', '#f59e0b', 1, 0, 1)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages VALUES (102, 100, 'In Progress', 'Service In Progress', 'The staff has commenced', '#3b82f6', 0, 0, 2)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages VALUES (103, 100, 'Completed', 'Completed', 'The requested service', '#10b981', 0, 1, 3)");
+            $this->pdo->exec("INSERT OR IGNORE INTO demo_service_types (service_type_id, name, description, price) VALUES ('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Plumbing Maintenance', 'General plumbing repairs', 150.0)");
+            $this->pdo->exec("INSERT OR IGNORE INTO demo_service_types (service_type_id, name, description, price) VALUES ('b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e', 'Electrical Inspection', 'Safety audit', 120.0)");
+            $this->pdo->exec("INSERT OR IGNORE INTO demo_customer_requests (request_id, customer_name, service_type_id, request_details, status, created_at, updated_at) VALUES ('d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'Alice Smith', 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Main drain backing up', 'Pending', '{$nowStr}', '{$nowStr}')");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflows (wf_id, wf_code, wf_name, wf_description, wf_form_code, wf_active) VALUES (100, 'customer_request_wf', 'Customer Request Workflow', 'A demo workflow', 'demo_customer_requests', 1)");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages (wfs_id, wfs_wf_id, wfs_code, wfs_name, wfs_description, wfs_color, wfs_is_start, wfs_is_end, wfs_order) VALUES (101, 100, 'Pending', 'Pending Service', 'The service request is created', '#f59e0b', 1, 0, 1)");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages (wfs_id, wfs_wf_id, wfs_code, wfs_name, wfs_description, wfs_color, wfs_is_start, wfs_is_end, wfs_order) VALUES (102, 100, 'In Progress', 'Service In Progress', 'The staff has commenced', '#3b82f6', 0, 0, 2)");
+            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages (wfs_id, wfs_wf_id, wfs_code, wfs_name, wfs_description, wfs_color, wfs_is_start, wfs_is_end, wfs_order) VALUES (103, 100, 'Completed', 'Completed', 'The requested service', '#10b981', 0, 1, 3)");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions (wft_id, wft_wf_id, wft_from_id, wft_to_id, wft_action, wft_label, wft_hook) VALUES (101, 100, 101, 102, 'advance', 'Start Providing Service', 'update_record')");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions (wft_id, wft_wf_id, wft_from_id, wft_to_id, wft_action, wft_label, wft_hook) VALUES (102, 100, 102, 103, 'advance', 'Mark Service Completed', 'update_record')");
             $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_instances (wfi_id, wfi_wf_id, wfi_stage_id, wfi_record_table, wfi_record_id, wfi_status, wfi_started_by) VALUES (1, 100, 101, 'demo_customer_requests', 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'active', 1)");
@@ -638,6 +638,188 @@ class NuDatabase {
 
                 if ($sessionActive) {
                     $_SESSION['_nu_demo_workflow_ensured'] = true;
+                }
+            } catch (Exception $ignored) {}
+        }
+
+        // Self-healing: Ensure Multi-Project tables & columns exist
+        if (!$sessionActive || empty($_SESSION['_nu_projects_ensured'])) {
+            try {
+                $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+                $hasProjects = false;
+                try {
+                    $hasProjects = (bool)$this->pdo->query($driver === 'sqlite' ? "SELECT name FROM sqlite_master WHERE type='table' AND name='nu_projects'" : "SHOW TABLES LIKE 'nu_projects'")->fetch();
+                } catch (Exception $e) {}
+
+                if (!$hasProjects) {
+                    if ($driver === 'sqlite') {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_projects` (
+                            `project_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+                            `project_code` TEXT NOT NULL UNIQUE,
+                            `project_name` TEXT NOT NULL,
+                            `project_description` TEXT NULL,
+                            `project_settings` TEXT NULL,
+                            `project_active` INTEGER NOT NULL DEFAULT 1,
+                            `project_is_default` INTEGER NOT NULL DEFAULT 0,
+                            `project_owner_id` INTEGER NULL,
+                            `project_created_at` TEXT DEFAULT CURRENT_TIMESTAMP,
+                            `project_updated_at` TEXT DEFAULT CURRENT_TIMESTAMP
+                        )");
+                    } else {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_projects` (
+                            `project_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                            `project_code` VARCHAR(50) NOT NULL,
+                            `project_name` VARCHAR(150) NOT NULL,
+                            `project_description` TEXT NULL,
+                            `project_settings` JSON NULL,
+                            `project_active` TINYINT(1) NOT NULL DEFAULT 1,
+                            `project_is_default` TINYINT(1) NOT NULL DEFAULT 0,
+                            `project_owner_id` INT NULL,
+                            `project_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            `project_updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                            PRIMARY KEY (`project_id`),
+                            UNIQUE KEY `uq_project_code` (`project_code`),
+                            KEY `idx_project_active` (`project_active`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                    }
+                }
+
+                // Ensure nu_project_versions table
+                $hasProjectVersions = false;
+                try {
+                    $hasProjectVersions = (bool)$this->pdo->query($driver === 'sqlite' ? "SELECT name FROM sqlite_master WHERE type='table' AND name='nu_project_versions'" : "SHOW TABLES LIKE 'nu_project_versions'")->fetch();
+                } catch (Exception $e) {}
+
+                if (!$hasProjectVersions) {
+                    if ($driver === 'sqlite') {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_project_versions` (
+                            `pv_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+                            `pv_project_id` INTEGER NOT NULL,
+                            `pv_version_tag` TEXT NOT NULL,
+                            `pv_description` TEXT NULL,
+                            `pv_snapshot_data` TEXT NOT NULL,
+                            `pv_created_by` INTEGER NULL,
+                            `pv_created_at` TEXT DEFAULT CURRENT_TIMESTAMP
+                        )");
+                    } else {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_project_versions` (
+                            `pv_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                            `pv_project_id` INT UNSIGNED NOT NULL,
+                            `pv_version_tag` VARCHAR(50) NOT NULL,
+                            `pv_description` TEXT NULL,
+                            `pv_snapshot_data` MEDIUMTEXT NOT NULL,
+                            `pv_created_by` INT NULL,
+                            `pv_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            PRIMARY KEY (`pv_id`),
+                            KEY `idx_pv_project` (`pv_project_id`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                    }
+                }
+
+                // Seed default project
+                $stmtProj = $this->pdo->prepare("SELECT COUNT(*) FROM `nu_projects` WHERE `project_code` = 'default'");
+                $stmtProj->execute();
+                if ((int)$stmtProj->fetchColumn() === 0) {
+                    $this->pdo->prepare("INSERT INTO `nu_projects` (`project_code`, `project_name`, `project_description`, `project_active`, `project_is_default`) VALUES ('default', 'Default Project', 'Default system project created during migration.', 1, 1)")->execute();
+                }
+
+                // Ensure nu_project_members table
+                $hasMembers = false;
+                try {
+                    $hasMembers = (bool)$this->pdo->query($driver === 'sqlite' ? "SELECT name FROM sqlite_master WHERE type='table' AND name='nu_project_members'" : "SHOW TABLES LIKE 'nu_project_members'")->fetch();
+                } catch (Exception $e) {}
+
+                if (!$hasMembers) {
+                    if ($driver === 'sqlite') {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_project_members` (
+                            `pm_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+                            `pm_project_id` INTEGER NOT NULL,
+                            `pm_user_id` INTEGER NOT NULL,
+                            `pm_role` TEXT NOT NULL DEFAULT 'member'
+                        )");
+                    } else {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_project_members` (
+                            `pm_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                            `pm_project_id` INT UNSIGNED NOT NULL,
+                            `pm_user_id` INT NOT NULL,
+                            `pm_role` VARCHAR(30) NOT NULL DEFAULT 'member',
+                            PRIMARY KEY (`pm_id`),
+                            UNIQUE KEY `uq_project_user` (`pm_project_id`, `pm_user_id`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                    }
+                }
+
+                // Ensure nu_project_tables registry table
+                $hasProjectTables = false;
+                try {
+                    $hasProjectTables = (bool)$this->pdo->query($driver === 'sqlite' ? "SELECT name FROM sqlite_master WHERE type='table' AND name='nu_project_tables'" : "SHOW TABLES LIKE 'nu_project_tables'")->fetch();
+                } catch (Exception $e) {}
+
+                if (!$hasProjectTables) {
+                    if ($driver === 'sqlite') {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_project_tables` (
+                            `pt_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+                            `project_id` INTEGER NOT NULL,
+                            `table_name` TEXT NOT NULL UNIQUE,
+                            `form_code` TEXT NULL
+                        )");
+                    } else {
+                        $this->pdo->exec("CREATE TABLE IF NOT EXISTS `nu_project_tables` (
+                            `pt_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                            `project_id` INT UNSIGNED NOT NULL,
+                            `table_name` VARCHAR(64) NOT NULL,
+                            `form_code` VARCHAR(50) NULL,
+                            PRIMARY KEY (`pt_id`),
+                            UNIQUE KEY `uq_pt_table` (`table_name`),
+                            KEY `idx_pt_project` (`project_id`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                    }
+                }
+
+                // Ensure project_id column on metadata tables
+                $metaTables = ['nu_forms', 'nu_reports', 'nu_queries', 'nu_procedures', 'nu_menus', 'nu_workflows', 'nu_workflow_stages', 'nu_workflow_transitions', 'nu_form_versions'];
+                foreach ($metaTables as $mTable) {
+                    try {
+                        $hasTbl = false;
+                        if ($driver === 'sqlite') {
+                            $hasTbl = (bool)$this->pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='{$mTable}'")->fetch();
+                        } else {
+                            $hasTbl = (bool)$this->pdo->query("SHOW TABLES LIKE '{$mTable}'")->fetch();
+                        }
+
+                        if (!$hasTbl) {
+                            continue;
+                        }
+
+                        $hasCol = false;
+                        if ($driver === 'sqlite') {
+                            $cols = $this->pdo->query("PRAGMA table_info(`{$mTable}`)")->fetchAll(PDO::FETCH_ASSOC);
+                            foreach ($cols as $c) {
+                                if (($c['name'] ?? '') === 'project_id') { $hasCol = true; break; }
+                            }
+                        } else {
+                            $cols = $this->pdo->query("DESCRIBE `{$mTable}`")->fetchAll(PDO::FETCH_ASSOC);
+                            foreach ($cols as $c) {
+                                if (($c['Field'] ?? '') === 'project_id') { $hasCol = true; break; }
+                            }
+                        }
+
+                        if (!$hasCol) {
+                            if ($driver === 'sqlite') {
+                                $this->pdo->exec("ALTER TABLE `{$mTable}` ADD COLUMN `project_id` INTEGER DEFAULT 1");
+                            } else {
+                                $this->pdo->exec("ALTER TABLE `{$mTable}` ADD COLUMN `project_id` INT UNSIGNED NOT NULL DEFAULT 1");
+                                try {
+                                    $this->pdo->exec("ALTER TABLE `{$mTable}` ADD KEY `idx_{$mTable}_project` (`project_id`)");
+                                } catch (Exception $e) {}
+                            }
+                        }
+                        $this->pdo->exec("UPDATE `{$mTable}` SET `project_id` = 1 WHERE `project_id` IS NULL OR `project_id` = 0");
+                    } catch (Exception $e) {}
+                }
+
+                if ($sessionActive) {
+                    $_SESSION['_nu_projects_ensured'] = true;
                 }
             } catch (Exception $ignored) {}
         }

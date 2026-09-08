@@ -8,6 +8,7 @@ header('Content-Type: application/json');
 require_once '../config.php';
 require_once '../core/Database.php';
 require_once '../core/Auth.php';
+require_once '../core/ProjectContext.php';
 
 $auth = new NuAuth();
 if (!$auth->checkAuth()) {
@@ -100,9 +101,10 @@ function actionGet($db, $auth) {
         echo json_encode(['success' => false, 'error' => 'Missing id']); return;
     }
     try {
-        $row = $db->fetchOne('SELECT * FROM nu_menus WHERE menu_id = ?', [$id]);
+        $pid = ProjectContext::getId();
+        $row = $db->fetchOne('SELECT * FROM nu_menus WHERE menu_id = ? AND project_id = ?', [$id, $pid]);
         if (!$row) {
-            echo json_encode(['success' => false, 'error' => 'Menu item not found']); return;
+            echo json_encode(['success' => false, 'error' => 'Menu item not found or access denied']); return;
         }
         echo json_encode(['success' => true, 'menu' => $row]);
     } catch (Exception $e) {
@@ -148,7 +150,9 @@ function actionCreate($db, $auth) {
 
     $rolesCsv = normaliseRolesCsv($data['roles'] ?? '');
 
+    $pid = ProjectContext::getId();
     $row = [
+        'project_id'       => $pid,
         'menu_label'       => $label,
         'menu_type'        => $type,
         'menu_target'      => $target,
@@ -203,8 +207,9 @@ function actionUpdate($db, $auth) {
     if ($parent === $id) {
         echo json_encode(['success' => false, 'error' => 'A menu item cannot be its own parent']); return;
     }
+    $pid = ProjectContext::getId();
     if ($parent > 0) {
-        $parentRow = $db->fetchOne('SELECT menu_id, menu_parent_id FROM nu_menus WHERE menu_id = ?', [$parent]);
+        $parentRow = $db->fetchOne('SELECT menu_id, menu_parent_id FROM nu_menus WHERE menu_id = ? AND project_id = ?', [$parent, $pid]);
         if (!$parentRow) {
             echo json_encode(['success' => false, 'error' => 'Parent menu item not found']); return;
         }
@@ -226,11 +231,11 @@ function actionUpdate($db, $auth) {
     ];
 
     try {
-        $existing = $db->fetchOne('SELECT menu_id FROM nu_menus WHERE menu_id = ?', [$id]);
+        $existing = $db->fetchOne('SELECT menu_id FROM nu_menus WHERE menu_id = ? AND project_id = ?', [$id, $pid]);
         if (!$existing) {
-            echo json_encode(['success' => false, 'error' => 'Menu item not found']); return;
+            echo json_encode(['success' => false, 'error' => 'Menu item not found or access denied']); return;
         }
-        $db->update('nu_menus', $row, 'menu_id = ?', [$id]);
+        $db->update('nu_menus', $row, 'menu_id = ? AND project_id = ?', [$id, $pid]);
         echo json_encode(['success' => true, 'id' => $id]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
@@ -248,8 +253,9 @@ function actionDelete($db, $auth) {
         echo json_encode(['success' => false, 'error' => 'Missing id']); return;
     }
     try {
-        $db->query('DELETE FROM nu_menus WHERE menu_parent_id = ?', [$id]);
-        $db->query('DELETE FROM nu_menus WHERE menu_id = ?',        [$id]);
+        $pid = ProjectContext::getId();
+        $db->query('DELETE FROM nu_menus WHERE menu_parent_id = ? AND project_id = ?', [$id, $pid]);
+        $db->query('DELETE FROM nu_menus WHERE menu_id = ? AND project_id = ?',        [$id, $pid]);
         echo json_encode(['success' => true]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);

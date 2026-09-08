@@ -17,6 +17,7 @@ try {
     require_once __DIR__ . '/core/Database.php';
     require_once __DIR__ . '/core/Auth.php';
     require_once __DIR__ . '/core/MenuRenderer.php';
+    require_once __DIR__ . '/core/ProjectContext.php';
     // ErrorLogger registered AFTER Database + Auth are loaded
     require_once __DIR__ . '/core/ErrorLogger.php';
     NuErrorLogger::register();
@@ -596,6 +597,41 @@ try {
             </button>
             <h2 class="nu-page-title" id="pageTitle">Dashboard</h2>
             <div class="nu-header-actions">
+                <?php if ($isLoggedIn): ?>
+                <?php
+                    $activeProjectId = ProjectContext::getId();
+                    $accessibleProjects = ProjectContext::getAccessibleProjects();
+                ?>
+                <div class="nu-project-switcher" style="position: relative; display: inline-flex; align-items: center; margin-right: 8px;">
+                    <select id="nuProjectSelect" onchange="nuSwitchProject(this.value)" class="nu-input" style="padding: 5px 10px; font-weight: 600; font-size: 13px; border-radius: 6px; cursor: pointer; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color);" title="Switch Active Project">
+                        <?php foreach ($accessibleProjects as $proj): ?>
+                            <option value="<?= (int)$proj['project_id'] ?>" <?= (int)$proj['project_id'] === $activeProjectId ? 'selected' : '' ?>>
+                                📁 <?= h($proj['project_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <script>
+                function nuSwitchProject(pid) {
+                    if (!pid) return;
+                    fetch('api/projects.php?action=switch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ project_id: parseInt(pid) })
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (res.success) {
+                            window.location.reload();
+                        } else {
+                            alert(res.error || 'Failed to switch project');
+                        }
+                    })
+                    .catch(function(err) { alert('Network error switching project'); });
+                }
+                </script>
+                <?php endif; ?>
+
                 <button class="nu-btn nu-btn-ghost" title="Toggle theme"
                         onclick="(function(){
                             var t=document.documentElement.getAttribute('data-theme');
