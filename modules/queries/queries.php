@@ -3,7 +3,8 @@ declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
 $db      = NuDatabase::getInstance();
-$queries = $db->fetchAll("SELECT * FROM nu_queries WHERE query_active = 1 ORDER BY query_updated_at DESC");
+$pid     = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
+$queries = $db->fetchAll("SELECT * FROM nu_queries WHERE query_active = 1 AND project_id = ? ORDER BY query_updated_at DESC", [$pid]);
 ?>
 
 <div class="nu-queries-module">

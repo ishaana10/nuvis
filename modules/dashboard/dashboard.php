@@ -29,9 +29,10 @@ function nu_safe_count(NuDatabase $db, string $sql): int {
     catch (Throwable $e) { error_log('[dashboard] ' . $e->getMessage()); return 0; }
 }
 
+$currentPid  = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
 $userCount   = nu_safe_count($db, "SELECT COUNT(*) as total FROM nu_users");
-$formCount   = nu_safe_count($db, "SELECT COUNT(*) as total FROM nu_forms");
-$reportCount = nu_safe_count($db, "SELECT COUNT(*) as total FROM nu_reports");
+$formCount   = nu_safe_count($db, "SELECT COUNT(*) as total FROM nu_forms WHERE project_id = " . (int)$currentPid);
+$reportCount = nu_safe_count($db, "SELECT COUNT(*) as total FROM nu_reports WHERE project_id = " . (int)$currentPid);
 $auditToday  = nu_safe_count($db, "SELECT COUNT(*) as total FROM nu_audit_log WHERE DATE(audit_timestamp) = CURDATE()");
 
 try {

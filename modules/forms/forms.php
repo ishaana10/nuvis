@@ -4,7 +4,8 @@ require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 // $auth, $nuConfig available. Session open under 'nu5sess'.
 
 $db    = NuDatabase::getInstance();
-$forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 ORDER BY form_id DESC");
+$pid   = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
+$forms = $db->fetchAll("SELECT * FROM nu_forms WHERE form_active = 1 AND project_id = ? ORDER BY form_id DESC", [$pid]);
 
 // Fetch all tables in the current DB for the "existing table" dropdown
 $pdo         = $db->getPdo();

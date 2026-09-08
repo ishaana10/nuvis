@@ -438,12 +438,56 @@ switch ($action) {
                 $db->delete($tbl, 'project_id = ?', [$projectId]);
             }
 
-            foreach ($snapshot as $tbl => $rows) {
+            $pkMap = [
+                'nu_forms' => 'form_id',
+                'nu_reports' => 'report_id',
+                'nu_queries' => 'query_id',
+                'nu_procedures' => 'procedure_id',
+                'nu_menus' => 'menu_id',
+                'nu_workflows' => 'wf_id',
+                'nu_workflow_stages' => 'wfs_id',
+                'nu_workflow_transitions' => 'wft_id',
+            ];
+
+            $idMappings = [];
+            $insertOrder = ['nu_forms', 'nu_reports', 'nu_queries', 'nu_procedures', 'nu_menus', 'nu_workflows', 'nu_workflow_stages', 'nu_workflow_transitions'];
+
+            foreach ($insertOrder as $tbl) {
+                $rows = $snapshot[$tbl] ?? [];
                 if (!is_array($rows)) continue;
+                $pkCol = $pkMap[$tbl] ?? null;
+                $idMappings[$tbl] = [];
+
                 foreach ($rows as $row) {
                     if (!is_array($row)) continue;
+                    $oldId = $pkCol && isset($row[$pkCol]) ? $row[$pkCol] : null;
+                    if ($pkCol) {
+                        unset($row[$pkCol]);
+                    }
                     $row['project_id'] = $projectId;
-                    $db->insert($tbl, $row);
+
+                    if ($tbl === 'nu_menus' && !empty($row['menu_parent_id']) && isset($idMappings['nu_menus'][$row['menu_parent_id']])) {
+                        $row['menu_parent_id'] = $idMappings['nu_menus'][$row['menu_parent_id']];
+                    }
+                    if ($tbl === 'nu_workflow_stages' && !empty($row['wfs_wf_id']) && isset($idMappings['nu_workflows'][$row['wfs_wf_id']])) {
+                        $row['wfs_wf_id'] = $idMappings['nu_workflows'][$row['wfs_wf_id']];
+                    }
+                    if ($tbl === 'nu_workflow_transitions') {
+                        if (!empty($row['wft_wf_id']) && isset($idMappings['nu_workflows'][$row['wft_wf_id']])) {
+                            $row['wft_wf_id'] = $idMappings['nu_workflows'][$row['wft_wf_id']];
+                        }
+                        if (!empty($row['wft_from_id']) && isset($idMappings['nu_workflow_stages'][$row['wft_from_id']])) {
+                            $row['wft_from_id'] = $idMappings['nu_workflow_stages'][$row['wft_from_id']];
+                        }
+                        if (!empty($row['wft_to_id']) && isset($idMappings['nu_workflow_stages'][$row['wft_to_id']])) {
+                            $row['wft_to_id'] = $idMappings['nu_workflow_stages'][$row['wft_to_id']];
+                        }
+                    }
+
+                    $newId = $db->insert($tbl, $row);
+                    if ($oldId !== null) {
+                        $idMappings[$tbl][$oldId] = $newId;
+                    }
                 }
             }
 

@@ -25,6 +25,7 @@ $_mbRoot = dirname(__DIR__);
 require_once $_mbRoot . '/config.php';      // sets session_name + session_start
 require_once $_mbRoot . '/core/Database.php';
 require_once $_mbRoot . '/core/Auth.php';
+require_once $_mbRoot . '/core/ProjectContext.php';
 
 $auth = NuAuth::getInstance();
 

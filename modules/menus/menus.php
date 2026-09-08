@@ -3,9 +3,10 @@ declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
 $db    = NuDatabase::getInstance();
-$menus = $db->fetchAll("SELECT * FROM nu_menus WHERE menu_active = 1 ORDER BY menu_parent_id ASC, menu_order ASC");
+$pid   = ProjectContext::getId();
+$menus = $db->fetchAll("SELECT * FROM nu_menus WHERE menu_active = 1 AND project_id = ? ORDER BY menu_parent_id ASC, menu_order ASC", [$pid]);
 
-$forms = $db->fetchAll("SELECT form_code, form_name, form_type FROM nu_forms WHERE form_active = 1 ORDER BY form_name");
+$forms = $db->fetchAll("SELECT form_code, form_name, form_type FROM nu_forms WHERE form_active = 1 AND project_id = ? ORDER BY form_name", [$pid]);
 
 $menuMap = [];
 foreach ($menus as $m) {

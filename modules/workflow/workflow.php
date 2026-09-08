@@ -3,13 +3,16 @@ declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
 $db        = NuDatabase::getInstance();
+$pid       = ProjectContext::getId();
 $workflows = $db->fetchAll(
     'SELECT w.*,
             (SELECT COUNT(*) FROM nu_workflow_stages s WHERE s.wfs_wf_id = w.wf_id) AS stage_count,
             (SELECT COUNT(*) FROM nu_workflow_instances i WHERE i.wfi_wf_id = w.wf_id AND i.wfi_status = "active") AS active_instances,
             (SELECT COUNT(*) FROM nu_workflow_instances i WHERE i.wfi_wf_id = w.wf_id) AS total_instances
        FROM nu_workflows w
-      ORDER BY w.wf_active DESC, w.wf_updated_at DESC'
+      WHERE w.project_id = ?
+      ORDER BY w.wf_active DESC, w.wf_updated_at DESC',
+    [$pid]
 );
 ?>
 
