@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS `nu_projects` (
     `project_code` VARCHAR(50) NOT NULL,
     `project_name` VARCHAR(150) NOT NULL,
     `project_description` TEXT NULL,
-    `project_settings` JSON NULL,
+    `project_settings` LONGTEXT NULL,
     `project_active` TINYINT(1) NOT NULL DEFAULT 1,
     `project_is_default` TINYINT(1) NOT NULL DEFAULT 0,
     `project_owner_id` INT NULL,

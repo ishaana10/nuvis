@@ -31,4 +31,10 @@ $auth = NuAuth::getInstance();
 // Enforce authentication — exits with 401 if not logged in.
 $auth->requireAuth();
 
+if (!function_exists('h')) {
+    function h($string, $flags = ENT_QUOTES, $encoding = 'UTF-8') {
+        return htmlspecialchars((string)$string, $flags, $encoding);
+    }
+}
+
 unset($_mbRoot);
