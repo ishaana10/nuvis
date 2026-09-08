@@ -17,8 +17,23 @@ class ProjectContext {
         }
 
         $db = NuDatabase::getInstance();
-        $userId = $_SESSION['usr_id'] ?? ($_SESSION['user_id'] ?? null);
-        $userRole = $_SESSION['usr_role'] ?? ($_SESSION['user_role'] ?? '');
+        $sessUser = $_SESSION['user'] ?? null;
+        $sessUserId = is_array($sessUser) ? ($sessUser['usr_id'] ?? null) : (is_object($sessUser) ? ($sessUser->usr_id ?? null) : null);
+        $sessUserRole = is_array($sessUser) ? ($sessUser['usr_role'] ?? null) : (is_object($sessUser) ? ($sessUser->usr_role ?? null) : null);
+
+        $userId = $_SESSION['nu_user_id'] ?? ($sessUserId ?? ($_SESSION['usr_id'] ?? ($_SESSION['user_id'] ?? null)));
+        $userRole = $_SESSION['nu_role'] ?? ($sessUserRole ?? ($_SESSION['usr_role'] ?? ($_SESSION['user_role'] ?? '')));
+
+        if (($userId === null || $userRole === '') && class_exists('NuAuth')) {
+            $u = NuAuth::getInstance()->getCurrentUser();
+            if (is_array($u)) {
+                $userId = $userId ?? ($u['usr_id'] ?? ($u['id'] ?? null));
+                $userRole = $userRole !== '' ? $userRole : ($u['usr_role'] ?? ($u['role'] ?? ''));
+            } elseif (is_object($u)) {
+                $userId = $userId ?? ($u->usr_id ?? ($u->id ?? null));
+                $userRole = $userRole !== '' ? $userRole : ($u->usr_role ?? ($u->role ?? ''));
+            }
+        }
 
         // Check if session project ID exists
         if (!empty($_SESSION['nu_project_id'])) {
@@ -70,8 +85,23 @@ class ProjectContext {
             return false;
         }
 
-        $userId = $_SESSION['usr_id'] ?? ($_SESSION['user_id'] ?? null);
-        $userRole = $_SESSION['usr_role'] ?? ($_SESSION['user_role'] ?? '');
+        $sessUser = $_SESSION['user'] ?? null;
+        $sessUserId = is_array($sessUser) ? ($sessUser['usr_id'] ?? null) : (is_object($sessUser) ? ($sessUser->usr_id ?? null) : null);
+        $sessUserRole = is_array($sessUser) ? ($sessUser['usr_role'] ?? null) : (is_object($sessUser) ? ($sessUser->usr_role ?? null) : null);
+
+        $userId = $_SESSION['nu_user_id'] ?? ($sessUserId ?? ($_SESSION['usr_id'] ?? ($_SESSION['user_id'] ?? null)));
+        $userRole = $_SESSION['nu_role'] ?? ($sessUserRole ?? ($_SESSION['usr_role'] ?? ($_SESSION['user_role'] ?? '')));
+
+        if (($userId === null || $userRole === '') && class_exists('NuAuth')) {
+            $u = NuAuth::getInstance()->getCurrentUser();
+            if (is_array($u)) {
+                $userId = $userId ?? ($u['usr_id'] ?? ($u['id'] ?? null));
+                $userRole = $userRole !== '' ? $userRole : ($u['usr_role'] ?? ($u['role'] ?? ''));
+            } elseif (is_object($u)) {
+                $userId = $userId ?? ($u->usr_id ?? ($u->id ?? null));
+                $userRole = $userRole !== '' ? $userRole : ($u->usr_role ?? ($u->role ?? ''));
+            }
+        }
 
         if (!empty($userId) && $userRole !== 'globeadmin') {
             if (!self::validateAccess((int)$userId, $projectId, $userRole)) {
@@ -176,6 +206,13 @@ class ProjectContext {
         }
 
         $db = NuDatabase::getInstance();
+
+        // Allow access if user is owner of project
+        $ownerProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_id = ? AND project_owner_id = ? AND project_active = 1", [$projectId, $userId]);
+        if ($ownerProj) {
+            return true;
+        }
+
         $row = $db->fetchOne(
             "SELECT pm_id FROM nu_project_members WHERE pm_project_id = ? AND pm_user_id = ?",
             [$projectId, $userId]
@@ -202,11 +239,26 @@ class ProjectContext {
             session_start();
         }
 
+        $sessUser = $_SESSION['user'] ?? null;
+        $sessUserId = is_array($sessUser) ? ($sessUser['usr_id'] ?? null) : (is_object($sessUser) ? ($sessUser->usr_id ?? null) : null);
+        $sessUserRole = is_array($sessUser) ? ($sessUser['usr_role'] ?? null) : (is_object($sessUser) ? ($sessUser->usr_role ?? null) : null);
+
         if ($userId === null) {
-            $userId = $_SESSION['usr_id'] ?? ($_SESSION['user_id'] ?? null);
+            $userId = $_SESSION['nu_user_id'] ?? ($sessUserId ?? ($_SESSION['usr_id'] ?? ($_SESSION['user_id'] ?? null)));
         }
         if (empty($userRole)) {
-            $userRole = $_SESSION['usr_role'] ?? ($_SESSION['user_role'] ?? '');
+            $userRole = $_SESSION['nu_role'] ?? ($sessUserRole ?? ($_SESSION['usr_role'] ?? ($_SESSION['user_role'] ?? '')));
+        }
+
+        if (($userId === null || empty($userRole)) && class_exists('NuAuth')) {
+            $u = NuAuth::getInstance()->getCurrentUser();
+            if (is_array($u)) {
+                $userId = $userId ?? ($u['usr_id'] ?? ($u['id'] ?? null));
+                $userRole = !empty($userRole) ? $userRole : ($u['usr_role'] ?? ($u['role'] ?? ''));
+            } elseif (is_object($u)) {
+                $userId = $userId ?? ($u->usr_id ?? ($u->id ?? null));
+                $userRole = !empty($userRole) ? $userRole : ($u->usr_role ?? ($u->role ?? ''));
+            }
         }
 
         $db = NuDatabase::getInstance();
@@ -220,11 +272,11 @@ class ProjectContext {
         }
 
         $projects = $db->fetchAll(
-            "SELECT p.*, pm.pm_role FROM nu_projects p
-             INNER JOIN nu_project_members pm ON p.project_id = pm.pm_project_id
-             WHERE pm.pm_user_id = ? AND p.project_active = 1
+            "SELECT DISTINCT p.*, COALESCE(pm.pm_role, 'owner') AS pm_role FROM nu_projects p
+             LEFT JOIN nu_project_members pm ON p.project_id = pm.pm_project_id AND pm.pm_user_id = ?
+             WHERE (pm.pm_user_id = ? OR p.project_owner_id = ? OR p.project_is_default = 1) AND p.project_active = 1
              ORDER BY p.project_is_default DESC, p.project_name ASC",
-            [$userId]
+            [$userId, $userId, $userId]
         );
 
         if (empty($projects)) {
