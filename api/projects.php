@@ -23,7 +23,7 @@ if (!$auth->isLoggedIn()) {
     exit;
 }
 
-$user = $auth->getUser();
+$user = $auth->getCurrentUser();
 $userId = (int)($user['usr_id'] ?? $user['id'] ?? 0);
 $userRole = $user['usr_role'] ?? $user['role'] ?? 'user';
 $isGlobeAdmin = ($userRole === 'globeadmin');
