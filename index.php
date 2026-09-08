@@ -690,7 +690,7 @@ try {
                         }
                     })
                     .catch(function(err) {
-                        alert('Error submitting project creation');
+                        alert('Error submitting project creation: ' + (err.message || 'Server error or permission denied'));
                         if (btn) { btn.disabled = false; btn.textContent = 'Create Project'; }
                     });
                 }
