@@ -680,7 +680,15 @@ try {
                             project_description: desc
                         })
                     })
-                    .then(function(r) { return r.json(); })
+                    .then(function(r) {
+                        return r.text().then(function(text) {
+                            try {
+                                return JSON.parse(text);
+                            } catch (e) {
+                                throw new Error(text || ('HTTP ' + r.status + ' ' + r.statusText));
+                            }
+                        });
+                    })
                     .then(function(res) {
                         if (res.success) {
                             window.location.reload();
