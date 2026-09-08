@@ -333,10 +333,12 @@ class NuMenuRenderer
                 $db->query("UPDATE nu_menus SET menu_target = 'report_dashboards' WHERE menu_label = 'report_dashboards' AND (menu_target IS NULL OR menu_target = '')");
             } catch (Exception $ignored) {}
 
+            $pid = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
             $raw = $db->fetchAll(
                 "SELECT * FROM nu_menus
-                 WHERE  menu_active = 1
-                 ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC"
+                 WHERE  menu_active = 1 AND project_id = ?
+                 ORDER  BY menu_parent_id ASC, menu_order ASC, menu_id ASC",
+                [$pid]
             );
             $rows = array();
             foreach ($raw as $r) {

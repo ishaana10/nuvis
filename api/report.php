@@ -6,6 +6,7 @@ ob_start();
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/core/Database.php';
 require_once dirname(__DIR__) . '/core/Auth.php';
+require_once dirname(__DIR__) . '/core/ProjectContext.php';
 
 ob_clean();
 header('Content-Type: application/json; charset=utf-8');
@@ -53,12 +54,15 @@ try {
 
         // ── list all reports ────────────────────────────────────────────────────────────────
         case 'list':
+            $pid = ProjectContext::getId();
             $rows = $db->fetchAll(
                 "SELECT report_id, report_code, report_name, report_type,
                         report_view_mode, report_active,
                         COALESCE(report_updated_at, report_created_at) AS report_created_at
                  FROM nu_reports
-                 ORDER BY report_name"
+                 WHERE project_id = ?
+                 ORDER BY report_name",
+                [$pid]
             );
             echo json_encode(['success' => true, 'data' => $rows]);
             break;
@@ -67,10 +71,11 @@ try {
         case 'get':
             $id = (int)($_GET['id'] ?? 0);
             if (!$id) throw new Exception('Missing id');
+            $pid = ProjectContext::getId();
             $row = $db->fetchOne(
-                "SELECT * FROM nu_reports WHERE report_id = ?", [$id]
+                "SELECT * FROM nu_reports WHERE report_id = ? AND project_id = ?", [$id, $pid]
             );
-            if (!$row) throw new Exception('Report not found');
+            if (!$row) throw new Exception('Report not found or access denied');
             foreach (['report_columns','report_filters','report_settings','report_pdf_settings'] as $col) {
                 if (isset($row[$col]) && is_string($row[$col])) {
                     $row[$col] = json_decode($row[$col], true) ?? [];
@@ -129,8 +134,12 @@ try {
             $settingsJson = json_encode((object)$settings);
             $pdfSetJson   = json_encode((object)$pdfSettings);
             $userId       = $_SESSION['user_id'] ?? null;
+            $pid          = ProjectContext::getId();
 
             if ($id) {
+                $existing = $db->fetchOne("SELECT report_id FROM nu_reports WHERE report_id = ? AND project_id = ?", [$id, $pid]);
+                if (!$existing) throw new Exception('Report not found or access denied in this project');
+
                 // UPDATE — use $db->query() which exists on NuDatabase
                 $db->query(
                     "UPDATE nu_reports SET
@@ -138,20 +147,20 @@ try {
                         report_sql=?, report_columns=?, report_filters=?, report_settings=?,
                         report_pdf_template=?, report_pdf_settings=?,
                         report_updated_at=NOW()
-                     WHERE report_id=?",
-                    [$name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $pdfTemplate, $pdfSetJson, $id]
+                     WHERE report_id=? AND project_id=?",
+                    [$name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $pdfTemplate, $pdfSetJson, $id, $pid]
                 );
                 echo json_encode(['success' => true, 'id' => $id, 'message' => 'Report updated']);
             } else {
                 // INSERT — use $db->query() which exists on NuDatabase
                 $db->query(
                     "INSERT INTO nu_reports
-                        (report_name, report_code, report_type, report_view_mode,
+                        (project_id, report_name, report_code, report_type, report_view_mode,
                          report_sql, report_columns, report_filters, report_settings,
                          report_pdf_template, report_pdf_settings,
                          report_created_by, report_active)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,1)",
-                    [$name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $pdfTemplate, $pdfSetJson, $userId]
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                    [$pid, $name, $code, $type, $viewMode, $sql, $colsJson, $filtersJson, $settingsJson, $pdfTemplate, $pdfSetJson, $userId]
                 );
                 $newId = $db->lastInsertId();
                 echo json_encode(['success' => true, 'id' => $newId, 'message' => 'Report created']);
@@ -162,7 +171,8 @@ try {
         case 'delete':
             $id = (int)($body['id'] ?? $_GET['id'] ?? 0);
             if (!$id) throw new Exception('Missing id');
-            $db->query("DELETE FROM nu_reports WHERE report_id = ?", [$id]);
+            $pid = ProjectContext::getId();
+            $db->query("DELETE FROM nu_reports WHERE report_id = ? AND project_id = ?", [$id, $pid]);
             echo json_encode(['success' => true, 'message' => 'Report deleted']);
             break;
 

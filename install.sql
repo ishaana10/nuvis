@@ -137,10 +137,66 @@ CREATE TABLE IF NOT EXISTS `nu_files` (
     FOREIGN KEY (`file_uploaded_by`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ─── 0. PROJECTS & MEMBERSHIP ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `nu_projects` (
+    `project_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `project_code` VARCHAR(50) NOT NULL,
+    `project_name` VARCHAR(150) NOT NULL,
+    `project_description` TEXT NULL,
+    `project_settings` JSON NULL,
+    `project_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `project_is_default` TINYINT(1) NOT NULL DEFAULT 0,
+    `project_owner_id` INT NULL,
+    `project_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `project_updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`project_id`),
+    UNIQUE KEY `uq_project_code` (`project_code`),
+    KEY `idx_project_active` (`project_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `nu_project_members` (
+    `pm_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `pm_project_id` INT UNSIGNED NOT NULL,
+    `pm_user_id` INT NOT NULL,
+    `pm_role` VARCHAR(30) NOT NULL DEFAULT 'member',
+    PRIMARY KEY (`pm_id`),
+    UNIQUE KEY `uq_project_user` (`pm_project_id`, `pm_user_id`),
+    FOREIGN KEY (`pm_project_id`) REFERENCES `nu_projects` (`project_id`) ON DELETE CASCADE,
+    FOREIGN KEY (`pm_user_id`) REFERENCES `nu_users` (`usr_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `nu_project_tables` (
+    `pt_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `project_id` INT UNSIGNED NOT NULL,
+    `table_name` VARCHAR(64) NOT NULL,
+    `form_code` VARCHAR(50) NULL,
+    PRIMARY KEY (`pt_id`),
+    UNIQUE KEY `uq_pt_table` (`table_name`),
+    KEY `idx_pt_project` (`project_id`),
+    FOREIGN KEY (`project_id`) REFERENCES `nu_projects` (`project_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `nu_project_versions` (
+    `pv_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `pv_project_id` INT UNSIGNED NOT NULL,
+    `pv_version_tag` VARCHAR(50) NOT NULL,
+    `pv_description` TEXT NULL,
+    `pv_snapshot_data` MEDIUMTEXT NOT NULL,
+    `pv_created_by` INT NULL,
+    `pv_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`pv_id`),
+    KEY `idx_pv_project` (`pv_project_id`),
+    FOREIGN KEY (`pv_project_id`) REFERENCES `nu_projects` (`project_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `nu_projects` (`project_id`, `project_code`, `project_name`, `project_description`, `project_is_default`, `project_active`)
+VALUES (1, 'default', 'Default Project', 'Default system project', 1, 1);
+
 -- ─── 11. FORMS ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_forms` (
     `form_id` INT AUTO_INCREMENT PRIMARY KEY,
-    `form_code` VARCHAR(50) NOT NULL UNIQUE,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
+    `form_code` VARCHAR(50) NOT NULL,
     `form_type` VARCHAR(20) NOT NULL DEFAULT 'main',
     `form_name` VARCHAR(100) NOT NULL,
     `form_table` VARCHAR(50),
@@ -177,13 +233,15 @@ CREATE TABLE IF NOT EXISTS `nu_forms` (
     `form_created_by` INT,
     `form_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `form_updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_form_code_project` (`form_code`, `project_id`),
     FOREIGN KEY (`form_created_by`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ─── 12. REPORTS ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_reports` (
     `report_id` INT AUTO_INCREMENT PRIMARY KEY,
-    `report_code` VARCHAR(50) NOT NULL UNIQUE,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
+    `report_code` VARCHAR(50) NOT NULL,
     `report_name` VARCHAR(100) NOT NULL,
     `report_type` ENUM('table','chart','summary') DEFAULT 'table',
     `report_view_mode` VARCHAR(20) NOT NULL DEFAULT 'table',
@@ -197,13 +255,15 @@ CREATE TABLE IF NOT EXISTS `nu_reports` (
     `report_updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_report_code` (`report_code`),
     INDEX `idx_report_active` (`report_active`),
+    UNIQUE KEY `uq_report_code_project` (`report_code`, `project_id`),
     FOREIGN KEY (`report_created_by`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ─── 13. QUERIES ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_queries` (
     `query_id` INT AUTO_INCREMENT PRIMARY KEY,
-    `query_code` VARCHAR(50) NOT NULL UNIQUE,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
+    `query_code` VARCHAR(50) NOT NULL,
     `query_name` VARCHAR(100) NOT NULL,
     `query_sql` TEXT NOT NULL,
     `query_description` TEXT,
@@ -212,26 +272,30 @@ CREATE TABLE IF NOT EXISTS `nu_queries` (
     `query_created_by` INT,
     `query_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `query_updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_query_code_project` (`query_code`, `project_id`),
     FOREIGN KEY (`query_created_by`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ─── 13b. PROCEDURES ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_procedures` (
     `procedure_id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
     `procedure_name` VARCHAR(150) NOT NULL,
-    `procedure_code` VARCHAR(100) NOT NULL UNIQUE,
+    `procedure_code` VARCHAR(100) NOT NULL,
     `procedure_description` VARCHAR(255) DEFAULT NULL,
     `procedure_php` MEDIUMTEXT DEFAULT NULL,
     `procedure_active` TINYINT(1) NOT NULL DEFAULT 1,
     `procedure_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `procedure_updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_proc_code` (`procedure_code`),
-    INDEX `idx_proc_active` (`procedure_active`)
+    INDEX `idx_proc_active` (`procedure_active`),
+    UNIQUE KEY `uq_proc_code_project` (`procedure_code`, `project_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ─── 14. MENUS ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_menus` (
     `menu_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
     `menu_label` VARCHAR(120) NOT NULL DEFAULT '',
     `menu_type` ENUM('form','report','query','url','group','divider') NOT NULL DEFAULT 'form',
     `menu_target` VARCHAR(255) NOT NULL DEFAULT '',
@@ -438,6 +502,7 @@ CREATE TABLE IF NOT EXISTS `nu_password_history` (
 -- ─── 27. WORKFLOW DEFINITIONS ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflows` (
     `wf_id` INT NOT NULL AUTO_INCREMENT,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
     `wf_code` VARCHAR(64) NOT NULL,
     `wf_name` VARCHAR(128) NOT NULL,
     `wf_description` TEXT,
@@ -447,7 +512,7 @@ CREATE TABLE IF NOT EXISTS `nu_workflows` (
     `wf_created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `wf_updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`wf_id`),
-    UNIQUE KEY `uq_wf_code` (`wf_code`),
+    UNIQUE KEY `uq_wf_code_project` (`wf_code`, `project_id`),
     KEY `idx_wf_active` (`wf_active`),
     FOREIGN KEY (`wf_created_by`) REFERENCES `nu_users` (`usr_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -455,6 +520,7 @@ CREATE TABLE IF NOT EXISTS `nu_workflows` (
 -- ─── 28. WORKFLOW STAGES ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflow_stages` (
     `wfs_id` INT NOT NULL AUTO_INCREMENT,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
     `wfs_wf_id` INT NOT NULL,
     `wfs_code` VARCHAR(64)   NOT NULL,
     `wfs_name` VARCHAR(128)  NOT NULL,
@@ -475,6 +541,7 @@ CREATE TABLE IF NOT EXISTS `nu_workflow_stages` (
 -- ─── 29. WORKFLOW TRANSITIONS ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `nu_workflow_transitions` (
     `wft_id` INT NOT NULL AUTO_INCREMENT,
+    `project_id` INT UNSIGNED NOT NULL DEFAULT 1,
     `wft_wf_id` INT NOT NULL,
     `wft_from_id` INT NOT NULL,
     `wft_to_id` INT NOT NULL,

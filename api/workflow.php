@@ -5,6 +5,7 @@ require_once dirname(__DIR__) . '/core/Database.php';
 require_once dirname(__DIR__) . '/core/Auth.php';
 require_once dirname(__DIR__) . '/core/Audit.php';
 require_once dirname(__DIR__) . '/core/Workflow.php';
+require_once dirname(__DIR__) . '/core/ProjectContext.php';
 
 header('Content-Type: application/json');
 
@@ -33,12 +34,15 @@ try {
 
         // ── LIST workflows ─────────────────────────────────────────────────────
         case 'list':
+            $pid = ProjectContext::getId();
             $rows = $db->fetchAll(
                 'SELECT w.*,
                         (SELECT COUNT(*) FROM nu_workflow_stages WHERE wfs_wf_id = w.wf_id) AS stage_count,
                         (SELECT COUNT(*) FROM nu_workflow_instances WHERE wfi_wf_id = w.wf_id AND wfi_status = "active") AS active_instances
                    FROM nu_workflows w
-                  ORDER BY w.wf_updated_at DESC'
+                  WHERE w.project_id = ?
+                  ORDER BY w.wf_updated_at DESC',
+                [$pid]
             );
             echo json_encode(['success' => true, 'workflows' => $rows]);
             break;
@@ -46,20 +50,21 @@ try {
         // ── GET single workflow + its stages + transitions ──────────────────────
         case 'get':
             $id = (int)($_GET['id'] ?? 0);
-            $wf = $db->fetchOne('SELECT * FROM nu_workflows WHERE wf_id = :id', [':id' => $id]);
-            if (!$wf) { echo json_encode(['success' => false, 'error' => 'Not found']); break; }
+            $pid = ProjectContext::getId();
+            $wf = $db->fetchOne('SELECT * FROM nu_workflows WHERE wf_id = :id AND project_id = :pid', [':id' => $id, ':pid' => $pid]);
+            if (!$wf) { echo json_encode(['success' => false, 'error' => 'Not found or access denied']); break; }
             $stages = $db->fetchAll(
-                'SELECT * FROM nu_workflow_stages WHERE wfs_wf_id = :id ORDER BY wfs_order ASC, wfs_id ASC',
-                [':id' => $id]
+                'SELECT * FROM nu_workflow_stages WHERE wfs_wf_id = :id AND project_id = :pid ORDER BY wfs_order ASC, wfs_id ASC',
+                [':id' => $id, ':pid' => $pid]
             );
             $transitions = $db->fetchAll(
                 'SELECT t.*, fs.wfs_name AS from_name, ts.wfs_name AS to_name
                    FROM nu_workflow_transitions t
                    JOIN nu_workflow_stages fs ON fs.wfs_id = t.wft_from_id
                    JOIN nu_workflow_stages ts ON ts.wfs_id = t.wft_to_id
-                  WHERE t.wft_wf_id = :id
+                  WHERE t.wft_wf_id = :id AND t.project_id = :pid
                   ORDER BY t.wft_id ASC',
-                [':id' => $id]
+                [':id' => $id, ':pid' => $pid]
             );
             echo json_encode(['success' => true, 'workflow' => $wf, 'stages' => $stages, 'transitions' => $transitions]);
             break;
@@ -72,7 +77,9 @@ try {
             if ($code === '') {
                 $code = strtolower(preg_replace('/[^a-z0-9]+/i', '_', $name));
             }
+            $pid = ProjectContext::getId();
             $data = [
+                'project_id'     => $pid,
                 'wf_name'        => $name,
                 'wf_code'        => $code,
                 'wf_description' => trim((string)($body['wf_description'] ?? '')),
@@ -82,8 +89,10 @@ try {
             ];
             $wfId = (int)($body['wf_id'] ?? 0);
             if ($wfId > 0) {
+                $existing = $db->fetchOne('SELECT wf_id FROM nu_workflows WHERE wf_id = :id AND project_id = :pid', [':id' => $wfId, ':pid' => $pid]);
+                if (!$existing) { echo json_encode(['success' => false, 'error' => 'Workflow not found or access denied']); break; }
                 unset($data['wf_created_by']);
-                $db->update('nu_workflows', $data, 'wf_id = :id', [':id' => $wfId]);
+                $db->update('nu_workflows', $data, 'wf_id = :id AND project_id = :pid', [':id' => $wfId, ':pid' => $pid]);
                 $audit->log('workflow_update', 'nu_workflows', $wfId);
                 echo json_encode(['success' => true, 'wf_id' => $wfId]);
             } else {
@@ -96,6 +105,9 @@ try {
         // ── DELETE workflow ────────────────────────────────────────────────────
         case 'delete':
             $id = (int)($_GET['id'] ?? 0);
+            $pid = ProjectContext::getId();
+            $existing = $db->fetchOne('SELECT wf_id FROM nu_workflows WHERE wf_id = :id AND project_id = :pid', [':id' => $id, ':pid' => $pid]);
+            if (!$existing) { echo json_encode(['success' => false, 'error' => 'Workflow not found or access denied']); break; }
             $active = $db->fetchOne(
                 'SELECT COUNT(*) AS n FROM nu_workflow_instances WHERE wfi_wf_id = :id AND wfi_status = "active"',
                 [':id' => $id]
@@ -104,7 +116,7 @@ try {
                 echo json_encode(['success' => false, 'error' => 'Cannot delete: workflow has active instances.']);
                 break;
             }
-            $db->query('DELETE FROM nu_workflows WHERE wf_id = :id', [':id' => $id]);
+            $db->query('DELETE FROM nu_workflows WHERE wf_id = :id AND project_id = :pid', [':id' => $id, ':pid' => $pid]);
             $audit->log('workflow_delete', 'nu_workflows', $id);
             echo json_encode(['success' => true]);
             break;

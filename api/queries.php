@@ -8,6 +8,7 @@ header('Content-Type: application/json');
 require_once '../config.php';
 require_once '../core/Database.php';
 require_once '../core/Auth.php';
+require_once '../core/ProjectContext.php';
 require_once '../core/QueryExecutor.php';
 
 $auth = new NuAuth();
@@ -36,11 +37,14 @@ switch ($action) {
 // ── LIST ──────────────────────────────────────────────────────────────────
 function actionList($db) {
     try {
+        $pid = ProjectContext::getId();
         $rows = $db->fetchAll(
             'SELECT query_id, query_code, query_name, query_description,
                     query_active, query_created_at, query_updated_at
              FROM nu_queries
-             ORDER BY query_updated_at DESC'
+             WHERE project_id = ?
+             ORDER BY query_updated_at DESC',
+            [$pid]
         );
         echo json_encode(['success' => true, 'queries' => $rows]);
     } catch (Exception $e) {
@@ -53,8 +57,9 @@ function actionGet($db) {
     $id = $_GET['id'] ?? '';
     if (!$id) { echo json_encode(['success' => false, 'error' => 'Missing id']); return; }
     try {
-        $row = $db->fetchOne('SELECT * FROM nu_queries WHERE query_id = ?', [(int)$id]);
-        if (!$row) { echo json_encode(['success' => false, 'error' => 'Query not found']); return; }
+        $pid = ProjectContext::getId();
+        $row = $db->fetchOne('SELECT * FROM nu_queries WHERE query_id = ? AND project_id = ?', [(int)$id, $pid]);
+        if (!$row) { echo json_encode(['success' => false, 'error' => 'Query not found or access denied']); return; }
         echo json_encode(['success' => true, 'query' => $row]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
@@ -107,7 +112,9 @@ function actionSave($db, $auth) {
         $paramsJson = '{}';
     }
 
+    $pid = ProjectContext::getId();
     $row = [
+        'project_id'        => $pid,
         'query_name'        => $queryName,
         'query_code'        => $queryCode,
         'query_description' => $queryDesc,
@@ -118,10 +125,12 @@ function actionSave($db, $auth) {
 
     try {
         if ($queryId) {
-            $db->update('nu_queries', $row, 'query_id = ?', [$queryId]);
+            $existing = $db->fetchOne('SELECT query_id FROM nu_queries WHERE query_id = ? AND project_id = ?', [$queryId, $pid]);
+            if (!$existing) { echo json_encode(['success' => false, 'error' => 'Query not found or access denied']); return; }
+            $db->update('nu_queries', $row, 'query_id = ? AND project_id = ?', [$queryId, $pid]);
             echo json_encode(['success' => true, 'query_id' => $queryId]);
         } else {
-            $existing = $db->fetchOne('SELECT query_id FROM nu_queries WHERE query_code = ?', [$queryCode]);
+            $existing = $db->fetchOne('SELECT query_id FROM nu_queries WHERE query_code = ? AND project_id = ?', [$queryCode, $pid]);
             if ($existing) {
                 echo json_encode(['success' => false, 'error' => "Query code '{$queryCode}' already exists"]); return;
             }
@@ -142,7 +151,8 @@ function actionDelete($db, $auth) {
     $id = $_GET['id'] ?? '';
     if (!$id) { echo json_encode(['success' => false, 'error' => 'Missing id']); return; }
     try {
-        $db->query('DELETE FROM nu_queries WHERE query_id = ?', [(int)$id]);
+        $pid = ProjectContext::getId();
+        $db->query('DELETE FROM nu_queries WHERE query_id = ? AND project_id = ?', [(int)$id, $pid]);
         echo json_encode(['success' => true]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);

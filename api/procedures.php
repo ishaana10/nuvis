@@ -8,6 +8,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once '../config.php';
 require_once '../core/Database.php';
 require_once '../core/Auth.php';
+require_once '../core/ProjectContext.php';
 
 $auth = new NuAuth();
 if (!$auth->checkAuth()) {
@@ -41,11 +42,14 @@ switch ($action) {
 // ── LIST ──────────────────────────────────────────────────────────────────
 function actionList($db) {
     try {
+        $pid = ProjectContext::getId();
         $rows = $db->fetchAll(
             'SELECT procedure_id, procedure_code, procedure_name, procedure_description,
                     procedure_active, procedure_created_at, procedure_updated_at
              FROM nu_procedures
-             ORDER BY procedure_updated_at DESC'
+             WHERE project_id = ?
+             ORDER BY procedure_updated_at DESC',
+            [$pid]
         );
         echo json_encode(['success' => true, 'procedures' => $rows]);
     } catch (Exception $e) {
@@ -58,8 +62,9 @@ function actionGet($db) {
     $id = $_GET['id'] ?? '';
     if (!$id) { echo json_encode(['success' => false, 'error' => 'Missing id']); return; }
     try {
-        $row = $db->fetchOne('SELECT * FROM nu_procedures WHERE procedure_id = ?', [(int)$id]);
-        if (!$row) { echo json_encode(['success' => false, 'error' => 'Procedure not found']); return; }
+        $pid = ProjectContext::getId();
+        $row = $db->fetchOne('SELECT * FROM nu_procedures WHERE procedure_id = ? AND project_id = ?', [(int)$id, $pid]);
+        if (!$row) { echo json_encode(['success' => false, 'error' => 'Procedure not found or access denied']); return; }
         echo json_encode(['success' => true, 'procedure' => $row]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
@@ -91,7 +96,9 @@ function actionSave($db) {
 
     if (!$procCode) { echo json_encode(['success' => false, 'error' => 'Invalid or empty Code']); return; }
 
+    $pid = ProjectContext::getId();
     $row = [
+        'project_id'            => $pid,
         'procedure_name'        => $procName,
         'procedure_code'        => $procCode,
         'procedure_description' => $procDesc,
@@ -101,10 +108,12 @@ function actionSave($db) {
 
     try {
         if ($procId) {
-            $db->update('nu_procedures', $row, 'procedure_id = ?', [$procId]);
+            $existing = $db->fetchOne('SELECT procedure_id FROM nu_procedures WHERE procedure_id = ? AND project_id = ?', [$procId, $pid]);
+            if (!$existing) { echo json_encode(['success' => false, 'error' => 'Procedure not found or access denied']); return; }
+            $db->update('nu_procedures', $row, 'procedure_id = ? AND project_id = ?', [$procId, $pid]);
             echo json_encode(['success' => true, 'procedure_id' => $procId]);
         } else {
-            $existing = $db->fetchOne('SELECT procedure_id FROM nu_procedures WHERE procedure_code = ?', [$procCode]);
+            $existing = $db->fetchOne('SELECT procedure_id FROM nu_procedures WHERE procedure_code = ? AND project_id = ?', [$procCode, $pid]);
             if ($existing) {
                 echo json_encode(['success' => false, 'error' => "Procedure code '{$procCode}' already exists"]); return;
             }
@@ -122,7 +131,8 @@ function actionDelete($db) {
     $id = $_GET['id'] ?? '';
     if (!$id) { echo json_encode(['success' => false, 'error' => 'Missing id']); return; }
     try {
-        $db->query('DELETE FROM nu_procedures WHERE procedure_id = ?', [(int)$id]);
+        $pid = ProjectContext::getId();
+        $db->query('DELETE FROM nu_procedures WHERE procedure_id = ? AND project_id = ?', [(int)$id, $pid]);
         echo json_encode(['success' => true]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
