@@ -433,6 +433,13 @@ try {
             <!-- ── Admin Tools section ── -->
             <?php if ($isAdmin): ?>
             <div style="margin:12px 8px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted,#888);padding:0 4px;">Admin Tools</div>
+            <a href="#projects" class="nu-nav-item" data-module="projects"
+               onclick="NuApp.loadModule('projects'); return false;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>Projects</span>
+            </a>
             <a href="#menus" class="nu-nav-item" data-module="menus"
                onclick="NuApp.loadModule('menus'); return false;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -602,7 +609,7 @@ try {
                     $activeProjectId = ProjectContext::getId();
                     $accessibleProjects = ProjectContext::getAccessibleProjects();
                 ?>
-                <div class="nu-project-switcher" style="position: relative; display: inline-flex; align-items: center; margin-right: 8px;">
+                <div class="nu-project-switcher" style="position: relative; display: inline-flex; align-items: center; gap: 6px; margin-right: 8px;">
                     <select id="nuProjectSelect" onchange="nuSwitchProject(this.value)" class="nu-input" style="padding: 5px 10px; font-weight: 600; font-size: 13px; border-radius: 6px; cursor: pointer; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color);" title="Switch Active Project">
                         <?php foreach ($accessibleProjects as $proj): ?>
                             <option value="<?= (int)$proj['project_id'] ?>" <?= (int)$proj['project_id'] === $activeProjectId ? 'selected' : '' ?>>
@@ -610,6 +617,12 @@ try {
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <?php if ($_role === 'globeadmin'): ?>
+                    <button class="nu-btn nu-btn-primary nu-btn-sm" style="padding: 4px 10px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; border-radius: 6px;" onclick="nuOpenQuickNewProjectModal()" title="Create New Project">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>New Project</span>
+                    </button>
+                    <?php endif; ?>
                 </div>
                 <script>
                 function nuSwitchProject(pid) {
@@ -628,6 +641,58 @@ try {
                         }
                     })
                     .catch(function(err) { alert('Network error switching project'); });
+                }
+
+                function nuOpenQuickNewProjectModal() {
+                    var modal = document.getElementById('nuQuickNewProjectModal');
+                    if (modal) {
+                        modal.style.display = 'flex';
+                        var codeInput = document.getElementById('nuQuickProjCode');
+                        if (codeInput) codeInput.focus();
+                    }
+                }
+
+                function nuCloseQuickNewProjectModal() {
+                    var modal = document.getElementById('nuQuickNewProjectModal');
+                    if (modal) modal.style.display = 'none';
+                }
+
+                function nuQuickCreateProjectSubmit(e) {
+                    e.preventDefault();
+                    var code = document.getElementById('nuQuickProjCode').value.trim();
+                    var name = document.getElementById('nuQuickProjName').value.trim();
+                    var desc = document.getElementById('nuQuickProjDesc').value.trim();
+
+                    if (!code || !name) {
+                        alert('Project Code and Name are required.');
+                        return;
+                    }
+
+                    var btn = document.getElementById('nuQuickProjSubmitBtn');
+                    if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+
+                    fetch('api/projects.php?action=create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_code: code,
+                            project_name: name,
+                            project_description: desc
+                        })
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (res.success) {
+                            window.location.reload();
+                        } else {
+                            alert(res.error || 'Failed to create project');
+                            if (btn) { btn.disabled = false; btn.textContent = 'Create Project'; }
+                        }
+                    })
+                    .catch(function(err) {
+                        alert('Error submitting project creation');
+                        if (btn) { btn.disabled = false; btn.textContent = 'Create Project'; }
+                    });
                 }
                 </script>
                 <?php endif; ?>
@@ -698,6 +763,41 @@ try {
     <div class="nu-overlay" id="overlay"
          onclick="document.getElementById('sidebar').classList.remove('open');this.classList.remove('open')"></div>
 </div>
+
+<!-- ════════════════════════ QUICK NEW PROJECT MODAL ════════════════════════ -->
+<?php if ($isLoggedIn && $_role === 'globeadmin'): ?>
+<div id="nuQuickNewProjectModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 99999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; width: 100%; max-width: 460px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary, #fff); margin: 0; display: flex; align-items: center; gap: 8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Create New Project
+            </h3>
+            <button onclick="nuCloseQuickNewProjectModal()" style="background: transparent; border: none; color: var(--text-muted, #94a3b8); cursor: pointer; padding: 4px;" title="Close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <form onsubmit="nuQuickCreateProjectSubmit(event)">
+            <div style="margin-bottom: 14px;">
+                <label for="nuQuickProjCode" style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 4px;">Project Code (Slug) *</label>
+                <input id="nuQuickProjCode" type="text" class="nu-input" placeholder="e.g. sales_app" required style="width: 100%; font-family: monospace;">
+            </div>
+            <div style="margin-bottom: 14px;">
+                <label for="nuQuickProjName" style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 4px;">Project Name *</label>
+                <input id="nuQuickProjName" type="text" class="nu-input" placeholder="e.g. Sales Management Portal" required style="width: 100%;">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label for="nuQuickProjDesc" style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 4px;">Description</label>
+                <textarea id="nuQuickProjDesc" class="nu-input" rows="3" placeholder="Brief description of this project environment..." style="width: 100%; resize: vertical;"></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="nu-btn nu-btn-ghost" onclick="nuCloseQuickNewProjectModal()">Cancel</button>
+                <button type="submit" id="nuQuickProjSubmitBtn" class="nu-btn nu-btn-primary">Create Project</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php endif; ?>
 

@@ -123,6 +123,27 @@ class NuMenuRenderer
                     ]);
                 }
 
+                $existsProjects = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'projects'");
+                if (!$existsProjects) {
+                    $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
+                    $parentId = $adminGroup ? (int)$adminGroup['menu_id'] : 0;
+                    $db->insert('nu_menus', [
+                        'menu_label'        => 'Projects',
+                        'menu_type'         => 'form',
+                        'menu_target'       => 'projects',
+                        'menu_parent_id'    => $parentId,
+                        'menu_order'        => 5,
+                        'menu_roles'        => 'globeadmin,admin',
+                        'menu_role_access'  => '["globeadmin","admin"]',
+                        'menu_active'       => 1,
+                        'menu_icon'         => 'files',
+                        'menu_open_mode'    => 'inline|browse',
+                        'menu_browse_mode'  => 'inline',
+                        'menu_preview_mode' => 'inline',
+                        'menu_default_view' => 'browse'
+                    ]);
+                }
+
                 $existsApi = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_target = 'api_manager'");
                 if (!$existsApi) {
                     $adminGroup = $db->fetchOne("SELECT menu_id FROM nu_menus WHERE menu_label = 'Admin Tools' AND menu_type = 'group'");
