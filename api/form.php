@@ -151,16 +151,25 @@ function nu_form_columns() {
 function nu_get_form($code) {
     $table = nu_form_table_name();
     $c = nu_form_columns();
+    $pid = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
 
     $stmt = nu_q(
-        "SELECT * FROM `{$table}` WHERE `{$c['code']}` = ? AND `{$c['active']}` = 1 LIMIT 1",
-        [$code]
+        "SELECT * FROM `{$table}` WHERE `{$c['code']}` = ? AND project_id = ? AND `{$c['active']}` = 1 LIMIT 1",
+        [$code, $pid]
     );
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($form) return $form;
 
     $stmt = nu_q(
-        "SELECT * FROM `{$table}` WHERE `{$c['code']}` = ? LIMIT 1",
+        "SELECT * FROM `{$table}` WHERE `{$c['code']}` = ? AND project_id = ? LIMIT 1",
+        [$code, $pid]
+    );
+    $form = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($form) return $form;
+
+    // Fallback search without project_id if not found in current project (e.g. system forms)
+    $stmt = nu_q(
+        "SELECT * FROM `{$table}` WHERE `{$c['code']}` = ? AND `{$c['active']}` = 1 LIMIT 1",
         [$code]
     );
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;

@@ -297,7 +297,7 @@ function actionGet($db) {
     if (!$id) { echo json_encode(['success' => false, 'error' => 'Missing id']); return; }
     try {
         $pid = ProjectContext::getId();
-        $form = $db->fetchOne('SELECT * FROM nu_forms WHERE form_id = ? AND project_id = ?', [$id, $pid]);
+        $form = $db->fetchOne('SELECT * FROM nu_forms WHERE form_id = ? AND project_id = ? LIMIT 1', [$id, $pid]);
         if (!$form) { echo json_encode(['success' => false, 'error' => 'Form not found or access denied']); return; }
         echo json_encode(['success' => true, 'form' => $form]);
     } catch (Exception $e) {

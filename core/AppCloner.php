@@ -773,7 +773,8 @@ class AppCloner {
 
         // 1. Export nu_projects row
         $parts[] = "-- ─── PROJECT METADATA ───────────────────";
-        $parts[] = "INSERT INTO `nu_projects` (`project_id`, `project_code`, `project_name`, `project_description`, `project_settings`, `project_active`, `project_is_default`) VALUES (" .
+        $insVerb = ($driver === 'sqlite') ? "INSERT OR REPLACE INTO" : "REPLACE INTO";
+        $parts[] = "{$insVerb} `nu_projects` (`project_id`, `project_code`, `project_name`, `project_description`, `project_settings`, `project_active`, `project_is_default`) VALUES (" .
             (int)$proj['project_id'] . ", " .
             $pdo->quote((string)$proj['project_code']) . ", " .
             $pdo->quote((string)$proj['project_name']) . ", " .
@@ -781,7 +782,7 @@ class AppCloner {
             ($proj['project_settings'] !== null ? $pdo->quote((string)$proj['project_settings']) : 'NULL') . ", " .
             (int)$proj['project_active'] . ", " .
             (int)$proj['project_is_default'] .
-            ") ON DUPLICATE KEY UPDATE `project_name` = VALUES(`project_name`);\n";
+            ");\n";
 
         // 2. Export metadata tables for this project
         $metaTables = [

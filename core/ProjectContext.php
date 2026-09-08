@@ -272,11 +272,11 @@ class ProjectContext {
         }
 
         $projects = $db->fetchAll(
-            "SELECT DISTINCT p.*, COALESCE(pm.pm_role, 'owner') AS pm_role FROM nu_projects p
+            "SELECT p.*, COALESCE(pm.pm_role, CASE WHEN p.project_owner_id = ? THEN 'owner' ELSE 'member' END) AS pm_role FROM nu_projects p
              LEFT JOIN nu_project_members pm ON p.project_id = pm.pm_project_id AND pm.pm_user_id = ?
              WHERE (pm.pm_user_id = ? OR p.project_owner_id = ? OR p.project_is_default = 1) AND p.project_active = 1
              ORDER BY p.project_is_default DESC, p.project_name ASC",
-            [$userId, $userId, $userId]
+            [$userId, $userId, $userId, $userId]
         );
 
         if (empty($projects)) {

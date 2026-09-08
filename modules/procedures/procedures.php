@@ -3,7 +3,8 @@ declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
 $db = NuDatabase::getInstance();
-$procedures = $db->fetchAll("SELECT * FROM nu_procedures ORDER BY procedure_updated_at DESC");
+$pid        = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
+$procedures = $db->fetchAll("SELECT * FROM nu_procedures WHERE project_id = ? ORDER BY procedure_updated_at DESC", [$pid]);
 ?>
 
 <style>

@@ -81,8 +81,11 @@ class NuMenuRenderer
 
         $rows = array();
         try {
+            if (!class_exists('ProjectContext')) {
+                require_once __DIR__ . '/ProjectContext.php';
+            }
             $db  = NuDatabase::getInstance();
-            $pid = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
+            $pid = ProjectContext::getId();
 
             // Self-healing: Ensure Import / Export and Developer Settings menu items exist in nu_menus table
             try {
@@ -361,7 +364,7 @@ class NuMenuRenderer
                 $db->query("UPDATE nu_menus SET menu_target = 'report_dashboards' WHERE menu_label = 'report_dashboards' AND (menu_target IS NULL OR menu_target = '')");
             } catch (Exception $ignored) {}
 
-            $pid = class_exists('ProjectContext') ? ProjectContext::getId() : 1;
+            $pid = ProjectContext::getId();
             $raw = $db->fetchAll(
                 "SELECT * FROM nu_menus
                  WHERE  menu_active = 1 AND project_id = ?
