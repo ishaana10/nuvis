@@ -101,6 +101,7 @@ nuvis/
 │   ├── procedures/               # Centralized Custom PHP Procedures (functions) block designer
 │   ├── system_demo_files/        # Interactive Developer Demo (Custom LEFT JOIN forms, workflows, automation)
 │   ├── developer_settings/       # System-wide variables, user custom fields & toggles
+│   ├── projects/                 # Multi-Project Manager (isolation, switcher, member access, versions, SQL export)
 │   └── email-settings.html       # Standalone email settings UI
 │
 └── assets/
@@ -198,6 +199,7 @@ cp config.local.php.example config.local.php
 - App Cloner — clone and template entire applications
 - Dashboard widgets (configurable, icon support)
 - System Updater — Git auto-update & config manager (restricted to globeadmin/admin)
+- Multi-Project Management — isolated projects, header switcher, access control, version snapshots, and single-project SQL export
 
 ---
 
@@ -264,6 +266,14 @@ A robust modular script repository enabling server-side execution of custom PHP 
 - **Sandboxed Test Console:** Embedded Code Editor combined with an interactive test runtime panel allowing developers to mock inputs, execute procedures safely, and review execution time, output buffers, and exceptions.
 - **Unified Client-Server Bridge**: Allows immediate client-side invocation via a simple asynchronous javascript API `callPHP(code, params, callback)` or its alias `runProcedure(code, params, callback)`. Under the hood, procedures are executed via static helper `NuProcedure::run($code, $params)` or global functions `nu_run_procedure()` / `run_procedure()`.
 
+### 📁 Multi-Project Management & Metadata Isolation
+A multi-tenant project isolation engine within a single Nuvis instance:
+- **Project Context & Switcher**: Header dropdown allowing users to switch active project context in real time.
+- **Isolated Metadata**: Filters forms, menus, reports, queries, procedures, and workflows by `project_id`.
+- **Project Members & Security**: Assigns users to projects via `nu_project_members` with roles (`owner`, `admin`, `member`), enforcing RBAC across non-`globeadmin` users.
+- **Single-Project SQL Exports**: AppCloner integration (`exportProject`) exporting project definitions and registered form data tables into portable SQL bundles.
+- **Version Snapshots & Rollback**: Point-in-time JSON metadata snapshot creation and restoration (`nu_project_versions`).
+
 ### 🏷️ Barcodes, Products & Self-Healing Inventory
 A dedicated products tracking system:
 - **Self-Healing Schema**: Automatically checks for, creates, and populates the `nu_products` table on database connect using session-cached flags, preventing runtime errors.
@@ -323,6 +333,12 @@ Over the course of recent developments, we have performed deep architectural ref
 - `nu_reports` — Report metadata (SQL + columns)
 - `nu_queries` — Query metadata (SQL + parameters)
 - `nu_menus` — Navigation structure (role JSON access + CSV fallback)
+
+### Multi-Project Tables
+- `nu_projects` — Project definitions and configurations
+- `nu_project_members` — User-to-project access control mapping
+- `nu_project_tables` — Form table registry per project
+- `nu_project_versions` — JSON metadata snapshot version control
 
 ### System Tables
 - `nu_api_tokens` — API keys for incoming REST integrations
