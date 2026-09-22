@@ -14,6 +14,36 @@ class NuApi {
         $this->auth = new NuAuth();
     }
 
+    /**
+     * Validates that an identifier (table name or column name) contains only alphanumeric characters and underscores,
+     * and optionally checks if the table exists in the database schema.
+     */
+    public function validateIdentifier(string $identifier, bool $checkTableExists = false): string {
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $identifier)) {
+            $this->error('Invalid table or column name format', 400);
+        }
+
+        if ($checkTableExists) {
+            $driver = $this->db->getDriverName();
+            if ($driver === 'sqlite') {
+                $check = $this->db->fetchOne(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name = :t",
+                    [':t' => $identifier]
+                );
+            } else {
+                $check = $this->db->fetchOne(
+                    "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t",
+                    [':t' => $identifier]
+                );
+            }
+            if (!$check) {
+                $this->error('Access denied or table does not exist', 400);
+            }
+        }
+
+        return $identifier;
+    }
+
     public function authenticate() {
         if (isset($_SESSION['nu_user_id'])) {
             $user = $this->db->fetchOne(
@@ -23,7 +53,17 @@ class NuApi {
             if ($user) return $user;
         }
 
-        $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? null;
+        $allowQueryParam = $this->config['allowApiKeyQueryParam'] ?? false;
+        $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? null;
+        if (!$apiKey && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            if (preg_match('/Bearer\s+(\S+)/i', $_SERVER['HTTP_AUTHORIZATION'], $matches)) {
+                $apiKey = $matches[1];
+            }
+        }
+        if (!$apiKey && $allowQueryParam && isset($_GET['api_key'])) {
+            $apiKey = $_GET['api_key'];
+        }
+
         if (!$apiKey) {
             $this->error('API key required', 401);
         }
@@ -80,14 +120,27 @@ class NuApi {
 
     // Detect primary key column for any table
     private function getPrimaryKey($table) {
+        $table = $this->validateIdentifier($table, true);
         if (isset($this->pkCache[$table])) {
             return $this->pkCache[$table];
         }
-        $cols = $this->db->fetchAll("SHOW COLUMNS FROM {$table}");
-        foreach ($cols as $col) {
-            if ($col['Key'] === 'PRI') {
-                $this->pkCache[$table] = $col['Field'];
-                return $col['Field'];
+
+        $driver = $this->db->getDriverName();
+        if ($driver === 'sqlite') {
+            $cols = $this->db->fetchAll("PRAGMA table_info(`{$table}`)");
+            foreach ($cols as $col) {
+                if (!empty($col['pk'])) {
+                    $this->pkCache[$table] = $col['name'];
+                    return $col['name'];
+                }
+            }
+        } else {
+            $cols = $this->db->fetchAll("SHOW COLUMNS FROM `{$table}`");
+            foreach ($cols as $col) {
+                if ($col['Key'] === 'PRI') {
+                    $this->pkCache[$table] = $col['Field'];
+                    return $col['Field'];
+                }
             }
         }
         // Fallback to 'id' if no PK found
@@ -96,23 +149,25 @@ class NuApi {
     }
 
     public function listRecords($table, $filters = [], $page = 1, $perPage = 20) {
+        $table = $this->validateIdentifier($table, true);
         $offset = ($page - 1) * $perPage;
         $where = ['1=1'];
         $params = [];
 
         foreach ($filters as $key => $value) {
-            $where[] = "{$key} = :{$key}";
-            $params[":{$key}"] = $value;
+            $cleanKey = $this->validateIdentifier((string)$key, false);
+            $where[] = "`{$cleanKey}` = :{$cleanKey}";
+            $params[":{$cleanKey}"] = $value;
         }
 
-        $sql = "SELECT * FROM {$table} WHERE " . implode(' AND ', $where) .
+        $sql = "SELECT * FROM `{$table}` WHERE " . implode(' AND ', $where) .
                " LIMIT :limit OFFSET :offset";
         $params[':limit'] = (int)$perPage;
         $params[':offset'] = (int)$offset;
 
         $records = $this->db->fetchAll($sql, $params);
 
-        $countSql = "SELECT COUNT(*) as total FROM {$table} WHERE " . implode(' AND ', $where);
+        $countSql = "SELECT COUNT(*) as total FROM `{$table}` WHERE " . implode(' AND ', $where);
         unset($params[':limit'], $params[':offset']);
         $total = $this->db->fetchOne($countSql, $params);
 
@@ -126,28 +181,42 @@ class NuApi {
     }
 
     public function getRecord($table, $id) {
+        $table = $this->validateIdentifier($table, true);
         $pk = $this->getPrimaryKey($table);
-        return $this->db->fetchOne("SELECT * FROM {$table} WHERE {$pk} = :id", [':id' => $id]);
+        return $this->db->fetchOne("SELECT * FROM `{$table}` WHERE `{$pk}` = :id", [':id' => $id]);
     }
 
     public function createRecord($table, $data) {
-        $id = $this->db->insert($table, $data);
-        $this->logAudit('api_create', $table, $id, null, $data);
+        $table = $this->validateIdentifier($table, true);
+        $cleanData = [];
+        foreach ($data as $k => $v) {
+            $cleanKey = $this->validateIdentifier((string)$k, false);
+            $cleanData[$cleanKey] = $v;
+        }
+        $id = $this->db->insert($table, $cleanData);
+        $this->logAudit('api_create', $table, $id, null, $cleanData);
         return $id;
     }
 
     public function updateRecord($table, $id, $data) {
+        $table = $this->validateIdentifier($table, true);
         $pk = $this->getPrimaryKey($table);
         $old = $this->getRecord($table, $id);
-        $this->db->update($table, $data, "{$pk} = :id", [':id' => $id]);
-        $this->logAudit('api_update', $table, $id, $old, $data);
+        $cleanData = [];
+        foreach ($data as $k => $v) {
+            $cleanKey = $this->validateIdentifier((string)$k, false);
+            $cleanData[$cleanKey] = $v;
+        }
+        $this->db->update($table, $cleanData, "`{$pk}` = :id", [':id' => $id]);
+        $this->logAudit('api_update', $table, $id, $old, $cleanData);
         return true;
     }
 
     public function deleteRecord($table, $id) {
+        $table = $this->validateIdentifier($table, true);
         $pk = $this->getPrimaryKey($table);
         $old = $this->getRecord($table, $id);
-        $this->db->delete($table, "{$pk} = :id", [':id' => $id]);
+        $this->db->delete($table, "`{$pk}` = :id", [':id' => $id]);
         $this->logAudit('api_delete', $table, $id, $old, null);
         return true;
     }

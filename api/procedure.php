@@ -2,11 +2,20 @@
 require_once '../config.php';
 require_once '../core/Database.php';
 require_once '../core/Auth.php';
+require_once '../core/Audit.php';
 
 $auth = new NuAuth();
 if (!$auth->checkAuth()) {
     http_response_code(403);
     echo json_encode(['error' => 'Unauthorized']);
+    exit;
+}
+
+$user = $auth->getCurrentUser();
+$role = strtolower((string)($user['usr_role'] ?? ''));
+if ($role !== 'globeadmin' && $role !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Permission denied. Administrative role required to execute procedures.']);
     exit;
 }
 
@@ -40,15 +49,18 @@ try {
     $_proc_db = $db;
     $_proc_auth = $auth;
     $_proc_hash = $hashCookies;
-    
+
     // Use output buffering to catch any echo/print
     ob_start();
-    
+
     // Execute procedure code
     eval('?>' . $proc['procedure_php']);
-    
+
     $output = ob_get_clean();
-    
+
+    $audit = new NuAudit();
+    $audit->log('run_procedure', 'nu_procedures', (int)($proc['procedure_id'] ?? 0), null, ['code' => $code]);
+
     $result = [
         'success' => true,
         'output' => $output,

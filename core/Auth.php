@@ -52,6 +52,16 @@ class NuAuth {
             }
         }
 
+        // Enforce password change for default credentials or when usr_must_change_password is set
+        $mustChange = !empty($user['usr_must_change_password']);
+        if (($user['usr_username'] === 'globeadmin' && password_verify('password', $user['usr_password'])) || $password === 'password') {
+            $mustChange = true;
+            try {
+                $this->db->query("UPDATE nu_users SET usr_must_change_password = 1 WHERE usr_id = :id", [':id' => $user['usr_id']]);
+                $user['usr_must_change_password'] = 1;
+            } catch (\Throwable $t) {}
+        }
+
         $this->resetAttempts($user['usr_id']);
         $this->createSession($user);
         $this->logAudit('login', 'nu_users', $user['usr_id']);
@@ -122,7 +132,11 @@ class NuAuth {
     }
 
     public function verifyCsrf($token) {
-        return isset($_SESSION['nu_csrf']) && hash_equals($_SESSION['nu_csrf'], $token);
+        return isset($_SESSION['nu_csrf']) && hash_equals($_SESSION['nu_csrf'], (string)$token);
+    }
+
+    public function verifyCsrfToken($token) {
+        return $this->verifyCsrf($token);
     }
 
     // --- Legacy permission check (module-level) ---
@@ -224,12 +238,28 @@ class NuAuth {
         $meta = $this->getGlobalMeta();
         if (empty($meta)) return $sql;
 
+        $pdo = null;
+        try {
+            $pdo = NuDatabase::getInstance()->getPdo();
+        } catch (\Throwable $e) {}
+
         foreach ($meta as $key => $value) {
-            // Sanitise key to prevent regex injection
             $safeKey = preg_quote((string)$key, '/');
-            // Escape value for safe SQL embedding (PDO not available at this point)
-            $safeVal = addslashes((string)$value);
-            $sql = preg_replace('/##' . $safeKey . '##/', $safeVal, $sql);
+            if ($value === null) {
+                $quotedVal = "''";
+            } else if (is_int($value) || is_float($value)) {
+                $quotedVal = (string)$value;
+            } else if (is_numeric($value) && (string)(int)$value === (string)$value) {
+                $quotedVal = (string)$value;
+            } else if ($pdo) {
+                $quotedVal = $pdo->quote((string)$value);
+            } else {
+                $quotedVal = "'" . addslashes((string)$value) . "'";
+            }
+
+            // Replace single-quoted placeholders ('##key##') or unquoted placeholders (##key##) safely
+            $sql = preg_replace("/'##" . $safeKey . "##'/", $quotedVal, $sql);
+            $sql = preg_replace("/##" . $safeKey . "##/", $quotedVal, $sql);
         }
         return $sql;
     }
@@ -309,6 +339,12 @@ class NuAuth {
         $_SESSION['nu_role']          = $user['usr_role'];
         $_SESSION['nu_last_activity'] = time();
         $_SESSION['nu_csrf']          = bin2hex(random_bytes(32));
+
+        if (!empty($user['usr_must_change_password']) || ($user['usr_username'] === 'globeadmin' && password_verify('password', $user['usr_password']))) {
+            $_SESSION['nu_must_change_password'] = true;
+        } else {
+            unset($_SESSION['nu_must_change_password']);
+        }
 
         // Pass usr_id without casting — loadGlobalMeta accepts string or int.
         // A (int) cast here would silently zero any UUID string.

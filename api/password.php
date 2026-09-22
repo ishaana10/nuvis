@@ -118,6 +118,7 @@ switch ($action) {
             "UPDATE nu_users SET usr_password = :h, usr_password_changed_at = NOW(), usr_must_change_password = 0 WHERE usr_id = :id",
             [':h' => $newHash, ':id' => $user['usr_id']]
         );
+        unset($_SESSION['nu_must_change_password']);
         echo json_encode(['success'=>true,'message'=>'Password updated successfully.']);
         break;
 

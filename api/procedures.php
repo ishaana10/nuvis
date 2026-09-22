@@ -8,6 +8,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once '../config.php';
 require_once '../core/Database.php';
 require_once '../core/Auth.php';
+require_once '../core/Audit.php';
 require_once '../core/ProjectContext.php';
 
 $auth = new NuAuth();
@@ -111,6 +112,8 @@ function actionSave($db) {
             $existing = $db->fetchOne('SELECT procedure_id FROM nu_procedures WHERE procedure_id = ? AND project_id = ?', [$procId, $pid]);
             if (!$existing) { echo json_encode(['success' => false, 'error' => 'Procedure not found or access denied']); return; }
             $db->update('nu_procedures', $row, 'procedure_id = ? AND project_id = ?', [$procId, $pid]);
+            $audit = new NuAudit();
+            $audit->log('update_procedure', 'nu_procedures', $procId, null, $row);
             echo json_encode(['success' => true, 'procedure_id' => $procId]);
         } else {
             $existing = $db->fetchOne('SELECT procedure_id FROM nu_procedures WHERE procedure_code = ? AND project_id = ?', [$procCode, $pid]);
@@ -118,7 +121,9 @@ function actionSave($db) {
                 echo json_encode(['success' => false, 'error' => "Procedure code '{$procCode}' already exists"]); return;
             }
             $db->insert('nu_procedures', $row);
-            $newId = $db->lastInsertId();
+            $newId = (int)$db->lastInsertId();
+            $audit = new NuAudit();
+            $audit->log('create_procedure', 'nu_procedures', $newId, null, $row);
             echo json_encode(['success' => true, 'procedure_id' => $newId]);
         }
     } catch (Exception $e) {

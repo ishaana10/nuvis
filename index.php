@@ -892,6 +892,11 @@ try {
 
     function _boot() {
         if (!window.NuApp) return;
+        <?php if (!empty($_SESSION['nu_must_change_password'])): ?>
+            alert('Default credentials detected or password change required. Please update your password to continue.');
+            NuApp.loadModule('password');
+            return;
+        <?php endif; ?>
         var hash = (location.hash || '').replace('#', '');
         NuApp.loadModule(hash || 'dashboard');
     }

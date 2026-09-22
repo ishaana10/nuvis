@@ -19,12 +19,13 @@ if (!$auth->hasPermission('files.upload')) {
     exit;
 }
 
+// Helper to extract CSRF token from headers, POST, or GET
+$headers = function_exists('getallheaders') ? getallheaders() : [];
+$csrfToken = $headers['X-CSRF-Token'] ?? $headers['x-csrf-token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['nu_csrf'] ?? $_GET['csrf_token'] ?? '';
+
 // Secure Deletion Action
 if (isset($_GET['action']) && $_GET['action'] === 'delete') {
-    // Validate CSRF token to prevent CSRF attacks
-    $headers = function_exists('getallheaders') ? getallheaders() : [];
-    $token = $headers['X-CSRF-Token'] ?? $headers['x-csrf-token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_GET['csrf_token'] ?? '';
-    if (!$auth->verifyCsrfToken($token)) {
+    if (!$auth->verifyCsrf($csrfToken)) {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
         exit;
@@ -58,6 +59,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete') {
     $audit->log('delete', 'nu_files', $fileId);
 
     echo json_encode(['success' => true]);
+    exit;
+}
+
+// Verify CSRF token for file upload as well
+if (!$auth->verifyCsrf($csrfToken)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
     exit;
 }
 

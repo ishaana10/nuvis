@@ -25,6 +25,18 @@ $nuConfig['sessionCookieHttpOnly'] = true;
 $nuConfig['sessionCookieSameSite'] = 'Lax';
 $nuConfig['passwordMinLength']     = 10;
 
+// ─── HTTP Security Headers ───────────────────────────────────────────────────
+if (PHP_SAPI !== 'cli' && !headers_sent()) {
+    header('X-Frame-Options: SAMEORIGIN');
+    header('X-Content-Type-Options: nosniff');
+    header('X-XSS-Protection: 1; mode=block');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://code.jquery.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; frame-ancestors 'self';");
+}
+
 // ─── Features ─────────────────────────────────────────────────────────────────
 $nuConfig['enable2FA']         = false;
 $nuConfig['enableAPI']         = true;
@@ -47,6 +59,8 @@ $nuConfig['userHeaderFormat'] = '{name} | {location}';
 $nuConfig['apiRateLimit'] = 1000;
 $nuConfig['apiKeyHeader'] = 'X-API-Key';
 $nuConfig['enableWebhookDemo'] = true;
+$nuConfig['enableGitUpdater'] = false;
+$nuConfig['allowApiKeyQueryParam'] = false;
 
 // ─── PHP Error Handling ───────────────────────────────────────────────────────
 ini_set('display_errors', '0');

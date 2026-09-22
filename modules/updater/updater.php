@@ -5,6 +5,21 @@
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../../core/module_bootstrap.php';
+
+global $nuConfig;
+$auth = NuAuth::getInstance();
+$user = $auth->getCurrentUser();
+$role = strtolower((string)($user['usr_role'] ?? ''));
+
+if ($role !== 'globeadmin') {
+    echo '<div style="padding:24px;color:#e11d48;font-weight:600;">Access Denied: The System Updater module is restricted to globeadmin users only.</div>';
+    return;
+}
+
+if (empty($nuConfig['enableGitUpdater'])) {
+    echo '<div style="padding:24px;color:#d97706;font-weight:600;">System Updater Disabled: This module is currently disabled in system configuration ($nuConfig[\'enableGitUpdater\'] = false).</div>';
+    return;
+}
 ?>
 
 <style>

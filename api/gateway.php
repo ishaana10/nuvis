@@ -40,7 +40,8 @@ header('Content-Type: application/json; charset=utf-8');
 $db = NuDatabase::getInstance();
 
 // ── 1. Authenticate Request ─────────────────────────────────────────────────
-$apiKey = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? null;
+$allowQueryParam = $nuConfig['allowApiKeyQueryParam'] ?? false;
+$apiKey = $_SERVER['HTTP_X_API_KEY'] ?? null;
 
 if (!$apiKey) {
     // Check Authorization Header
@@ -52,6 +53,10 @@ if (!$apiKey) {
     if ($authHeader && preg_match('/Bearer\s+(.+)$/i', $authHeader, $matches)) {
         $apiKey = $matches[1];
     }
+}
+
+if (!$apiKey && $allowQueryParam && isset($_GET['api_key'])) {
+    $apiKey = $_GET['api_key'];
 }
 
 if (!$apiKey) {

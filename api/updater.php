@@ -10,7 +10,14 @@ require_once __DIR__ . '/../core/Auth.php';
 
 header('Content-Type: application/json');
 
-// ── Auth + admin gate ──────────────────────────────────────────────────
+// ── Auth + globeadmin + config gate ────────────────────────────────────
+global $nuConfig;
+if (empty($nuConfig['enableGitUpdater'])) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Git Updater is disabled in configuration ($nuConfig[\'enableGitUpdater\'])']);
+    exit;
+}
+
 $auth = NuAuth::getInstance();
 if (!$auth->checkAuth()) {
     http_response_code(401);
@@ -19,10 +26,34 @@ if (!$auth->checkAuth()) {
 }
 $user = $auth->getCurrentUser();
 $role = strtolower((string)($user['usr_role'] ?? ''));
-if ($role !== 'globeadmin' && $role !== 'admin') {
+if ($role !== 'globeadmin') {
     http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Admin access required']);
+    echo json_encode(['success' => false, 'error' => 'Access denied: Restricted to globeadmin role']);
     exit;
+}
+
+function validate_repo_dir(string $dir): string {
+    $appRoot = realpath(NU_ROOT);
+    $realDir = realpath($dir);
+    if (!$realDir || !$appRoot) {
+        throw new Exception('Invalid repository directory: path does not exist');
+    }
+    if (strpos($realDir, $appRoot) !== 0) {
+        throw new Exception('Access denied: repository directory must reside within application root');
+    }
+    return $realDir;
+}
+
+function validate_git_path(string $path): string {
+    $path = trim($path);
+    if ($path === 'git') return 'git';
+    if (!preg_match('#^/([a-zA-Z0-9_.-]+/)*git$#', $path)) {
+        throw new Exception('Invalid git executable path');
+    }
+    if (!file_exists($path) || !is_executable($path)) {
+        throw new Exception('Git binary path does not exist or is not executable');
+    }
+    return $path;
 }
 
 /**
@@ -49,12 +80,17 @@ function get_git_config(NuDatabase $db): array {
         }
     }
 
-    // Double check fallsbacks in case DB stored empty strings
-    if (empty($settings['git_path'])) {
+    // Double check fallbacks in case DB stored empty strings
+    try {
+        $settings['git_path'] = validate_git_path($settings['git_path'] ?? 'git');
+    } catch (Throwable $t) {
         $settings['git_path'] = 'git';
     }
-    if (empty($settings['git_repo_dir'])) {
-        $settings['git_repo_dir'] = realpath(__DIR__ . '/..') ?: '/app';
+
+    try {
+        $settings['git_repo_dir'] = validate_repo_dir($settings['git_repo_dir'] ?? NU_ROOT);
+    } catch (Throwable $t) {
+        $settings['git_repo_dir'] = realpath(NU_ROOT) ?: NU_ROOT;
     }
     if (empty($settings['update_branch'])) {
         $settings['update_branch'] = 'main';
