@@ -51,8 +51,7 @@ nuvis/
 │   ├── AppCloner.php             # App template clone engine (38KB)
 │   ├── Workflow.php              # Workflow engine core
 │   ├── PluginManager.php         # Plugin registration + loader
-│   ├── module_bootstrap.php      # Module bootstrap helper
-│   └── oldApi.php                # Legacy API shim (compatibility)
+│   └── Api.php                   # Modern REST API layer
 │
 ├── api/
 │   ├── auth.php                  # Login / logout / me

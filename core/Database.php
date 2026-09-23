@@ -48,81 +48,16 @@ class NuDatabase {
         try {
             $this->pdo = new PDO($dsn, $user, $pass, $options);
         } catch (PDOException $e) {
-            // Fallback to file-based SQLite database so visual previews/dev tools never crash and persist state
-            $this->pdo = new PDO("sqlite:/tmp/test_nuvis.sqlite", null, null, [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-            // Create essential tables to support mock/visual preview gracefully
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_forms (
-                form_id INTEGER PRIMARY KEY,
-                form_code TEXT UNIQUE,
-                form_table TEXT,
-                form_layout TEXT,
-                browse_layout TEXT,
-                form_active INTEGER,
-                form_type TEXT,
-                form_name TEXT,
-                form_description TEXT,
-                form_pk_type TEXT,
-                form_table_mode TEXT,
-                browse_search_enabled INTEGER,
-                browse_search_placeholder TEXT,
-                browse_search_fields TEXT,
-                browse_page_size INTEGER,
-                browse_default_sort TEXT,
-                browse_php TEXT,
-                browse_conditions TEXT,
-                browse_delete_enabled INTEGER,
-                browse_display_mode TEXT,
-                form_custom_js TEXT,
-                form_custom_php TEXT,
-                form_custom_php_after TEXT,
-                form_custom_css TEXT,
-                browse_sql TEXT,
-                browse_columns TEXT,
-                form_js_before_save TEXT,
-                form_js_after_save TEXT
-            )");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_system_settings (setting_key VARCHAR(50) PRIMARY KEY, setting_value TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_error_log (err_id INTEGER PRIMARY KEY, err_message TEXT, err_file TEXT, err_line INTEGER, err_severity TEXT, err_user_id TEXT, err_created_at TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_audit_log (audit_id INTEGER PRIMARY KEY, audit_action TEXT, audit_table TEXT, audit_username TEXT, audit_timestamp TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_menus (menu_id INTEGER PRIMARY KEY, menu_label TEXT, menu_type TEXT, menu_target TEXT, menu_parent_id INTEGER, menu_order INTEGER, menu_roles TEXT, menu_role_access TEXT, menu_active INTEGER, menu_icon TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_users (usr_id INTEGER PRIMARY KEY, usr_username TEXT UNIQUE, usr_password TEXT, usr_email TEXT, usr_role TEXT, usr_active INTEGER, usr_2fa_secret TEXT, usr_failed_attempts INTEGER DEFAULT 0, usr_last_attempt TEXT, usr_password_changed_at TEXT, usr_must_change_password INTEGER DEFAULT 0, usr_created_at TEXT, usr_updated_at TEXT, usr_name TEXT, usr_custom_fields TEXT, usr_custom_fields_def TEXT)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_users (usr_id, usr_username, usr_password, usr_email, usr_role, usr_active, usr_name, usr_custom_fields, usr_custom_fields_def) VALUES (1, 'globeadmin', '" . password_hash('password', PASSWORD_BCRYPT) . "', 'globeadmin@example.com', 'globeadmin', 1, 'Globe Admin', '{}', '[]')");
-            // Create demo tables
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_service_types (service_type_id TEXT PRIMARY KEY, name TEXT, description TEXT, price REAL)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_customer_requests (request_id TEXT PRIMARY KEY, customer_name TEXT, service_type_id TEXT, request_details TEXT, status TEXT DEFAULT 'Pending', created_at TEXT, updated_at TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS demo_staff_services (service_log_id TEXT PRIMARY KEY, customer_request_id TEXT, staff_notes TEXT, service_date TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_instances (wfi_id INTEGER PRIMARY KEY, wfi_wf_id INTEGER, wfi_stage_id INTEGER, wfi_record_table TEXT, wfi_record_id TEXT, wfi_status TEXT, wfi_started_by INTEGER, wfi_started_at TEXT, wfi_completed_at TEXT, wfi_meta TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflows (wf_id INTEGER PRIMARY KEY, wf_code TEXT, wf_name TEXT, wf_description TEXT, wf_form_code TEXT, wf_active INTEGER)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_stages (wfs_id INTEGER PRIMARY KEY, wfs_wf_id INTEGER, wfs_code TEXT, wfs_name TEXT, wfs_description TEXT, wfs_color TEXT, wfs_is_start INTEGER, wfs_is_end INTEGER, wfs_order INTEGER)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_transitions (wft_id INTEGER PRIMARY KEY, wft_wf_id INTEGER, wft_from_id INTEGER, wft_to_id INTEGER, wft_action TEXT, wft_label TEXT, wft_condition TEXT, wft_hook TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_workflow_history (wfh_id INTEGER PRIMARY KEY, wfh_wfi_id INTEGER, wfh_from_id INTEGER, wfh_to_id INTEGER, wfh_action TEXT, wfh_actor_id INTEGER, wfh_comment TEXT, wfh_acted_at TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_webhooks (webhook_id INTEGER PRIMARY KEY, webhook_name TEXT, webhook_url TEXT, webhook_secret TEXT, webhook_events TEXT, webhook_active INTEGER)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agents (agent_id INTEGER PRIMARY KEY, agent_code TEXT UNIQUE, agent_name TEXT, agent_system_prompt TEXT, agent_model TEXT, agent_tools TEXT, agent_tool_config TEXT, agent_memory_type TEXT, agent_max_tokens INTEGER, agent_active INTEGER, agent_created_at TEXT, agent_updated_at TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_runs (run_id INTEGER PRIMARY KEY, agent_id INTEGER, run_status TEXT, input_prompt TEXT, output_text TEXT, error_message TEXT, context TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, total_tokens INTEGER, started_at TEXT, completed_at TEXT, created_at TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_messages (msg_id INTEGER PRIMARY KEY, run_id INTEGER, msg_role TEXT, msg_content TEXT, msg_raw TEXT, created_at TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_tool_calls (tool_id INTEGER PRIMARY KEY, run_id INTEGER, tool_call_id TEXT, tool_name TEXT, tool_arguments TEXT, tool_result TEXT, created_at TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS nu_agent_memory (mem_id INTEGER PRIMARY KEY, agent_id INTEGER, entity_key TEXT, mem_key TEXT, mem_value TEXT, mem_created_at TEXT, mem_updated_at TEXT)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_agents (agent_id, agent_code, agent_name, agent_system_prompt, agent_model, agent_tools, agent_active) VALUES (1, 'default_assistant', 'Customer Support & Service Assistant', 'You are a helpful Nuvis enterprise AI assistant.', 'gemini-1.5-flash', '[\"query_records\",\"get_record\",\"create_record\",\"update_record\",\"run_procedure\",\"send_email\",\"call_webhook\",\"start_workflow\",\"advance_workflow\"]', 1)");
+            throw new PDOException("Database connection failed: " . $e->getMessage(), (int)$e->getCode(), $e);
+        }
 
-            // Seed sample data
-            $nowStr = date('Y-m-d H:i:s');
-            $this->pdo->exec("INSERT OR IGNORE INTO demo_service_types (service_type_id, name, description, price) VALUES ('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Plumbing Maintenance', 'General plumbing repairs', 150.0)");
-            $this->pdo->exec("INSERT OR IGNORE INTO demo_service_types (service_type_id, name, description, price) VALUES ('b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e', 'Electrical Inspection', 'Safety audit', 120.0)");
-            $this->pdo->exec("INSERT OR IGNORE INTO demo_customer_requests (request_id, customer_name, service_type_id, request_details, status, created_at, updated_at) VALUES ('d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'Alice Smith', 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Main drain backing up', 'Pending', '{$nowStr}', '{$nowStr}')");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflows (wf_id, wf_code, wf_name, wf_description, wf_form_code, wf_active) VALUES (100, 'customer_request_wf', 'Customer Request Workflow', 'A demo workflow', 'demo_customer_requests', 1)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages (wfs_id, wfs_wf_id, wfs_code, wfs_name, wfs_description, wfs_color, wfs_is_start, wfs_is_end, wfs_order) VALUES (101, 100, 'Pending', 'Pending Service', 'The service request is created', '#f59e0b', 1, 0, 1)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages (wfs_id, wfs_wf_id, wfs_code, wfs_name, wfs_description, wfs_color, wfs_is_start, wfs_is_end, wfs_order) VALUES (102, 100, 'In Progress', 'Service In Progress', 'The staff has commenced', '#3b82f6', 0, 0, 2)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_stages (wfs_id, wfs_wf_id, wfs_code, wfs_name, wfs_description, wfs_color, wfs_is_start, wfs_is_end, wfs_order) VALUES (103, 100, 'Completed', 'Completed', 'The requested service', '#10b981', 0, 1, 3)");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions (wft_id, wft_wf_id, wft_from_id, wft_to_id, wft_action, wft_label, wft_hook) VALUES (101, 100, 101, 102, 'advance', 'Start Providing Service', 'update_record')");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_transitions (wft_id, wft_wf_id, wft_from_id, wft_to_id, wft_action, wft_label, wft_hook) VALUES (102, 100, 102, 103, 'advance', 'Mark Service Completed', 'update_record')");
-            $this->pdo->exec("INSERT OR IGNORE INTO nu_workflow_instances (wfi_id, wfi_wf_id, wfi_stage_id, wfi_record_table, wfi_record_id, wfi_status, wfi_started_by) VALUES (1, 100, 101, 'demo_customer_requests', 'd4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'active', 1)");
+        // Optimization: Skip self-healing DDL queries if schema version is already current in session
+        $sessionActive = (session_status() === PHP_SESSION_ACTIVE);
+        if ($sessionActive && ($_SESSION['_nu_schema_version'] ?? '') === NU_VERSION) {
+            return;
         }
 
         // Ensure nu_menus columns exist in case of upgrade or existing database
-        $sessionActive = (session_status() === PHP_SESSION_ACTIVE);
         if (!$sessionActive || empty($_SESSION['_nu_menu_columns_ensured'])) {
             try {
                 $tableExists = $this->pdo->query("SHOW TABLES LIKE 'nu_menus'")->fetch();
@@ -826,6 +761,10 @@ class NuDatabase {
                     $_SESSION['_nu_projects_ensured'] = true;
                 }
             } catch (Exception $ignored) {}
+        }
+
+        if ($sessionActive) {
+            $_SESSION['_nu_schema_version'] = NU_VERSION;
         }
     }
 
