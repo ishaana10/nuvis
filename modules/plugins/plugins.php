@@ -1,10 +1,5 @@
 <?php
-require_once '../../config.php';
-require_once '../../core/Database.php';
-require_once '../../core/Auth.php';
-
-$auth = new NuAuth();
-if (!$auth->checkAuth()) exit('Unauthorized');
+require_once dirname(__DIR__, 2) . '/core/module_bootstrap.php';
 
 $db = NuDatabase::getInstance();
 $plugins = $db->fetchAll("SELECT * FROM nu_plugins ORDER BY plugin_installed_at DESC");
