@@ -13,6 +13,12 @@ class NuDatabase {
 
     private function __construct() {
         global $nuConfig;
+        if (empty($nuConfig)) {
+            $configPath = defined('NU_ROOT') ? NU_ROOT . '/config.php' : dirname(__DIR__) . '/config.php';
+            if (is_file($configPath)) {
+                require_once $configPath;
+            }
+        }
         $this->config = $nuConfig ?? [];
         $this->connect();
     }

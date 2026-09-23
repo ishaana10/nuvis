@@ -5,7 +5,7 @@ declare(strict_types=1);
  * modules/ai/ai.php - Nuvis AI Agent Management Builder & Activity Dashboard
  */
 
-require_once __DIR__ . '/../../core/Database.php';
+require_once __DIR__ . '/../../core/module_bootstrap.php';
 $db = NuDatabase::getInstance();
 $geminiKeyRow = $db->fetchOne("SELECT setting_value FROM nu_system_settings WHERE setting_key = 'gemini_api_key'");
 $geminiApiKey = $geminiKeyRow['setting_value'] ?? '';
