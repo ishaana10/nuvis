@@ -6,6 +6,7 @@ ob_start();
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/core/Database.php';
 require_once dirname(__DIR__) . '/core/Auth.php';
+require_once dirname(__DIR__) . '/core/ProjectContext.php';
 
 ob_clean();
 header('Content-Type: application/json; charset=utf-8');
@@ -69,12 +70,15 @@ try {
 
         // ── list all dashboards ────────────────────────────────────────────────────────────────
         case 'list':
+            $pid = ProjectContext::getId();
             $rows = $db->fetchAll(
                 "SELECT dashboard_id, dashboard_code, dashboard_name, dashboard_description,
                         dashboard_active, dashboard_role_access,
                         COALESCE(dashboard_updated_at, dashboard_created_at) AS dashboard_created_at
                  FROM nu_report_dashboards
-                 ORDER BY dashboard_name"
+                 WHERE project_id = ?
+                 ORDER BY dashboard_name",
+                [$pid]
             );
 
             $visibleDashboards = [];
@@ -98,8 +102,9 @@ try {
         case 'get':
             $id = (int)($_GET['id'] ?? 0);
             if (!$id) throw new Exception('Missing id');
+            $pid = ProjectContext::getId();
             $row = $db->fetchOne(
-                "SELECT * FROM nu_report_dashboards WHERE dashboard_id = ?", [$id]
+                "SELECT * FROM nu_report_dashboards WHERE dashboard_id = ? AND project_id = ?", [$id, $pid]
             );
             if (!$row) throw new Exception('Dashboard not found');
 
@@ -153,24 +158,25 @@ try {
             $reportsJson = json_encode(array_values($reports));
             $userId      = $_SESSION['user_id'] ?? null;
 
+            $pid = ProjectContext::getId();
             if ($id) {
                 $db->query(
                     "UPDATE nu_report_dashboards SET
                         dashboard_name=?, dashboard_code=?, dashboard_description=?, dashboard_active=?,
                         dashboard_role_access=?, dashboard_filters=?, dashboard_reports=?,
                         dashboard_updated_at=NOW()
-                     WHERE dashboard_id=?",
-                    [$name, $code, $desc, $active, $rolesJson, $filtersJson, $reportsJson, $id]
+                     WHERE dashboard_id=? AND project_id=?",
+                    [$name, $code, $desc, $active, $rolesJson, $filtersJson, $reportsJson, $id, $pid]
                 );
                 echo json_encode(['success' => true, 'id' => $id, 'message' => 'Dashboard updated']);
             } else {
                 $db->query(
                     "INSERT INTO nu_report_dashboards
-                        (dashboard_name, dashboard_code, dashboard_description, dashboard_active,
+                        (project_id, dashboard_name, dashboard_code, dashboard_description, dashboard_active,
                          dashboard_role_access, dashboard_filters, dashboard_reports,
                          dashboard_created_by)
-                     VALUES (?,?,?,?,?,?,?,?)",
-                    [$name, $code, $desc, $active, $rolesJson, $filtersJson, $reportsJson, $userId]
+                     VALUES (?,?,?,?,?,?,?,?,?)",
+                    [$pid, $name, $code, $desc, $active, $rolesJson, $filtersJson, $reportsJson, $userId]
                 );
                 $newId = $db->lastInsertId();
                 echo json_encode(['success' => true, 'id' => $newId, 'message' => 'Dashboard created']);
@@ -185,7 +191,8 @@ try {
 
             $id = (int)($body['id'] ?? $_GET['id'] ?? 0);
             if (!$id) throw new Exception('Missing id');
-            $db->query("DELETE FROM nu_report_dashboards WHERE dashboard_id = ?", [$id]);
+            $pid = ProjectContext::getId();
+            $db->query("DELETE FROM nu_report_dashboards WHERE dashboard_id = ? AND project_id = ?", [$id, $pid]);
             echo json_encode(['success' => true, 'message' => 'Dashboard deleted']);
             break;
 

@@ -156,6 +156,11 @@ cp config.local.php.example config.local.php
 - Accessible keyboard navigation
 - PWA ready (service worker + web manifest)
 
+### Multi-Project Support
+- Isolated project environments with dedicated forms, reports, queries, procedures, menus, workflows, and dashboards
+- Server-side context switching via `ProjectContext`
+- See [Multi-Project Metadata Isolation Guide](docs/multi_project_guide.md) for full architecture details
+
 ### Security
 - Password hashing (bcrypt)
 - Login attempt lockout

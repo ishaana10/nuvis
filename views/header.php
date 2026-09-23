@@ -28,9 +28,13 @@ declare(strict_types=1);
         <?php if ($isLoggedIn): ?>
         <?php
             $activeProjectId = ProjectContext::getId();
+            $activeProjectCode = $_SESSION['nu_project_code'] ?? 'default';
             $accessibleProjects = ProjectContext::getAccessibleProjects();
         ?>
         <div class="nu-project-switcher" style="position: relative; display: inline-flex; align-items: center; gap: 6px; margin-right: 8px;">
+            <span class="nu-project-badge" style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px; background: rgba(79,107,237,0.15); color: var(--accent, #4f6bed); border: 1px solid rgba(79,107,237,0.3);" title="Active Project Slug">
+                ⚡ <?= h($activeProjectCode) ?>
+            </span>
             <select id="nuProjectSelect" onchange="nuSwitchProject(this.value)" class="nu-input" style="padding: 5px 10px; font-weight: 600; font-size: 13px; border-radius: 6px; cursor: pointer; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color);" title="Switch Active Project">
                 <?php foreach ($accessibleProjects as $proj): ?>
                     <option value="<?= (int)$proj['project_id'] ?>" <?= (int)$proj['project_id'] === $activeProjectId ? 'selected' : '' ?>>
