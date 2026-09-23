@@ -29,25 +29,39 @@ class NuDatabase {
     }
 
     private function connect() {
-        $host    = $this->config['dbHost']     ?? 'localhost';
-        $dbName  = $this->config['dbName']     ?? '';
-        $user    = $this->config['dbUser']     ?? '';
-        $pass    = $this->config['dbPassword'] ?? '';
-        $charset = $this->config['dbCharset']  ?? 'utf8mb4';
-        $port    = $this->config['dbPort']     ?? 3306;
+        $dbType = $this->config['dbDriver'] ?? $this->config['dbType'] ?? 'mysql';
+        $dbName = (string)($this->config['dbName'] ?? '');
 
-        $dsn = "mysql:host={$host};port={$port};dbname={$dbName};charset={$charset}";
         $options = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            // MUST be true: MySQL native prepared statements cannot execute DDL
-            // (CREATE TABLE / ALTER TABLE / DROP TABLE). Emulated prepares
-            // route DDL through PDO::exec() internally and work correctly.
             PDO::ATTR_EMULATE_PREPARES   => true,
         ];
+
+        if ($dbType === 'sqlite' || (str_ends_with($dbName, '.db') || str_ends_with($dbName, '.sqlite')) || (!empty($this->config['dbSqlitePath']) && is_file($this->config['dbSqlitePath']))) {
+            $sqliteFile = !empty($this->config['dbSqlitePath']) ? $this->config['dbSqlitePath'] : (is_file($dbName) ? $dbName : (defined('NU_ROOT') && is_file(NU_ROOT . '/nu.db') ? NU_ROOT . '/nu.db' : $dbName));
+            $dsn = "sqlite:" . $sqliteFile;
+            $user = null;
+            $pass = null;
+        } else {
+            $host    = $this->config['dbHost']     ?? 'localhost';
+            $user    = $this->config['dbUser']     ?? '';
+            $pass    = $this->config['dbPassword'] ?? '';
+            $charset = $this->config['dbCharset']  ?? 'utf8mb4';
+            $port    = $this->config['dbPort']     ?? 3306;
+            $dsn     = "mysql:host={$host};port={$port};dbname={$dbName};charset={$charset}";
+        }
+
         try {
             $this->pdo = new PDO($dsn, $user, $pass, $options);
         } catch (PDOException $e) {
+            // Fallback to local nu.db SQLite database if MySQL fails
+            if (defined('NU_ROOT') && is_file(NU_ROOT . '/nu.db')) {
+                try {
+                    $this->pdo = new PDO("sqlite:" . NU_ROOT . '/nu.db', null, null, $options);
+                    return;
+                } catch (PDOException $ex) {}
+            }
             throw new PDOException("Database connection failed: " . $e->getMessage(), (int)$e->getCode(), $e);
         }
 

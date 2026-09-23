@@ -68,6 +68,26 @@ class NuErrorLogger {
         ];
         $trace = $this->buildTrace($e->getTrace());
         $this->write(self::TYPE_PHP, self::SEV_FATAL, $message, $context, $trace, $e->getFile(), $e->getLine());
+
+        // In production, mask internal error details and stack traces for non-admin users
+        if (!headers_sent()) {
+            http_response_code(500);
+            $role = strtolower((string)($_SESSION['nu_role'] ?? ''));
+            $isAdmin = ($role === 'globeadmin' || $role === 'admin');
+
+            $isApi = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) || (strpos($_SERVER['REQUEST_URI'] ?? '', '/api/') !== false));
+            if ($isApi) {
+                header('Content-Type: application/json; charset=utf-8');
+                $outMsg = $isAdmin ? $message : 'An internal server error occurred.';
+                echo json_encode(['success' => false, 'error' => $outMsg]);
+            } else {
+                if ($isAdmin) {
+                    echo '<h1>Server Error</h1><p>' . htmlspecialchars($message) . '</p><pre>' . htmlspecialchars($trace) . '</pre>';
+                } else {
+                    echo '<h1>Server Error</h1><p>An internal error occurred. Please contact your system administrator.</p>';
+                }
+            }
+        }
     }
 
     /** register_shutdown_function — catches E_ERROR, E_PARSE, E_COMPILE_ERROR */

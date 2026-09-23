@@ -36,36 +36,40 @@ class ProjectContext {
         }
 
         // Check if session project ID exists
-        if (!empty($_SESSION['nu_project_id'])) {
-            $sessPid = (int)$_SESSION['nu_project_id'];
+        try {
+            if (!empty($_SESSION['nu_project_id'])) {
+                $sessPid = (int)$_SESSION['nu_project_id'];
 
-            // Verify project exists & active
-            $proj = $db->fetchOne("SELECT project_id, project_code FROM nu_projects WHERE project_id = ? AND project_active = 1", [$sessPid]);
-            if ($proj) {
-                // If user is globeadmin, allow access immediately
-                if ($userRole === 'globeadmin' || empty($userId)) {
-                    $_SESSION['nu_project_code'] = $proj['project_code'];
-                    return $sessPid;
-                }
+                // Verify project exists & active
+                $proj = $db->fetchOne("SELECT project_id, project_code FROM nu_projects WHERE project_id = ? AND project_active = 1", [$sessPid]);
+                if ($proj) {
+                    // If user is globeadmin, allow access immediately
+                    if ($userRole === 'globeadmin' || empty($userId)) {
+                        $_SESSION['nu_project_code'] = $proj['project_code'];
+                        return $sessPid;
+                    }
 
-                // For non-globeadmin users, verify member assignment
-                if (self::validateAccess((int)$userId, $sessPid, $userRole)) {
-                    $_SESSION['nu_project_code'] = $proj['project_code'];
-                    return $sessPid;
+                    // For non-globeadmin users, verify member assignment
+                    if (self::validateAccess((int)$userId, $sessPid, $userRole)) {
+                        $_SESSION['nu_project_code'] = $proj['project_code'];
+                        return $sessPid;
+                    }
                 }
             }
+
+            // Resolve default or assigned project for user
+            $resolvedId = self::resolveDefaultProjectForUser($userId ? (int)$userId : null, $userRole);
+            $_SESSION['nu_project_id'] = $resolvedId;
+
+            $projRow = $db->fetchOne("SELECT project_code FROM nu_projects WHERE project_id = ?", [$resolvedId]);
+            if ($projRow) {
+                $_SESSION['nu_project_code'] = $projRow['project_code'];
+            }
+
+            return $resolvedId;
+        } catch (\Throwable $e) {
+            return 1;
         }
-
-        // Resolve default or assigned project for user
-        $resolvedId = self::resolveDefaultProjectForUser($userId ? (int)$userId : null, $userRole);
-        $_SESSION['nu_project_id'] = $resolvedId;
-
-        $projRow = $db->fetchOne("SELECT project_code FROM nu_projects WHERE project_id = ?", [$resolvedId]);
-        if ($projRow) {
-            $_SESSION['nu_project_code'] = $projRow['project_code'];
-        }
-
-        return $resolvedId;
     }
 
     /**
@@ -152,12 +156,16 @@ class ProjectContext {
 
         // 1. If globeadmin or unauthenticated, return system default project
         if ($userRole === 'globeadmin' || empty($userId)) {
-            $defaultProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_is_default = 1 AND project_active = 1 LIMIT 1");
-            if ($defaultProj) {
-                return (int)$defaultProj['project_id'];
+            try {
+                $defaultProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_is_default = 1 AND project_active = 1 LIMIT 1");
+                if ($defaultProj) {
+                    return (int)$defaultProj['project_id'];
+                }
+                $anyProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_active = 1 ORDER BY project_id ASC LIMIT 1");
+                return $anyProj ? (int)$anyProj['project_id'] : 1;
+            } catch (\Throwable $e) {
+                return 1;
             }
-            $anyProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_active = 1 ORDER BY project_id ASC LIMIT 1");
-            return $anyProj ? (int)$anyProj['project_id'] : 1;
         }
 
         // 2. Check user meta for last_project_id

@@ -20,7 +20,7 @@ class NuApi {
      */
     public function validateIdentifier(string $identifier, bool $checkTableExists = false): string {
         if (!preg_match('/^[a-zA-Z0-9_]+$/', $identifier)) {
-            $this->error('Invalid table or column name format', 400);
+            throw new InvalidArgumentException('Invalid table or column name format');
         }
 
         if ($checkTableExists) {
@@ -37,7 +37,7 @@ class NuApi {
                 );
             }
             if (!$check) {
-                $this->error('Access denied or table does not exist', 400);
+                throw new InvalidArgumentException('Access denied or table does not exist');
             }
         }
 
