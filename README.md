@@ -161,6 +161,11 @@ cp config.local.php.example config.local.php
 - Server-side context switching via `ProjectContext`
 - See [Multi-Project Metadata Isolation Guide](docs/multi_project_guide.md) for full architecture details
 
+### Plugins System
+- Extensible modular architecture allowing plugins located under `plugins/`
+- Lifecycle hooks and custom workflow extensions
+- See [Plugin Architecture & Extension Guide](docs/plugins_guide.md) for details
+
 ### Security
 - Password hashing (bcrypt)
 - Login attempt lockout

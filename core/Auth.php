@@ -10,6 +10,7 @@ class NuAuth {
     private $db;
     private $config;
     private static $instance = null;
+    private array $permCache = [];
 
     public function __construct() {
         global $nuConfig;
@@ -145,6 +146,11 @@ class NuAuth {
         if (!$user) return false;
         if ($user['usr_role'] === 'globeadmin') return true;
 
+        $cacheKey = 'has_perm_' . $user['usr_role'] . '_' . $permission;
+        if (array_key_exists($cacheKey, $this->permCache)) {
+            return $this->permCache[$cacheKey];
+        }
+
         $perms = $this->db->fetchAll(
             "SELECT p.perm_code FROM nu_permissions p
              JOIN nu_role_permissions rp ON p.perm_id = rp.rp_perm_id
@@ -154,7 +160,9 @@ class NuAuth {
         );
 
         $permCodes = array_column($perms, 'perm_code');
-        return in_array($permission, $permCodes);
+        $has       = in_array($permission, $permCodes, true);
+        $this->permCache[$cacheKey] = $has;
+        return $has;
     }
 
     // --- Form-level permission check ---
@@ -164,25 +172,8 @@ class NuAuth {
         if (!$user) return false;
         if ($user['usr_role'] === 'globeadmin') return true;
 
-        $role = $user['usr_role'];
-        $col  = 'rfp_can_' . $action;
-
-        // Exact form match first, then wildcard fallback
-        $row = $this->db->fetchOne(
-            "SELECT {$col} FROM nu_role_form_permissions
-             WHERE rfp_role_code = :role AND rfp_form_code = :form",
-            [':role' => $role, ':form' => $formCode]
-        );
-
-        if ($row !== null) return (bool)$row[$col];
-
-        $wild = $this->db->fetchOne(
-            "SELECT {$col} FROM nu_role_form_permissions
-             WHERE rfp_role_code = :role AND rfp_form_code = '*'",
-            [':role' => $role]
-        );
-
-        return $wild ? (bool)$wild[$col] : false;
+        $perms = $this->formPerms($formCode);
+        return $perms[$action] ?? false;
     }
 
     // Returns all 5 flags for a form — used by FormRenderer to inject data attrs
@@ -194,6 +185,11 @@ class NuAuth {
         }
 
         $role = $user['usr_role'];
+        $cacheKey = 'form_perms_' . $role . '_' . $formCode;
+        if (isset($this->permCache[$cacheKey])) {
+            return $this->permCache[$cacheKey];
+        }
+
         $row  = $this->db->fetchOne(
             "SELECT * FROM nu_role_form_permissions
              WHERE rfp_role_code = :role AND rfp_form_code = :form",
@@ -206,15 +202,17 @@ class NuAuth {
                 [':role' => $role]
             );
         }
-        if (!$row) return ['view'=>false,'add'=>false,'edit'=>false,'delete'=>false,'export'=>false];
 
-        return [
-            'view'   => (bool)$row['rfp_can_view'],
-            'add'    => (bool)$row['rfp_can_add'],
-            'edit'   => (bool)$row['rfp_can_edit'],
-            'delete' => (bool)$row['rfp_can_delete'],
-            'export' => (bool)$row['rfp_can_export'],
+        $res = !$row ? ['view'=>false,'add'=>false,'edit'=>false,'delete'=>false,'export'=>false] : [
+            'view'   => (bool)($row['rfp_can_view'] ?? false),
+            'add'    => (bool)($row['rfp_can_add'] ?? false),
+            'edit'   => (bool)($row['rfp_can_edit'] ?? false),
+            'delete' => (bool)($row['rfp_can_delete'] ?? false),
+            'export' => (bool)($row['rfp_can_export'] ?? false),
         ];
+
+        $this->permCache[$cacheKey] = $res;
+        return $res;
     }
 
     // -------------------------------------------------------------------------
@@ -432,8 +430,55 @@ class NuAuth {
         );
     }
 
-    // --- TOTP 2FA ---
-    private function verifyTOTP($secret, $otp) {
+    // --- TOTP 2FA Helpers ---
+    public function generateTOTPSecret(): string {
+        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $secret = '';
+        for ($i = 0; $i < 16; $i++) {
+            $secret .= $chars[random_int(0, 31)];
+        }
+        return $secret;
+    }
+
+    public function generateBackupCodes($userId): array {
+        $codes = [];
+        $hashes = [];
+        for ($i = 0; $i < 8; $i++) {
+            $code = sprintf('%04d-%04d', random_int(1000, 9999), random_int(1000, 9999));
+            $codes[] = $code;
+            $hashes[] = password_hash(str_replace('-', '', $code), PASSWORD_BCRYPT);
+        }
+        try {
+            $user = $this->db->fetchOne("SELECT usr_custom_fields FROM nu_users WHERE usr_id = :id", [':id' => $userId]);
+            $custom = json_decode($user['usr_custom_fields'] ?? '{}', true) ?: [];
+            $custom['backup_codes'] = $hashes;
+            $this->db->query("UPDATE nu_users SET usr_custom_fields = :c WHERE usr_id = :id", [':c' => json_encode($custom), ':id' => $userId]);
+        } catch (\Throwable $e) {}
+        return $codes;
+    }
+
+    public function verifyBackupCode($userId, string $code): bool {
+        $cleanCode = str_replace(['-', ' '], '', trim($code));
+        if ($cleanCode === '') return false;
+        $user = $this->db->fetchOne("SELECT usr_custom_fields FROM nu_users WHERE usr_id = :id", [':id' => $userId]);
+        if (!$user || empty($user['usr_custom_fields'])) return false;
+
+        $custom = json_decode($user['usr_custom_fields'], true) ?: [];
+        $hashes = $custom['backup_codes'] ?? [];
+        if (!is_array($hashes)) return false;
+
+        foreach ($hashes as $idx => $hash) {
+            if (password_verify($cleanCode, $hash)) {
+                unset($hashes[$idx]);
+                $custom['backup_codes'] = array_values($hashes);
+                $this->db->query("UPDATE nu_users SET usr_custom_fields = :c WHERE usr_id = :id", [':c' => json_encode($custom), ':id' => $userId]);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function verifyTOTP($secret, $otp) {
         $timeSlice = floor(time() / 30);
         for ($i = -1; $i <= 1; $i++) {
             $calculated = $this->generateTOTP($secret, $timeSlice + $i);
@@ -451,7 +496,7 @@ class NuAuth {
                   ((ord($hm[$offset+1]) & 0xFF) << 16) |
                   ((ord($hm[$offset+2]) & 0xFF) <<  8) |
                    (ord($hm[$offset+3]) & 0xFF);
-        return str_pad($code % 1000000, 6, '0', STR_PAD_LEFT);
+        return str_pad((string)($code % 1000000), 6, '0', STR_PAD_LEFT);
     }
 
     private function __clone() {}
