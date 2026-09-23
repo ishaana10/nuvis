@@ -10,6 +10,7 @@ class NuAuth {
     private $db;
     private $config;
     private static $instance = null;
+    private array $permCache = [];
 
     public function __construct() {
         global $nuConfig;
@@ -50,6 +51,16 @@ class NuAuth {
             if (!$otp || !$this->verifyTOTP($user['usr_2fa_secret'], $otp)) {
                 return ['success' => false, 'message' => 'Invalid or missing 2FA code', 'requires2FA' => true];
             }
+        }
+
+        // Enforce password change for default credentials or when usr_must_change_password is set
+        $mustChange = !empty($user['usr_must_change_password']);
+        if (($user['usr_username'] === 'globeadmin' && password_verify('password', $user['usr_password'])) || $password === 'password') {
+            $mustChange = true;
+            try {
+                $this->db->query("UPDATE nu_users SET usr_must_change_password = 1 WHERE usr_id = :id", [':id' => $user['usr_id']]);
+                $user['usr_must_change_password'] = 1;
+            } catch (\Throwable $t) {}
         }
 
         $this->resetAttempts($user['usr_id']);
@@ -122,7 +133,11 @@ class NuAuth {
     }
 
     public function verifyCsrf($token) {
-        return isset($_SESSION['nu_csrf']) && hash_equals($_SESSION['nu_csrf'], $token);
+        return isset($_SESSION['nu_csrf']) && hash_equals($_SESSION['nu_csrf'], (string)$token);
+    }
+
+    public function verifyCsrfToken($token) {
+        return $this->verifyCsrf($token);
     }
 
     // --- Legacy permission check (module-level) ---
@@ -130,6 +145,11 @@ class NuAuth {
         $user = $this->getCurrentUser();
         if (!$user) return false;
         if ($user['usr_role'] === 'globeadmin') return true;
+
+        $cacheKey = 'has_perm_' . $user['usr_role'] . '_' . $permission;
+        if (array_key_exists($cacheKey, $this->permCache)) {
+            return $this->permCache[$cacheKey];
+        }
 
         $perms = $this->db->fetchAll(
             "SELECT p.perm_code FROM nu_permissions p
@@ -140,7 +160,9 @@ class NuAuth {
         );
 
         $permCodes = array_column($perms, 'perm_code');
-        return in_array($permission, $permCodes);
+        $has       = in_array($permission, $permCodes, true);
+        $this->permCache[$cacheKey] = $has;
+        return $has;
     }
 
     // --- Form-level permission check ---
@@ -150,25 +172,8 @@ class NuAuth {
         if (!$user) return false;
         if ($user['usr_role'] === 'globeadmin') return true;
 
-        $role = $user['usr_role'];
-        $col  = 'rfp_can_' . $action;
-
-        // Exact form match first, then wildcard fallback
-        $row = $this->db->fetchOne(
-            "SELECT {$col} FROM nu_role_form_permissions
-             WHERE rfp_role_code = :role AND rfp_form_code = :form",
-            [':role' => $role, ':form' => $formCode]
-        );
-
-        if ($row !== null) return (bool)$row[$col];
-
-        $wild = $this->db->fetchOne(
-            "SELECT {$col} FROM nu_role_form_permissions
-             WHERE rfp_role_code = :role AND rfp_form_code = '*'",
-            [':role' => $role]
-        );
-
-        return $wild ? (bool)$wild[$col] : false;
+        $perms = $this->formPerms($formCode);
+        return $perms[$action] ?? false;
     }
 
     // Returns all 5 flags for a form — used by FormRenderer to inject data attrs
@@ -180,6 +185,11 @@ class NuAuth {
         }
 
         $role = $user['usr_role'];
+        $cacheKey = 'form_perms_' . $role . '_' . $formCode;
+        if (isset($this->permCache[$cacheKey])) {
+            return $this->permCache[$cacheKey];
+        }
+
         $row  = $this->db->fetchOne(
             "SELECT * FROM nu_role_form_permissions
              WHERE rfp_role_code = :role AND rfp_form_code = :form",
@@ -192,15 +202,17 @@ class NuAuth {
                 [':role' => $role]
             );
         }
-        if (!$row) return ['view'=>false,'add'=>false,'edit'=>false,'delete'=>false,'export'=>false];
 
-        return [
-            'view'   => (bool)$row['rfp_can_view'],
-            'add'    => (bool)$row['rfp_can_add'],
-            'edit'   => (bool)$row['rfp_can_edit'],
-            'delete' => (bool)$row['rfp_can_delete'],
-            'export' => (bool)$row['rfp_can_export'],
+        $res = !$row ? ['view'=>false,'add'=>false,'edit'=>false,'delete'=>false,'export'=>false] : [
+            'view'   => (bool)($row['rfp_can_view'] ?? false),
+            'add'    => (bool)($row['rfp_can_add'] ?? false),
+            'edit'   => (bool)($row['rfp_can_edit'] ?? false),
+            'delete' => (bool)($row['rfp_can_delete'] ?? false),
+            'export' => (bool)($row['rfp_can_export'] ?? false),
         ];
+
+        $this->permCache[$cacheKey] = $res;
+        return $res;
     }
 
     // -------------------------------------------------------------------------
@@ -224,12 +236,28 @@ class NuAuth {
         $meta = $this->getGlobalMeta();
         if (empty($meta)) return $sql;
 
+        $pdo = null;
+        try {
+            $pdo = NuDatabase::getInstance()->getPdo();
+        } catch (\Throwable $e) {}
+
         foreach ($meta as $key => $value) {
-            // Sanitise key to prevent regex injection
             $safeKey = preg_quote((string)$key, '/');
-            // Escape value for safe SQL embedding (PDO not available at this point)
-            $safeVal = addslashes((string)$value);
-            $sql = preg_replace('/##' . $safeKey . '##/', $safeVal, $sql);
+            if ($value === null) {
+                $quotedVal = "''";
+            } else if (is_int($value) || is_float($value)) {
+                $quotedVal = (string)$value;
+            } else if (is_numeric($value) && (string)(int)$value === (string)$value) {
+                $quotedVal = (string)$value;
+            } else if ($pdo) {
+                $quotedVal = $pdo->quote((string)$value);
+            } else {
+                $quotedVal = "'" . addslashes((string)$value) . "'";
+            }
+
+            // Replace single-quoted placeholders ('##key##') or unquoted placeholders (##key##) safely
+            $sql = preg_replace("/'##" . $safeKey . "##'/", $quotedVal, $sql);
+            $sql = preg_replace("/##" . $safeKey . "##/", $quotedVal, $sql);
         }
         return $sql;
     }
@@ -309,6 +337,12 @@ class NuAuth {
         $_SESSION['nu_role']          = $user['usr_role'];
         $_SESSION['nu_last_activity'] = time();
         $_SESSION['nu_csrf']          = bin2hex(random_bytes(32));
+
+        if (!empty($user['usr_must_change_password']) || ($user['usr_username'] === 'globeadmin' && password_verify('password', $user['usr_password']))) {
+            $_SESSION['nu_must_change_password'] = true;
+        } else {
+            unset($_SESSION['nu_must_change_password']);
+        }
 
         // Pass usr_id without casting — loadGlobalMeta accepts string or int.
         // A (int) cast here would silently zero any UUID string.
@@ -396,8 +430,55 @@ class NuAuth {
         );
     }
 
-    // --- TOTP 2FA ---
-    private function verifyTOTP($secret, $otp) {
+    // --- TOTP 2FA Helpers ---
+    public function generateTOTPSecret(): string {
+        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $secret = '';
+        for ($i = 0; $i < 16; $i++) {
+            $secret .= $chars[random_int(0, 31)];
+        }
+        return $secret;
+    }
+
+    public function generateBackupCodes($userId): array {
+        $codes = [];
+        $hashes = [];
+        for ($i = 0; $i < 8; $i++) {
+            $code = sprintf('%04d-%04d', random_int(1000, 9999), random_int(1000, 9999));
+            $codes[] = $code;
+            $hashes[] = password_hash(str_replace('-', '', $code), PASSWORD_BCRYPT);
+        }
+        try {
+            $user = $this->db->fetchOne("SELECT usr_custom_fields FROM nu_users WHERE usr_id = :id", [':id' => $userId]);
+            $custom = json_decode($user['usr_custom_fields'] ?? '{}', true) ?: [];
+            $custom['backup_codes'] = $hashes;
+            $this->db->query("UPDATE nu_users SET usr_custom_fields = :c WHERE usr_id = :id", [':c' => json_encode($custom), ':id' => $userId]);
+        } catch (\Throwable $e) {}
+        return $codes;
+    }
+
+    public function verifyBackupCode($userId, string $code): bool {
+        $cleanCode = str_replace(['-', ' '], '', trim($code));
+        if ($cleanCode === '') return false;
+        $user = $this->db->fetchOne("SELECT usr_custom_fields FROM nu_users WHERE usr_id = :id", [':id' => $userId]);
+        if (!$user || empty($user['usr_custom_fields'])) return false;
+
+        $custom = json_decode($user['usr_custom_fields'], true) ?: [];
+        $hashes = $custom['backup_codes'] ?? [];
+        if (!is_array($hashes)) return false;
+
+        foreach ($hashes as $idx => $hash) {
+            if (password_verify($cleanCode, $hash)) {
+                unset($hashes[$idx]);
+                $custom['backup_codes'] = array_values($hashes);
+                $this->db->query("UPDATE nu_users SET usr_custom_fields = :c WHERE usr_id = :id", [':c' => json_encode($custom), ':id' => $userId]);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function verifyTOTP($secret, $otp) {
         $timeSlice = floor(time() / 30);
         for ($i = -1; $i <= 1; $i++) {
             $calculated = $this->generateTOTP($secret, $timeSlice + $i);
@@ -415,7 +496,7 @@ class NuAuth {
                   ((ord($hm[$offset+1]) & 0xFF) << 16) |
                   ((ord($hm[$offset+2]) & 0xFF) <<  8) |
                    (ord($hm[$offset+3]) & 0xFF);
-        return str_pad($code % 1000000, 6, '0', STR_PAD_LEFT);
+        return str_pad((string)($code % 1000000), 6, '0', STR_PAD_LEFT);
     }
 
     private function __clone() {}

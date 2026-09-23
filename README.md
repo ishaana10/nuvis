@@ -51,8 +51,7 @@ nuvis/
 │   ├── AppCloner.php             # App template clone engine (38KB)
 │   ├── Workflow.php              # Workflow engine core
 │   ├── PluginManager.php         # Plugin registration + loader
-│   ├── module_bootstrap.php      # Module bootstrap helper
-│   └── oldApi.php                # Legacy API shim (compatibility)
+│   └── Api.php                   # Modern REST API layer
 │
 ├── api/
 │   ├── auth.php                  # Login / logout / me
@@ -156,6 +155,16 @@ cp config.local.php.example config.local.php
 - Card-based UI with CSS custom properties
 - Accessible keyboard navigation
 - PWA ready (service worker + web manifest)
+
+### Multi-Project Support
+- Isolated project environments with dedicated forms, reports, queries, procedures, menus, workflows, and dashboards
+- Server-side context switching via `ProjectContext`
+- See [Multi-Project Metadata Isolation Guide](docs/multi_project_guide.md) for full architecture details
+
+### Plugins System
+- Extensible modular architecture allowing plugins located under `plugins/`
+- Lifecycle hooks and custom workflow extensions
+- See [Plugin Architecture & Extension Guide](docs/plugins_guide.md) for details
 
 ### Security
 - Password hashing (bcrypt)

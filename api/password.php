@@ -118,6 +118,7 @@ switch ($action) {
             "UPDATE nu_users SET usr_password = :h, usr_password_changed_at = NOW(), usr_must_change_password = 0 WHERE usr_id = :id",
             [':h' => $newHash, ':id' => $user['usr_id']]
         );
+        unset($_SESSION['nu_must_change_password']);
         echo json_encode(['success'=>true,'message'=>'Password updated successfully.']);
         break;
 
@@ -207,6 +208,64 @@ switch ($action) {
             elseif ($remaining <= (int)$policy['policy_expiry_warning_days']) { $result['warning'] = true; }
         }
         echo json_encode(['success'=>true] + $result);
+        break;
+
+    // ── 2FA: Status check ────────────────────────────────────────────────────
+    case 'get_2fa_status':
+        if (!$auth->checkAuth()) { http_response_code(401); echo json_encode(['success'=>false,'message'=>'Unauthorized']); exit; }
+        $user = $auth->getCurrentUser();
+        echo json_encode(['success'=>true, 'enabled' => !empty($user['usr_2fa_secret'])]);
+        break;
+
+    // ── 2FA: Initiate setup ──────────────────────────────────────────────────
+    case 'setup_2fa':
+        if (!$auth->checkAuth()) { http_response_code(401); echo json_encode(['success'=>false,'message'=>'Unauthorized']); exit; }
+        $secret = $auth->generateTOTPSecret();
+        $user   = $auth->getCurrentUser();
+        $issuer = rawurlencode('Nuvis');
+        $account = rawurlencode($user['usr_username']);
+        $otpauth = "otpauth://totp/{$issuer}:{$account}?secret={$secret}&issuer={$issuer}";
+        echo json_encode(['success'=>true, 'secret'=>$secret, 'otpauth_url'=>$otpauth]);
+        break;
+
+    // ── 2FA: Enable after verification ────────────────────────────────────────
+    case 'enable_2fa':
+        if (!$auth->checkAuth()) { http_response_code(401); echo json_encode(['success'=>false,'message'=>'Unauthorized']); exit; }
+        $input  = json_decode(file_get_contents('php://input'), true) ?? [];
+        $secret = trim($input['secret'] ?? '');
+        $code   = trim($input['code'] ?? '');
+
+        if (!$secret || !$code) {
+            echo json_encode(['success'=>false,'message'=>'Secret and verification code are required.']);
+            break;
+        }
+
+        if (!$auth->verifyTOTP($secret, $code)) {
+            echo json_encode(['success'=>false,'message'=>'Invalid verification code. Please try again.']);
+            break;
+        }
+
+        $user = $auth->getCurrentUser();
+        $db->query("UPDATE nu_users SET usr_2fa_secret = :s WHERE usr_id = :id", [':s'=>$secret, ':id'=>$user['usr_id']]);
+        $backupCodes = $auth->generateBackupCodes($user['usr_id']);
+
+        echo json_encode(['success'=>true, 'message'=>'2FA enabled successfully!', 'backup_codes'=>$backupCodes]);
+        break;
+
+    // ── 2FA: Disable ──────────────────────────────────────────────────────────
+    case 'disable_2fa':
+        if (!$auth->checkAuth()) { http_response_code(401); echo json_encode(['success'=>false,'message'=>'Unauthorized']); exit; }
+        $input      = json_decode(file_get_contents('php://input'), true) ?? [];
+        $currentPwd = trim($input['current_password'] ?? '');
+
+        $user = $auth->getCurrentUser();
+        if (!password_verify($currentPwd, $user['usr_password'])) {
+            echo json_encode(['success'=>false,'message'=>'Incorrect password.']);
+            break;
+        }
+
+        $db->query("UPDATE nu_users SET usr_2fa_secret = NULL WHERE usr_id = :id", [':id'=>$user['usr_id']]);
+        echo json_encode(['success'=>true, 'message'=>'2FA disabled successfully.']);
         break;
 
     default:

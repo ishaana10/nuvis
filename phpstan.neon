@@ -1,0 +1,8 @@
+parameters:
+    level: 2
+    paths:
+        - core
+    excludePaths:
+        - vendor
+    bootstrapFiles:
+        - tests/bootstrap.php

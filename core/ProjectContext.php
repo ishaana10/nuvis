@@ -36,36 +36,40 @@ class ProjectContext {
         }
 
         // Check if session project ID exists
-        if (!empty($_SESSION['nu_project_id'])) {
-            $sessPid = (int)$_SESSION['nu_project_id'];
+        try {
+            if (!empty($_SESSION['nu_project_id'])) {
+                $sessPid = (int)$_SESSION['nu_project_id'];
 
-            // Verify project exists & active
-            $proj = $db->fetchOne("SELECT project_id, project_code FROM nu_projects WHERE project_id = ? AND project_active = 1", [$sessPid]);
-            if ($proj) {
-                // If user is globeadmin, allow access immediately
-                if ($userRole === 'globeadmin' || empty($userId)) {
-                    $_SESSION['nu_project_code'] = $proj['project_code'];
-                    return $sessPid;
-                }
+                // Verify project exists & active
+                $proj = $db->fetchOne("SELECT project_id, project_code FROM nu_projects WHERE project_id = ? AND project_active = 1", [$sessPid]);
+                if ($proj) {
+                    // If user is globeadmin, allow access immediately
+                    if ($userRole === 'globeadmin' || empty($userId)) {
+                        $_SESSION['nu_project_code'] = $proj['project_code'];
+                        return $sessPid;
+                    }
 
-                // For non-globeadmin users, verify member assignment
-                if (self::validateAccess((int)$userId, $sessPid, $userRole)) {
-                    $_SESSION['nu_project_code'] = $proj['project_code'];
-                    return $sessPid;
+                    // For non-globeadmin users, verify member assignment
+                    if (self::validateAccess((int)$userId, $sessPid, $userRole)) {
+                        $_SESSION['nu_project_code'] = $proj['project_code'];
+                        return $sessPid;
+                    }
                 }
             }
+
+            // Resolve default or assigned project for user
+            $resolvedId = self::resolveDefaultProjectForUser($userId ? (int)$userId : null, $userRole);
+            $_SESSION['nu_project_id'] = $resolvedId;
+
+            $projRow = $db->fetchOne("SELECT project_code FROM nu_projects WHERE project_id = ?", [$resolvedId]);
+            if ($projRow) {
+                $_SESSION['nu_project_code'] = $projRow['project_code'];
+            }
+
+            return $resolvedId;
+        } catch (\Throwable $e) {
+            return 1;
         }
-
-        // Resolve default or assigned project for user
-        $resolvedId = self::resolveDefaultProjectForUser($userId ? (int)$userId : null, $userRole);
-        $_SESSION['nu_project_id'] = $resolvedId;
-
-        $projRow = $db->fetchOne("SELECT project_code FROM nu_projects WHERE project_id = ?", [$resolvedId]);
-        if ($projRow) {
-            $_SESSION['nu_project_code'] = $projRow['project_code'];
-        }
-
-        return $resolvedId;
     }
 
     /**
@@ -80,9 +84,13 @@ class ProjectContext {
         }
 
         $db = NuDatabase::getInstance();
-        $proj = $db->fetchOne("SELECT project_id, project_code FROM nu_projects WHERE project_id = ? AND project_active = 1", [$projectId]);
-        if (!$proj) {
-            return false;
+        try {
+            $proj = $db->fetchOne("SELECT project_id, project_code FROM nu_projects WHERE project_id = ? AND project_active = 1", [$projectId]);
+            if (!$proj) {
+                return false;
+            }
+        } catch (\Throwable $e) {
+            return true;
         }
 
         $sessUser = $_SESSION['user'] ?? null;
@@ -152,12 +160,16 @@ class ProjectContext {
 
         // 1. If globeadmin or unauthenticated, return system default project
         if ($userRole === 'globeadmin' || empty($userId)) {
-            $defaultProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_is_default = 1 AND project_active = 1 LIMIT 1");
-            if ($defaultProj) {
-                return (int)$defaultProj['project_id'];
+            try {
+                $defaultProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_is_default = 1 AND project_active = 1 LIMIT 1");
+                if ($defaultProj) {
+                    return (int)$defaultProj['project_id'];
+                }
+                $anyProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_active = 1 ORDER BY project_id ASC LIMIT 1");
+                return $anyProj ? (int)$anyProj['project_id'] : 1;
+            } catch (\Throwable $e) {
+                return 1;
             }
-            $anyProj = $db->fetchOne("SELECT project_id FROM nu_projects WHERE project_active = 1 ORDER BY project_id ASC LIMIT 1");
-            return $anyProj ? (int)$anyProj['project_id'] : 1;
         }
 
         // 2. Check user meta for last_project_id
@@ -263,27 +275,31 @@ class ProjectContext {
 
         $db = NuDatabase::getInstance();
 
-        if ($userRole === 'globeadmin') {
-            return $db->fetchAll("SELECT * FROM nu_projects WHERE project_active = 1 ORDER BY project_is_default DESC, project_name ASC");
+        try {
+            if ($userRole === 'globeadmin') {
+                return $db->fetchAll("SELECT * FROM nu_projects WHERE project_active = 1 ORDER BY project_is_default DESC, project_name ASC");
+            }
+
+            if (empty($userId)) {
+                return $db->fetchAll("SELECT * FROM nu_projects WHERE project_is_default = 1 AND project_active = 1");
+            }
+
+            $projects = $db->fetchAll(
+                "SELECT p.*, COALESCE(pm.pm_role, CASE WHEN p.project_owner_id = ? THEN 'owner' ELSE 'member' END) AS pm_role FROM nu_projects p
+                 LEFT JOIN nu_project_members pm ON p.project_id = pm.pm_project_id AND pm.pm_user_id = ?
+                 WHERE (pm.pm_user_id = ? OR p.project_owner_id = ? OR p.project_is_default = 1) AND p.project_active = 1
+                 ORDER BY p.project_is_default DESC, p.project_name ASC",
+                [$userId, $userId, $userId, $userId]
+            );
+
+            if (empty($projects)) {
+                $projects = $db->fetchAll("SELECT *, 'member' AS pm_role FROM nu_projects WHERE project_is_default = 1 AND project_active = 1");
+            }
+
+            return $projects;
+        } catch (\Throwable $e) {
+            return [['project_id' => 1, 'project_code' => 'default', 'project_name' => 'Default Project', 'project_active' => 1, 'project_is_default' => 1]];
         }
-
-        if (empty($userId)) {
-            return $db->fetchAll("SELECT * FROM nu_projects WHERE project_is_default = 1 AND project_active = 1");
-        }
-
-        $projects = $db->fetchAll(
-            "SELECT p.*, COALESCE(pm.pm_role, CASE WHEN p.project_owner_id = ? THEN 'owner' ELSE 'member' END) AS pm_role FROM nu_projects p
-             LEFT JOIN nu_project_members pm ON p.project_id = pm.pm_project_id AND pm.pm_user_id = ?
-             WHERE (pm.pm_user_id = ? OR p.project_owner_id = ? OR p.project_is_default = 1) AND p.project_active = 1
-             ORDER BY p.project_is_default DESC, p.project_name ASC",
-            [$userId, $userId, $userId, $userId]
-        );
-
-        if (empty($projects)) {
-            $projects = $db->fetchAll("SELECT *, 'member' AS pm_role FROM nu_projects WHERE project_is_default = 1 AND project_active = 1");
-        }
-
-        return $projects;
     }
 
     /**

@@ -11,10 +11,71 @@ $isAdmin = $auth->hasPermission('system.config');
 <!-- ── Tab nav ──────────────────────────────────────────────────────────────── -->
 <div class="nu-tabs" style="margin-bottom:24px;">
     <button class="nu-tab-btn nu-tab-active" onclick="pwdShowTab('change')" id="tab-change">Change Password</button>
+    <button class="nu-tab-btn" onclick="pwdShowTab('2fa')" id="tab-2fa">Two-Factor Auth</button>
     <?php if ($isAdmin): ?>
     <button class="nu-tab-btn" onclick="pwdShowTab('policy')" id="tab-policy">Password Policy</button>
     <button class="nu-tab-btn" onclick="pwdShowTab('reset')" id="tab-reset">Admin Reset</button>
     <?php endif; ?>
+</div>
+
+<!-- ── PANEL: Two-Factor Authentication ────────────────────────────────────── -->
+<div id="pwd-panel-2fa" style="display:none;">
+    <div class="nu-card" style="max-width:540px;">
+        <div class="nu-card-header"><h3 class="nu-card-title">Two-Factor Authentication (2FA)</h3></div>
+        <div class="nu-card-body">
+            <div id="pwd-2fa-alert" style="display:none;margin-bottom:12px;"></div>
+
+            <div id="pwd-2fa-status-box" style="padding:12px;border-radius:var(--radius-md);background:var(--bg-secondary);margin-bottom:16px;">
+                <span id="pwd-2fa-badge" style="font-weight:600;">Checking 2FA status...</span>
+            </div>
+
+            <!-- Setup section -->
+            <div id="pwd-2fa-setup-step" style="display:none;">
+                <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px;">
+                    Scan the Secret Key with your Authenticator app (e.g. Google Authenticator, 1Password, Authy), then enter the 6-digit verification code below:
+                </p>
+                <div class="nu-field">
+                    <label>Secret Key</label>
+                    <input type="text" class="nu-input" id="pwd-2fa-secret" readonly style="font-family:monospace;letter-spacing:1px;background:var(--bg-tertiary);">
+                </div>
+                <div class="nu-field">
+                    <label for="pwd-2fa-code">Verification Code</label>
+                    <input type="text" class="nu-input" id="pwd-2fa-code" placeholder="123456" maxlength="6" style="width:180px;letter-spacing:2px;font-size:16px;">
+                </div>
+                <button class="nu-btn nu-btn-primary" onclick="pwdEnable2FA()">Verify & Enable 2FA</button>
+            </div>
+
+            <!-- Disable section -->
+            <div id="pwd-2fa-disable-step" style="display:none;">
+                <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px;">
+                    2FA is currently active for your account. Enter your current password to disable it:
+                </p>
+                <div class="nu-field">
+                    <label for="pwd-2fa-dis-password">Current Password</label>
+                    <input type="password" class="nu-input" id="pwd-2fa-dis-password" style="max-width:300px;">
+                </div>
+                <button class="nu-btn nu-btn-danger" onclick="pwdDisable2FA()">Disable 2FA</button>
+            </div>
+        </div>
+        <div class="nu-card-footer" style="display:flex;justify-content:space-between;align-items:center;">
+            <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="pwdCheck2FAStatus()">Refresh Status</button>
+            <button class="nu-btn nu-btn-secondary" id="pwd-2fa-init-btn" onclick="pwdInit2FA()">Set Up 2FA</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Backup Codes -->
+<div id="pwd-2fa-backup-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+    <div class="nu-card" style="width:420px;max-width:90%;background:var(--bg-primary);padding:20px;border-radius:var(--radius-lg);">
+        <h3 style="margin-top:0;">Save Your Backup Codes</h3>
+        <p style="font-size:13px;color:var(--text-secondary);">
+            Store these one-time backup codes in a safe place. If you lose access to your authenticator app, you can use these codes to log in.
+        </p>
+        <div id="pwd-2fa-backup-list" style="font-family:monospace;background:var(--bg-secondary);padding:12px;border-radius:var(--radius-md);display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0;font-size:14px;"></div>
+        <div style="display:flex;justify-content:flex-end;">
+            <button class="nu-btn nu-btn-primary" onclick="document.getElementById('pwd-2fa-backup-modal').style.display='none'">I Saved My Codes</button>
+        </div>
+    </div>
 </div>
 
 <!-- ── PANEL: Change own password ───────────────────────────────────────────── -->
@@ -181,14 +242,91 @@ $isAdmin = $auth->hasPermission('system.config');
 
     // ── Tab switching ─────────────────────────────────────────────────────────
     window.pwdShowTab = function(tab) {
-        ['change','policy','reset'].forEach(t => {
+        ['change','2fa','policy','reset'].forEach(t => {
             const panel = document.getElementById('pwd-panel-' + t);
             const btn   = document.getElementById('tab-' + t);
             if (!panel) return;
             panel.style.display = t === tab ? '' : 'none';
             if (btn) btn.classList.toggle('nu-tab-active', t === tab);
         });
+        if (tab === '2fa') pwdCheck2FAStatus();
         if (tab === 'policy' && !_policy) pwdLoadPolicy();
+    };
+
+    // ── 2FA Functions ─────────────────────────────────────────────────────────
+    window.pwdCheck2FAStatus = async function() {
+        try {
+            const res = await fetch('../api/password.php?action=get_2fa_status');
+            const data = await res.json();
+            const badge = document.getElementById('pwd-2fa-badge');
+            const initBtn = document.getElementById('pwd-2fa-init-btn');
+            const disableStep = document.getElementById('pwd-2fa-disable-step');
+            const setupStep = document.getElementById('pwd-2fa-setup-step');
+
+            if (data.enabled) {
+                if (badge) { badge.textContent = '● 2FA is ENABLED'; badge.style.color = 'var(--success, #059669)'; }
+                if (initBtn) initBtn.style.display = 'none';
+                if (disableStep) disableStep.style.display = 'block';
+                if (setupStep) setupStep.style.display = 'none';
+            } else {
+                if (badge) { badge.textContent = '○ 2FA is DISABLED'; badge.style.color = 'var(--text-secondary)'; }
+                if (initBtn) initBtn.style.display = 'inline-block';
+                if (disableStep) disableStep.style.display = 'none';
+            }
+        } catch(e) {}
+    };
+
+    window.pwdInit2FA = async function() {
+        try {
+            const res = await fetch('../api/password.php?action=setup_2fa');
+            const data = await res.json();
+            if (data.success) {
+                const secretInp = document.getElementById('pwd-2fa-secret');
+                if (secretInp) secretInp.value = data.secret;
+                const setupStep = document.getElementById('pwd-2fa-setup-step');
+                if (setupStep) setupStep.style.display = 'block';
+            }
+        } catch(e) {}
+    };
+
+    window.pwdEnable2FA = async function() {
+        showAlert('pwd-2fa-alert', '', '');
+        const payload = {
+            secret: document.getElementById('pwd-2fa-secret')?.value || '',
+            code:   document.getElementById('pwd-2fa-code')?.value || ''
+        };
+        try {
+            const res = await fetch('../api/password.php?action=enable_2fa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const data = await res.json();
+            showAlert('pwd-2fa-alert', data.message || (data.success ? 'Enabled.' : 'Error.'), data.success ? 'success' : 'error');
+            if (data.success) {
+                pwdCheck2FAStatus();
+                if (data.backup_codes && data.backup_codes.length) {
+                    const listEl = document.getElementById('pwd-2fa-backup-list');
+                    if (listEl) {
+                        listEl.innerHTML = data.backup_codes.map(c => `<div>${c}</div>`).join('');
+                    }
+                    const modal = document.getElementById('pwd-2fa-backup-modal');
+                    if (modal) modal.style.display = 'flex';
+                }
+            }
+        } catch(e) { showAlert('pwd-2fa-alert', 'Network error.', 'error'); }
+    };
+
+    window.pwdDisable2FA = async function() {
+        showAlert('pwd-2fa-alert', '', '');
+        const payload = {
+            current_password: document.getElementById('pwd-2fa-dis-password')?.value || ''
+        };
+        try {
+            const res = await fetch('../api/password.php?action=disable_2fa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const data = await res.json();
+            showAlert('pwd-2fa-alert', data.message || (data.success ? 'Disabled.' : 'Error.'), data.success ? 'success' : 'error');
+            if (data.success) {
+                document.getElementById('pwd-2fa-dis-password').value = '';
+                pwdCheck2FAStatus();
+            }
+        } catch(e) { showAlert('pwd-2fa-alert', 'Network error.', 'error'); }
     };
 
     // ── Alerts ────────────────────────────────────────────────────────────────
