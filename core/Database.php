@@ -867,6 +867,10 @@ class NuDatabase {
         return $this->pdo;
     }
 
+    public function getDriverName(): string {
+        return (string)$this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    }
+
     /**
      * Run a DML query (SELECT / INSERT / UPDATE / DELETE) via a prepared statement.
      */

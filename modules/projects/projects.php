@@ -70,6 +70,7 @@ $projects = ProjectContext::getAccessibleProjects();
 
         <?php if ($isGlobeAdmin): ?>
           <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.openExport(<?= $p['project_id'] ?>, '<?= h($p['project_name'], ENT_QUOTES) ?>')">📥 Export SQL</button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.openExportZip(<?= $p['project_id'] ?>, '<?= h($p['project_name'], ENT_QUOTES) ?>')">📦 Export ZIP</button>
           <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.openMembers(<?= $p['project_id'] ?>, '<?= h($p['project_name'], ENT_QUOTES) ?>')">👥 Members</button>
           <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.edit(<?= $p['project_id'] ?>)">✏️ Edit</button>
           <?php if (empty($p['project_is_default'])): ?>
@@ -295,6 +296,10 @@ $projects = ProjectContext::getAccessibleProjects();
       window.location.href = 'api/projects.php?action=export_project&project_id=' + id;
     }
 
+    function openExportZip(id, name) {
+      window.location.href = 'api/projects.php?action=export_zip&project_id=' + id;
+    }
+
     async function openMembers(id, name) {
       $('projMembersProjId').value = id;
       $('projMembersModalTitle').textContent = 'Project Members: ' + name;
@@ -404,6 +409,7 @@ $projects = ProjectContext::getAccessibleProjects();
       switchProject: switchProject,
       delete: delProject,
       openExport: openExport,
+      openExportZip: openExportZip,
       openMembers: openMembers,
       addMember: addMember,
       removeMember: removeMember,
