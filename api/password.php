@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
-require_once '../config.php';
-require_once '../core/Database.php';
-require_once '../core/Auth.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../core/Database.php';
+require_once __DIR__ . '/../core/Auth.php';
 
 header('Content-Type: application/json');
 
@@ -12,11 +12,10 @@ $action = $_GET['action'] ?? '';
 
 // ─── Helper: load active password policy ─────────────────────────────────────
 function loadPolicy(NuDatabase $db): array {
-    $row = $db->fetchOne("SELECT * FROM nu_password_policy WHERE policy_id = 1");
-    return $row ?: [
+    $default = [
         'policy_min_length'        => 8,
         'policy_require_uppercase' => 1,
-        'policy_require_lowercase'  => 1,
+        'policy_require_lowercase' => 1,
         'policy_require_number'    => 1,
         'policy_require_special'   => 0,
         'policy_disallow_username' => 1,
@@ -25,6 +24,12 @@ function loadPolicy(NuDatabase $db): array {
         'policy_expiry_warning_days' => 7,
         'policy_force_change_on_first_login' => 1,
     ];
+    try {
+        $row = $db->fetchOne("SELECT * FROM nu_password_policy WHERE policy_id = 1");
+        return $row ?: $default;
+    } catch (\Throwable $e) {
+        return $default;
+    }
 }
 
 // ─── Helper: validate password against policy ────────────────────────────────
@@ -52,36 +57,40 @@ function validatePassword(string $password, array $policy, string $username = ''
 }
 
 // ─── Helper: check password history ─────────────────────────────────────────
-function isPasswordReused(NuDatabase $db, int $userId, string $newPassword, int $historyCount): bool {
+function isPasswordReused(NuDatabase $db, $userId, string $newPassword, int $historyCount): bool {
     if ($historyCount <= 0) return false;
-    $rows = $db->fetchAll(
-        "SELECT ph_hash FROM nu_password_history WHERE ph_user_id = :uid ORDER BY ph_created_at DESC LIMIT :lim",
-        [':uid' => $userId, ':lim' => $historyCount]
-    );
-    foreach ($rows as $r) {
-        if (password_verify($newPassword, $r['ph_hash'])) return true;
-    }
+    try {
+        $rows = $db->fetchAll(
+            "SELECT ph_hash FROM nu_password_history WHERE ph_user_id = :uid ORDER BY ph_created_at DESC LIMIT :lim",
+            [':uid' => $userId, ':lim' => $historyCount]
+        );
+        foreach ($rows as $r) {
+            if (password_verify($newPassword, $r['ph_hash'])) return true;
+        }
+    } catch (\Throwable $e) {}
     return false;
 }
 
 // ─── Helper: record password history ─────────────────────────────────────────
-function recordPasswordHistory(NuDatabase $db, int $userId, string $hash, int $historyCount): void {
+function recordPasswordHistory(NuDatabase $db, $userId, string $hash, int $historyCount): void {
     if ($historyCount <= 0) return;
-    $db->query(
-        "INSERT INTO nu_password_history (ph_user_id, ph_hash) VALUES (:uid, :hash)",
-        [':uid' => $userId, ':hash' => $hash]
-    );
-    // Prune old history beyond limit
-    $db->query(
-        "DELETE FROM nu_password_history WHERE ph_user_id = :uid
-         AND ph_id NOT IN (
-             SELECT ph_id FROM (
-                 SELECT ph_id FROM nu_password_history WHERE ph_user_id = :uid2
-                 ORDER BY ph_created_at DESC LIMIT :lim
-             ) AS t
-         )",
-        [':uid' => $userId, ':uid2' => $userId, ':lim' => max(20, $historyCount)]
-    );
+    try {
+        $db->query(
+            "INSERT INTO nu_password_history (ph_user_id, ph_hash) VALUES (:uid, :hash)",
+            [':uid' => $userId, ':hash' => $hash]
+        );
+        // Prune old history beyond limit
+        $db->query(
+            "DELETE FROM nu_password_history WHERE ph_user_id = :uid
+             AND ph_id NOT IN (
+                 SELECT ph_id FROM (
+                     SELECT ph_id FROM nu_password_history WHERE ph_user_id = :uid2
+                     ORDER BY ph_created_at DESC LIMIT :lim
+                 ) AS t
+             )",
+            [':uid' => $userId, ':uid2' => $userId, ':lim' => max(20, $historyCount)]
+        );
+    } catch (\Throwable $e) {}
 }
 
 switch ($action) {
@@ -107,16 +116,17 @@ switch ($action) {
         $errors = validatePassword($newPwd, $policy, $user['usr_username']);
         if ($errors) { echo json_encode(['success'=>false,'message'=>implode(' ', $errors)]); break; }
 
-        if (isPasswordReused($db, (int)$user['usr_id'], $newPwd, (int)$policy['policy_history_count'])) {
+        if (isPasswordReused($db, $user['usr_id'], $newPwd, (int)$policy['policy_history_count'])) {
             echo json_encode(['success'=>false,'message'=>'You cannot reuse a recent password. Choose a different one.']);
             break;
         }
 
         $newHash = password_hash($newPwd, PASSWORD_DEFAULT);
-        recordPasswordHistory($db, (int)$user['usr_id'], $user['usr_password'], (int)$policy['policy_history_count']);
+        $nowStr  = date('Y-m-d H:i:s');
+        recordPasswordHistory($db, $user['usr_id'], $user['usr_password'], (int)$policy['policy_history_count']);
         $db->query(
-            "UPDATE nu_users SET usr_password = :h, usr_password_changed_at = NOW(), usr_must_change_password = 0 WHERE usr_id = :id",
-            [':h' => $newHash, ':id' => $user['usr_id']]
+            "UPDATE nu_users SET usr_password = :h, usr_password_changed_at = :now, usr_must_change_password = 0 WHERE usr_id = :id",
+            [':h' => $newHash, ':now' => $nowStr, ':id' => $user['usr_id']]
         );
         unset($_SESSION['nu_must_change_password']);
         echo json_encode(['success'=>true,'message'=>'Password updated successfully.']);
@@ -142,10 +152,11 @@ switch ($action) {
         if ($errors) { echo json_encode(['success'=>false,'message'=>implode(' ', $errors)]); break; }
 
         $newHash = password_hash($newPwd, PASSWORD_DEFAULT);
+        $nowStr  = date('Y-m-d H:i:s');
         recordPasswordHistory($db, $targetId, $target['usr_password'], (int)$policy['policy_history_count']);
         $db->query(
-            "UPDATE nu_users SET usr_password = :h, usr_password_changed_at = NOW(), usr_must_change_password = :f WHERE usr_id = :id",
-            [':h' => $newHash, ':f' => $force ? 1 : 0, ':id' => $targetId]
+            "UPDATE nu_users SET usr_password = :h, usr_password_changed_at = :now, usr_must_change_password = :f WHERE usr_id = :id",
+            [':h' => $newHash, ':now' => $nowStr, ':f' => $force ? 1 : 0, ':id' => $targetId]
         );
         echo json_encode(['success'=>true,'message'=>'Password reset for user #' . $targetId . '.']);
         break;
