@@ -256,7 +256,7 @@ $isAdmin = $auth->hasPermission('system.config');
     // ── 2FA Functions ─────────────────────────────────────────────────────────
     window.pwdCheck2FAStatus = async function() {
         try {
-            const res = await fetch('../api/password.php?action=get_2fa_status');
+            const res = await fetch('api/password.php?action=get_2fa_status');
             const data = await res.json();
             const badge = document.getElementById('pwd-2fa-badge');
             const initBtn = document.getElementById('pwd-2fa-init-btn');
@@ -278,7 +278,7 @@ $isAdmin = $auth->hasPermission('system.config');
 
     window.pwdInit2FA = async function() {
         try {
-            const res = await fetch('../api/password.php?action=setup_2fa');
+            const res = await fetch('api/password.php?action=setup_2fa');
             const data = await res.json();
             if (data.success) {
                 const secretInp = document.getElementById('pwd-2fa-secret');
@@ -296,7 +296,7 @@ $isAdmin = $auth->hasPermission('system.config');
             code:   document.getElementById('pwd-2fa-code')?.value || ''
         };
         try {
-            const res = await fetch('../api/password.php?action=enable_2fa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const res = await fetch('api/password.php?action=enable_2fa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
             const data = await res.json();
             showAlert('pwd-2fa-alert', data.message || (data.success ? 'Enabled.' : 'Error.'), data.success ? 'success' : 'error');
             if (data.success) {
@@ -319,7 +319,7 @@ $isAdmin = $auth->hasPermission('system.config');
             current_password: document.getElementById('pwd-2fa-dis-password')?.value || ''
         };
         try {
-            const res = await fetch('../api/password.php?action=disable_2fa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const res = await fetch('api/password.php?action=disable_2fa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
             const data = await res.json();
             showAlert('pwd-2fa-alert', data.message || (data.success ? 'Disabled.' : 'Error.'), data.success ? 'success' : 'error');
             if (data.success) {
@@ -401,7 +401,7 @@ $isAdmin = $auth->hasPermission('system.config');
             confirm_password:  document.getElementById('pwd-confirm').value,
         };
         try {
-            const res  = await fetch('../api/password.php?action=change_password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const res  = await fetch('api/password.php?action=change_password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
             const data = await res.json();
             showAlert('pwd-change-alert', data.message || (data.success ? 'Done.' : 'Error.'), data.success ? 'success' : 'error');
             if (data.success) { document.getElementById('pwd-current').value = ''; document.getElementById('pwd-new').value = ''; document.getElementById('pwd-confirm').value = ''; pwdStrength(''); }
@@ -411,7 +411,7 @@ $isAdmin = $auth->hasPermission('system.config');
     // ── Load policy into form ─────────────────────────────────────────────────
     window.pwdLoadPolicy = async function() {
         try {
-            const res  = await fetch('../api/password.php?action=get_policy');
+            const res  = await fetch('api/password.php?action=get_policy');
             const data = await res.json();
             if (!data.success) return;
             _policy = data.policy;
@@ -446,7 +446,7 @@ $isAdmin = $auth->hasPermission('system.config');
             policy_force_change_on_first_login: g('pol-force-first')?.checked ? 1 : 0,
         };
         try {
-            const res  = await fetch('../api/password.php?action=save_policy', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const res  = await fetch('api/password.php?action=save_policy', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
             const data = await res.json();
             showAlert('pwd-policy-alert', data.message || (data.success ? 'Saved.' : 'Error.'), data.success ? 'success' : 'error');
             if (data.success) { _policy = { ..._policy, ...payload }; }
@@ -461,7 +461,7 @@ $isAdmin = $auth->hasPermission('system.config');
             force_change: document.getElementById('rst-force')?.checked ?? true,
         };
         try {
-            const res  = await fetch('../api/password.php?action=admin_reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const res  = await fetch('api/password.php?action=admin_reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
             const data = await res.json();
             showAlert('pwd-reset-alert', data.message || (data.success ? 'Done.' : 'Error.'), data.success ? 'success' : 'error');
             if (data.success) { document.getElementById('rst-new-pwd').value = ''; }
@@ -471,7 +471,7 @@ $isAdmin = $auth->hasPermission('system.config');
     // ── Auto-load policy for checklist once on page load ──────────────────────
     (async () => {
         try {
-            const res  = await fetch('../api/password.php?action=get_policy');
+            const res  = await fetch('api/password.php?action=get_policy');
             const data = await res.json();
             if (data.success) _policy = data.policy;
         } catch(e) {}

@@ -842,7 +842,7 @@ async function saveSmtpSettings() {
   ];
 
   try {
-    const res = await fetch('../api/email.php', {
+    const res = await fetch('api/email.php', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ action: 'save_settings', settings })
@@ -857,7 +857,7 @@ async function saveSmtpSettings() {
 
 async function loadSmtpSettings() {
   try {
-    const res  = await fetch('../api/email.php?action=get_settings');
+    const res  = await fetch('api/email.php?action=get_settings');
     const data = await res.json();
     if(!data.success) return;
     const s = data.data;
@@ -889,7 +889,7 @@ async function sendTestEmail() {
   btn.textContent = 'Sending...';
   btn.disabled = true;
   try {
-    const res  = await fetch('../api/email.php', {
+    const res  = await fetch('api/email.php', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ action: 'test', to })
@@ -912,7 +912,7 @@ let templates = [];
 
 async function loadTemplates() {
   try {
-    const res  = await fetch('../api/email.php?action=templates');
+    const res  = await fetch('api/email.php?action=templates');
     const data = await res.json();
     templates  = data.success ? data.data : [];
     renderTemplatesTable();
@@ -985,7 +985,7 @@ async function saveTemplate() {
     showAlert('Name, slug, subject, and body are required.', 'error'); return;
   }
   try {
-    const res  = await fetch('../api/email.php', {
+    const res  = await fetch('api/email.php', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
     });
@@ -1003,7 +1003,7 @@ async function saveTemplate() {
 async function deleteTemplate(id) {
   if(!confirm('Delete this template? This cannot be undone.')) return;
   try {
-    const res  = await fetch('../api/email.php', {
+    const res  = await fetch('api/email.php', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ action:'delete_template', id })
     });
@@ -1020,7 +1020,7 @@ async function loadLogs() {
   const tbody = document.getElementById('logsBody');
   tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:var(--space-4);color:var(--color-text-muted);">Loading&hellip;</td></tr>';
   try {
-    const res  = await fetch('../api/email.php?action=logs&limit=50');
+    const res  = await fetch('api/email.php?action=logs&limit=50');
     const data = await res.json();
     if(!data.success || !data.data.length) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:var(--space-8);color:var(--color-text-muted);">No emails sent yet.</td></tr>';
