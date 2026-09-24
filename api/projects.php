@@ -321,6 +321,80 @@ switch ($action) {
         echo $sql;
         exit;
 
+    case 'export_zip':
+    case 'export_full_project':
+        if (!$isGlobeAdmin) {
+            json_response(['success' => false, 'error' => 'Only Globe Admin can export projects'], 403);
+        }
+
+        $projectId = (int)($_GET['project_id'] ?? ($input['project_id'] ?? 0));
+        if ($projectId <= 0) {
+            $projectId = ProjectContext::getId();
+        }
+
+        if (!class_exists('ZipArchive')) {
+            json_response(['success' => false, 'error' => 'ZipArchive PHP extension is required for full project export'], 500);
+        }
+
+        require_once dirname(__DIR__) . '/core/AppCloner.php';
+        $cloner = new AppCloner();
+
+        $sql = $cloner->exportProject($projectId, [
+            'schemaOnly' => false,
+            'includeUserData' => true
+        ]);
+
+        $proj = $db->fetchOne("SELECT project_code FROM nu_projects WHERE project_id = ?", [$projectId]);
+        $projCode = $proj['project_code'] ?? 'project_' . $projectId;
+
+        $tmpZip = tempnam(sys_get_temp_dir(), 'nu_export_') . '.zip';
+        $zip = new ZipArchive();
+        if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            json_response(['success' => false, 'error' => 'Failed to create zip archive'], 500);
+        }
+
+        // Add SQL export dump
+        $zip->addFromString('database.sql', $sql);
+
+        // Include application code files
+        $baseDir = dirname(__DIR__);
+        $dirsToInclude = ['core', 'api', 'views', 'modules', 'assets', 'lib', 'plugins'];
+        $filesToInclude = ['config.php', 'index.php', 'manifest.json', 'sw.js', '.htaccess', 'install.sql'];
+
+        foreach ($filesToInclude as $file) {
+            $filePath = $baseDir . '/' . $file;
+            if (file_exists($filePath) && is_file($filePath)) {
+                $zip->addFile($filePath, $file);
+            }
+        }
+
+        foreach ($dirsToInclude as $dir) {
+            $dirPath = $baseDir . '/' . $dir;
+            if (is_dir($dirPath)) {
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($dirPath, RecursiveDirectoryIterator::SKIP_DOTS),
+                    RecursiveIteratorIterator::SELF_FIRST
+                );
+                foreach ($iterator as $item) {
+                    $relativePath = substr($item->getPathname(), strlen($baseDir) + 1);
+                    if ($item->isDir()) {
+                        $zip->addEmptyDir($relativePath);
+                    } elseif ($item->isFile()) {
+                        $zip->addFile($item->getPathname(), $relativePath);
+                    }
+                }
+            }
+        }
+
+        $zip->close();
+
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $projCode . '_standalone_package.zip"');
+        header('Content-Length: ' . filesize($tmpZip));
+        readfile($tmpZip);
+        @unlink($tmpZip);
+        exit;
+
     case 'version_create':
         if (!$isGlobeAdmin) {
             json_response(['success' => false, 'error' => 'Only Globe Admin can create project versions'], 403);
