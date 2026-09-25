@@ -353,11 +353,23 @@ switch ($action) {
             json_response(['success' => false, 'error' => 'Failed to create zip archive'], 500);
         }
 
-        // Add SQL export dump
-        $zip->addFromString('database.sql', $sql);
+        // Base directory
+        $baseDir = dirname(__DIR__);
+
+        // Prepare combined SQL (base system install.sql + project application SQL)
+        $installSql = '';
+        $installSqlFile = $baseDir . '/install.sql';
+        if (file_exists($installSqlFile)) {
+            $installSql = (string)file_get_contents($installSqlFile) . "\n\n";
+        }
+
+        $combinedSql = $installSql . $sql;
+
+        // Add SQL export dumps into the ZIP archive
+        $zip->addFromString('database.sql', $combinedSql);
+        $zip->addFromString('project.sql', $sql);
 
         // Include application code files
-        $baseDir = dirname(__DIR__);
         $dirsToInclude = ['core', 'api', 'views', 'modules', 'assets', 'lib', 'plugins'];
         $filesToInclude = ['config.php', 'index.php', 'manifest.json', 'sw.js', '.htaccess', 'install.sql'];
 
