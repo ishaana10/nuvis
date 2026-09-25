@@ -464,8 +464,10 @@ switch ($action) {
         }
 
         $versions = $db->fetchAll(
-            "SELECT pv_id, pv_project_id, pv_version_tag, pv_description, pv_created_by, pv_created_at
-             FROM nu_project_versions WHERE pv_project_id = ? ORDER BY pv_id DESC",
+            "SELECT pv.pv_id, pv.pv_project_id, pv.pv_version_tag, pv.pv_description, pv.pv_created_by, pv.pv_created_at, u.usr_username, u.usr_name
+             FROM nu_project_versions pv
+             LEFT JOIN nu_users u ON pv.pv_created_by = u.usr_id
+             WHERE pv.pv_project_id = ? ORDER BY pv.pv_id DESC",
             [$projectId]
         );
 
