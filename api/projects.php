@@ -353,11 +353,23 @@ switch ($action) {
             json_response(['success' => false, 'error' => 'Failed to create zip archive'], 500);
         }
 
-        // Add SQL export dump
-        $zip->addFromString('database.sql', $sql);
+        // Base directory
+        $baseDir = dirname(__DIR__);
+
+        // Prepare combined SQL (base system install.sql + project application SQL)
+        $installSql = '';
+        $installSqlFile = $baseDir . '/install.sql';
+        if (file_exists($installSqlFile)) {
+            $installSql = (string)file_get_contents($installSqlFile) . "\n\n";
+        }
+
+        $combinedSql = $installSql . $sql;
+
+        // Add SQL export dumps into the ZIP archive
+        $zip->addFromString('database.sql', $combinedSql);
+        $zip->addFromString('project.sql', $sql);
 
         // Include application code files
-        $baseDir = dirname(__DIR__);
         $dirsToInclude = ['core', 'api', 'views', 'modules', 'assets', 'lib', 'plugins'];
         $filesToInclude = ['config.php', 'index.php', 'manifest.json', 'sw.js', '.htaccess', 'install.sql'];
 
@@ -452,8 +464,10 @@ switch ($action) {
         }
 
         $versions = $db->fetchAll(
-            "SELECT pv_id, pv_project_id, pv_version_tag, pv_description, pv_created_by, pv_created_at
-             FROM nu_project_versions WHERE pv_project_id = ? ORDER BY pv_id DESC",
+            "SELECT pv.pv_id, pv.pv_project_id, pv.pv_version_tag, pv.pv_description, pv.pv_created_by, pv.pv_created_at, u.usr_username, u.usr_name
+             FROM nu_project_versions pv
+             LEFT JOIN nu_users u ON pv.pv_created_by = u.usr_id
+             WHERE pv.pv_project_id = ? ORDER BY pv.pv_id DESC",
             [$projectId]
         );
 

@@ -71,6 +71,7 @@ $projects = ProjectContext::getAccessibleProjects();
         <?php if ($isGlobeAdmin): ?>
           <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.openExport(<?= $p['project_id'] ?>, '<?= h($p['project_name'], ENT_QUOTES) ?>')">📥 Export SQL</button>
           <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.openExportZip(<?= $p['project_id'] ?>, '<?= h($p['project_name'], ENT_QUOTES) ?>')">📦 Export ZIP</button>
+          <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.openVersions(<?= $p['project_id'] ?>, '<?= h($p['project_name'], ENT_QUOTES) ?>')">🏷️ Versions</button>
           <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.openMembers(<?= $p['project_id'] ?>, '<?= h($p['project_name'], ENT_QUOTES) ?>')">👥 Members</button>
           <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="ProjectsModule.edit(<?= $p['project_id'] ?>)">✏️ Edit</button>
           <?php if (empty($p['project_is_default'])): ?>
@@ -107,6 +108,49 @@ $projects = ProjectContext::getAccessibleProjects();
     <div style="display:flex; justify-content:flex-end; gap:8px;">
       <button class="nu-btn nu-btn-ghost" onclick="ProjectsModule.closeModal()">Cancel</button>
       <button class="nu-btn nu-btn-primary" onclick="ProjectsModule.saveProject()">Save Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── VERSION CONTROL SNAPSHOTS MODAL ── -->
+<div id="projVersionsModal" class="nu-modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+  <div class="nu-card" style="width:100%; max-width:680px; padding:24px; background:var(--bg-card); border-radius:8px;">
+    <h3 id="projVersionsModalTitle" style="font-size:16px; font-weight:600; margin:0 0 16px 0;">Project Versions & Snapshots</h3>
+    <input type="hidden" id="projVersionsProjId">
+
+    <!-- Create Version Form -->
+    <div style="display:grid; grid-template-columns:1fr 1.5fr auto; gap:8px; margin-bottom:16px; padding:12px; background:var(--bg-subtle); border-radius:6px; align-items:end;">
+      <div>
+        <label style="font-size:11px; font-weight:600; margin-bottom:4px; display:block;">Version Tag</label>
+        <input type="text" id="projVerTag" class="nu-input" placeholder="e.g. v1.0.0">
+      </div>
+      <div>
+        <label style="font-size:11px; font-weight:600; margin-bottom:4px; display:block;">Description / Release Notes</label>
+        <input type="text" id="projVerDesc" class="nu-input" placeholder="e.g. Initial production release">
+      </div>
+      <button class="nu-btn nu-btn-primary" onclick="ProjectsModule.createVersion()">🏷️ Create Snapshot</button>
+    </div>
+
+    <!-- Versions History Table -->
+    <div style="max-height:300px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px;">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg-subtle); text-align:left;">
+            <th style="padding:8px 12px;">Tag</th>
+            <th style="padding:8px 12px;">Description</th>
+            <th style="padding:8px 12px;">Created By</th>
+            <th style="padding:8px 12px;">Date</th>
+            <th style="padding:8px 12px; text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody id="projVersionsTableBody">
+          <!-- Populated dynamically -->
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+      <button class="nu-btn nu-btn-secondary" onclick="ProjectsModule.closeVersionsModal()">Close</button>
     </div>
   </div>
 </div>
@@ -300,6 +344,91 @@ $projects = ProjectContext::getAccessibleProjects();
       window.location.href = 'api/projects.php?action=export_zip&project_id=' + id;
     }
 
+    async function openVersions(id, name) {
+      $('projVersionsProjId').value = id;
+      $('projVersionsModalTitle').textContent = 'Project Versions: ' + name;
+      $('projVerTag').value = 'v' + new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+      $('projVerDesc').value = '';
+      $('projVersionsModal').style.display = 'flex';
+      await loadVersions(id);
+    }
+
+    async function loadVersions(id) {
+      try {
+        var res = await fetch('api/projects.php?action=version_list&project_id=' + id);
+        var data = await res.json();
+        var tbody = $('projVersionsTableBody');
+        tbody.innerHTML = '';
+        if (data.success && data.versions && data.versions.length > 0) {
+          data.versions.forEach(function(v) {
+            var tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--border-color)';
+            tr.innerHTML = '<td style="padding:8px 12px; font-weight:600; font-family:monospace;"><span class="nu-badge nu-badge-primary">' + v.pv_version_tag + '</span></td>' +
+                           '<td style="padding:8px 12px; color:var(--text-secondary);">' + (v.pv_description || 'No release notes') + '</td>' +
+                           '<td style="padding:8px 12px; font-size:12px;">' + (v.usr_name || v.usr_username || 'System') + '</td>' +
+                           '<td style="padding:8px 12px; font-size:12px; color:var(--text-tertiary);">' + v.pv_created_at + '</td>' +
+                           '<td style="padding:8px 12px; text-align:right;"><button class="nu-btn nu-btn-secondary nu-btn-sm" onclick="ProjectsModule.restoreVersion(' + v.pv_id + ', \'' + v.pv_version_tag + '\')">↺ Restore</button></td>';
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; text-align:center; color:var(--text-tertiary);">No version snapshots created yet.</td></tr>';
+        }
+      } catch (e) {
+        alert('Network error loading versions');
+      }
+    }
+
+    async function createVersion() {
+      var projId = $('projVersionsProjId').value;
+      var tag    = $('projVerTag').value.trim();
+      var desc   = $('projVerDesc').value.trim();
+
+      if (!projId) return;
+
+      try {
+        var res = await fetch('api/projects.php?action=version_create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: parseInt(projId), version_tag: tag, description: desc })
+        });
+        var data = await res.json();
+        if (data.success) {
+          $('projVerDesc').value = '';
+          $('projVerTag').value = 'v' + new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+          await loadVersions(projId);
+        } else {
+          alert(data.error || 'Failed to create snapshot');
+        }
+      } catch (e) {
+        alert('Network error creating snapshot');
+      }
+    }
+
+    async function restoreVersion(versionId, tag) {
+      if (!confirm('Are you sure you want to restore the project metadata to snapshot "' + tag + '"? Current forms, menus, reports, procedures, and workflows will be overwritten.')) return;
+
+      try {
+        var res = await fetch('api/projects.php?action=version_restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version_id: versionId })
+        });
+        var data = await res.json();
+        if (data.success) {
+          alert(data.message || 'Version snapshot restored successfully!');
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to restore snapshot');
+        }
+      } catch (e) {
+        alert('Network error restoring version');
+      }
+    }
+
+    function closeVersionsModal() {
+      $('projVersionsModal').style.display = 'none';
+    }
+
     async function openMembers(id, name) {
       $('projMembersProjId').value = id;
       $('projMembersModalTitle').textContent = 'Project Members: ' + name;
@@ -410,6 +539,10 @@ $projects = ProjectContext::getAccessibleProjects();
       delete: delProject,
       openExport: openExport,
       openExportZip: openExportZip,
+      openVersions: openVersions,
+      createVersion: createVersion,
+      restoreVersion: restoreVersion,
+      closeVersionsModal: closeVersionsModal,
       openMembers: openMembers,
       addMember: addMember,
       removeMember: removeMember,
