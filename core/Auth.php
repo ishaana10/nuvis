@@ -303,6 +303,19 @@ class NuAuth {
             header('Location: ../index.php');
             exit;
         }
+
+        if (!empty($_SESSION['nu_must_change_password'])) {
+            $uri = $_SERVER['REQUEST_URI'] ?? '';
+            $isPasswordEndpoint = (strpos($uri, 'password') !== false);
+            if (!$isPasswordEndpoint) {
+                if ($this->isApiRequest()) {
+                    http_response_code(403);
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'error' => 'Password change required before proceeding.', 'must_change_password' => true]);
+                    exit;
+                }
+            }
+        }
     }
 
     public function requirePermission($permission) {
@@ -329,9 +342,15 @@ class NuAuth {
         }
     }
 
+    public function regenerateSession(): void {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+    }
+
     // --- Private Helpers ---
     private function createSession($user) {
-        session_regenerate_id(true);
+        $this->regenerateSession();
         $_SESSION['nu_user_id']       = $user['usr_id'];  // preserved as-is: string (UUID) or int
         $_SESSION['nu_username']      = $user['usr_username'];
         $_SESSION['nu_role']          = $user['usr_role'];
