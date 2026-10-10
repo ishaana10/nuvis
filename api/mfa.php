@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../core/Database.php';
 require_once __DIR__ . '/../core/Auth.php';
+require_once __DIR__ . '/../core/Encryption.php';
 require_once __DIR__ . '/../lib/TOTP.php';
 
 header('Content-Type: application/json');
@@ -72,10 +73,11 @@ switch ($action) {
 
         $nowStr      = date('Y-m-d H:i:s');
         $backupCodes = $auth->generateBackupCodes($user['usr_id']);
+        $saveSecret  = NuEncryption::encryptField('nu_users', 'usr_2fa_secret', $secret);
 
         $db->query(
             "UPDATE nu_users SET usr_2fa_secret = :s, usr_2fa_enabled = 1, usr_mfa_enrolled_at = :now WHERE usr_id = :id",
-            [':s' => $secret, ':now' => $nowStr, ':id' => $user['usr_id']]
+            [':s' => $saveSecret, ':now' => $nowStr, ':id' => $user['usr_id']]
         );
 
         unset($_SESSION['nu_mfa_draft_secret'], $_SESSION['nu_mfa_partial'], $_SESSION['nu_user_id_mfa']);
@@ -103,7 +105,12 @@ switch ($action) {
             break;
         }
 
-        if (!empty($user['usr_2fa_secret']) && !TOTP::verify($user['usr_2fa_secret'], $otpCode)) {
+        $secret = $user['usr_2fa_secret'] ?? '';
+        if (class_exists('NuEncryption') && NuEncryption::isEncrypted($secret)) {
+            $secret = NuEncryption::decryptField('nu_users', 'usr_2fa_secret', $secret);
+        }
+
+        if (!empty($secret) && !TOTP::verify($secret, $otpCode)) {
             echo json_encode(['success' => false, 'message' => 'Invalid MFA verification code.']);
             break;
         }

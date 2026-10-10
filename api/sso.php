@@ -57,7 +57,13 @@ switch ($action) {
         exit;
 
     case 'get_providers':
-        if (!$auth->checkAuth() || !$auth->hasPermission('system.config')) {
+        if (!$auth->checkAuth()) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            exit;
+        }
+        $user = $auth->getCurrentUser();
+        if (!$user || ($user['usr_role'] !== 'globeadmin' && !$auth->hasPermission('system.config'))) {
             http_response_code(403);
             echo json_encode(['success' => false, 'error' => 'Forbidden']);
             exit;
@@ -67,7 +73,13 @@ switch ($action) {
         break;
 
     case 'save_provider':
-        if (!$auth->checkAuth() || !$auth->hasPermission('system.config')) {
+        if (!$auth->checkAuth()) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            exit;
+        }
+        $user = $auth->getCurrentUser();
+        if (!$user || ($user['usr_role'] !== 'globeadmin' && !$auth->hasPermission('system.config'))) {
             http_response_code(403);
             echo json_encode(['success' => false, 'error' => 'Forbidden']);
             exit;
@@ -108,7 +120,13 @@ switch ($action) {
         break;
 
     case 'delete_provider':
-        if (!$auth->checkAuth() || !$auth->hasPermission('system.config')) {
+        if (!$auth->checkAuth()) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            exit;
+        }
+        $user = $auth->getCurrentUser();
+        if (!$user || ($user['usr_role'] !== 'globeadmin' && !$auth->hasPermission('system.config'))) {
             http_response_code(403);
             echo json_encode(['success' => false, 'error' => 'Forbidden']);
             exit;

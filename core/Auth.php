@@ -54,8 +54,14 @@ class NuAuth {
                    || $mfaEnforcement === 'required'
                    || ($mfaEnforcement === 'required_for_admins' && in_array(strtolower((string)($user['usr_role'] ?? '')), ['globeadmin', 'admin'], true));
 
+        $totpSecret = $user['usr_2fa_secret'] ?? '';
+        if (class_exists('NuEncryption') && NuEncryption::isEncrypted($totpSecret)) {
+            require_once __DIR__ . '/Encryption.php';
+            $totpSecret = NuEncryption::decryptField('nu_users', 'usr_2fa_secret', $totpSecret);
+        }
+
         if ($mustUseMfa) {
-            if (empty($user['usr_2fa_secret'])) {
+            if (empty($totpSecret)) {
                 $this->createPartialSession($user);
                 return [
                     'success' => false,
@@ -65,7 +71,7 @@ class NuAuth {
                 ];
             }
 
-            if (!$otp || !$this->verifyTOTP($user['usr_2fa_secret'], $otp)) {
+            if (!$otp || !$this->verifyTOTP($totpSecret, $otp)) {
                 if (!$this->verifyBackupCode($user['usr_id'], (string)$otp)) {
                     return [
                         'success' => false,
@@ -344,6 +350,11 @@ class NuAuth {
                     header('Content-Type: application/json');
                     echo json_encode(['success' => false, 'error' => 'Password change required before proceeding.', 'must_change_password' => true]);
                     exit;
+                } else {
+                    if (strpos($uri, 'index.php') === false) {
+                        header('Location: ../index.php');
+                        exit;
+                    }
                 }
             }
         }

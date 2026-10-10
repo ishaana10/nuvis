@@ -37,6 +37,14 @@ $nuConfig['password'] = [
     'lockoutMinutes'  => 30,
 ];
 
+// ─── Application-Level Field Encryption ─────────────────────────────────────
+$nuConfig['encryption'] = [
+    'key' => getenv('NU_ENCRYPTION_KEY') ?: 'base64:' . base64_encode(hash('sha256', 'nuvis_master_encryption_key_2026', true)),
+    'enabled_fields' => [
+        'nu_users' => ['usr_2fa_secret'],
+    ],
+];
+
 // ─── HTTP Security Headers ───────────────────────────────────────────────────
 require_once NU_ROOT . '/core/SecurityHeaders.php';
 
