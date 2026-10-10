@@ -27,5 +27,16 @@
         "optimize-autoloader": true,
         "preferred-install": "dist",
         "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:coverage": "phpunit --coverage-html coverage",
+        "stan": "phpstan analyse --memory-limit=1G",
+        "security": "composer audit",
+        "check": [
+            "@stan",
+            "@test",
+            "@security"
+        ]
     }
 }

@@ -136,7 +136,8 @@ class NuAuth {
     // --- Session Check ---
     public function checkAuth() {
         if (empty($_SESSION['nu_user_id'])) return false;
-        if (time() - $_SESSION['nu_last_activity'] > $this->config['sessionTimeout']) {
+        $timeout = (int)($this->config['sessionTimeout'] ?? 1800);
+        if (time() - ($_SESSION['nu_last_activity'] ?? 0) > $timeout) {
             $this->logout();
             return false;
         }
@@ -472,7 +473,7 @@ class NuAuth {
     }
 
     private function logAudit($action, $table, $recordId) {
-        if (!$this->config['enableAuditTrail']) return;
+        if (empty($this->config['enableAuditTrail'])) return;
         $audit = new NuAudit();
         $audit->log($action, $table, $recordId);
     }
