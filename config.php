@@ -48,6 +48,20 @@ $nuConfig['encryption'] = [
 // ─── HTTP Security Headers ───────────────────────────────────────────────────
 require_once NU_ROOT . '/core/SecurityHeaders.php';
 
+// ─── Redis ────────────────────────────────────────────────────────────────────
+$nuConfig['redis'] = [
+    'enabled'     => false, // Set true in config.local.php or env when active
+    'scheme'      => 'unix',
+    'path'        => '/home/ictfjcom/.redis/redis.sock',
+    'host'        => '127.0.0.1',
+    'port'        => 6379,
+    'password'    => null,
+    'database'    => 0,
+    'prefix'      => 'nuvis:',
+    'timeout'     => 2.5,
+    'default_ttl' => 300,
+];
+
 // ─── Features ─────────────────────────────────────────────────────────────────
 $nuConfig['enable2FA']         = true;
 $nuConfig['enableAPI']         = true;
