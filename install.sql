@@ -634,8 +634,10 @@ SELECT r.role_id, p.perm_id FROM `nu_roles` r CROSS JOIN `nu_permissions` p
 WHERE r.role_code = 'admin';
 
 -- Default password: password (change immediately after first login)
-INSERT IGNORE INTO `nu_users` (`usr_username`, `usr_password`, `usr_email`, `usr_role`, `usr_active`) VALUES
-('globeadmin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin@nubuilder.local', 'globeadmin', 1);
+INSERT IGNORE INTO `nu_users` (`usr_username`, `usr_password`, `usr_email`, `usr_role`, `usr_active`, `usr_must_change_password`) VALUES
+('globeadmin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin@nubuilder.local', 'globeadmin', 1, 1);
+
+UPDATE `nu_users` SET `usr_must_change_password` = 1 WHERE `usr_username` = 'globeadmin' OR LENGTH(`usr_password`) < 60;
 
 -- Default Password Policy
 INSERT IGNORE INTO `nu_password_policy` (`policy_id`) VALUES (1);

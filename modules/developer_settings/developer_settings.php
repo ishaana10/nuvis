@@ -40,6 +40,16 @@ if (!$currentUser || strtolower((string)$currentUser['usr_role']) !== 'globeadmi
             </div>
 
             <div class="nu-field">
+                <label for="devMfaEnforcement" class="nu-label">MFA Enforcement Policy</label>
+                <select id="devMfaEnforcement" class="nu-input">
+                    <option value="optional">Optional (User-driven enrollment)</option>
+                    <option value="required_for_admins">Required for Administrators</option>
+                    <option value="required">Required for All Users</option>
+                </select>
+                <span class="nu-field-desc">Forces target users to complete TOTP MFA setup on next login.</span>
+            </div>
+
+            <div class="nu-field">
                 <label class="nu-label">Application Logo</label>
                 <div class="logo-preview-container" style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
                     <div id="devLogoPreview" style="width:64px; height:64px; border:1px solid var(--border-color); border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:center; overflow:hidden; background:var(--bg-elevated);">
@@ -148,6 +158,9 @@ var DevSettings = (function() {
             document.getElementById('devLogoUrl').value = settings.app_logo || '';
             if (document.getElementById('devForgotPasswordEnabled')) {
                 document.getElementById('devForgotPasswordEnabled').checked = (settings.forgot_password_enabled === '1');
+            }
+            if (document.getElementById('devMfaEnforcement')) {
+                document.getElementById('devMfaEnforcement').value = settings.mfa_enforcement || 'optional';
             }
             updateLogoPreview(settings.app_logo || '');
 
@@ -307,6 +320,7 @@ var DevSettings = (function() {
             user_header_format: document.getElementById('devUserHeaderFormat')?.value || '',
             app_logo: document.getElementById('devLogoUrl').value,
             forgot_password_enabled: document.getElementById('devForgotPasswordEnabled')?.checked ? '1' : '0',
+            mfa_enforcement: document.getElementById('devMfaEnforcement')?.value || 'optional',
             system_fields_def: rows
         };
 
