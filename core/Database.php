@@ -45,7 +45,7 @@ class NuDatabase {
         ];
 
         if ($dbType === 'sqlite' || (str_ends_with($dbName, '.db') || str_ends_with($dbName, '.sqlite')) || (!empty($this->config['dbSqlitePath']) && is_file($this->config['dbSqlitePath']))) {
-            $sqliteFile = !empty($this->config['dbSqlitePath']) ? $this->config['dbSqlitePath'] : (is_file($dbName) ? $dbName : (defined('NU_ROOT') && is_file(NU_ROOT . '/nu.db') ? NU_ROOT . '/nu.db' : $dbName));
+            $sqliteFile = !empty($this->config['dbSqlitePath']) ? $this->config['dbSqlitePath'] : $dbName;
             $dsn = "sqlite:" . $sqliteFile;
             $user = null;
             $pass = null;
@@ -61,13 +61,6 @@ class NuDatabase {
         try {
             $this->pdo = new PDO($dsn, $user, $pass, $options);
         } catch (PDOException $e) {
-            // Fallback to local nu.db SQLite database if MySQL fails
-            if (defined('NU_ROOT') && is_file(NU_ROOT . '/nu.db')) {
-                try {
-                    $this->pdo = new PDO("sqlite:" . NU_ROOT . '/nu.db', null, null, $options);
-                    return;
-                } catch (PDOException $ex) {}
-            }
             throw new PDOException("Database connection failed: " . $e->getMessage(), (int)$e->getCode(), $e);
         }
 
