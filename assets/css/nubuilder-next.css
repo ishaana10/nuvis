@@ -23,12 +23,23 @@
   --bg-card: #ffffff;
   --bg-subtle: #f8fafc;
   --bg-hover: rgba(0,0,0,.04);
+  --surface-elevated: #ffffff;
+  --focus-ring: rgba(14, 165, 233, 0.25);
 
   /* Text */
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #94a3b8;
   --text-sidebar: #cbd5e1;
+
+  /* Typography Scale */
+  --font-xs: 0.75rem;
+  --font-sm: 0.8125rem;
+  --font-base: 0.875rem;
+  --font-lg: 1rem;
+  --font-xl: 1.125rem;
+  --font-2xl: 1.5rem;
+  --font-3xl: 2.25rem;
 
   /* Borders & radius */
   --border-color: #e2e8f0;
@@ -42,11 +53,15 @@
   --shadow-md: 0 4px 12px rgba(0,0,0,.10);
   --shadow-lg: 0 10px 25px -5px rgba(0,0,0,.08);
 
-  /* Status */
+  /* Status / Semantic Colors */
   --success: #22c55e;
   --warning: #f59e0b;
   --error: #ef4444;
   --info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
 
   /* Spacing scale */
   --space-1: 0.25rem;
@@ -63,16 +78,22 @@
 [data-theme="dark"] {
   --bg-app: #0f172a;
   --bg-card: #1e293b;
-  --bg-subtle: #1e293b;
+  --bg-subtle: #0f172a;
   --bg-hover: rgba(255,255,255,.06);
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --surface-elevated: #334155;
+  --focus-ring: rgba(14, 165, 233, 0.4);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
   --border-color: #334155;
   --input-bg: #1e293b;
   --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
   --shadow-md: 0 4px 12px rgba(0,0,0,.4);
   --shadow-lg: 0 10px 25px -5px rgba(0,0,0,.4);
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-info: #60a5fa;
 }
 
 /* ══ Reset / Base ═══════════════════════════════════════════════════════════ */
@@ -1411,4 +1432,37 @@ body {
 }
 @media (max-width: 640px) {
   .nu-widget-grid { grid-template-columns: 1fr; gap: var(--space-4); }
+}
+
+/* ══ Skeleton Loaders ══════════════════════════════════════════════════════ */
+.nu-skeleton {
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--bg-hover) 50%, var(--bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: nu-skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.nu-skeleton-text {
+  height: 0.875rem;
+  width: 100%;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.nu-skeleton-card {
+  height: 120px;
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.nu-skeleton-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+@keyframes nu-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

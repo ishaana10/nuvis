@@ -45,4 +45,23 @@ class WidgetTest extends TestCase {
         $this->assertEquals('#3b82f6', wu_accent('info'));
         $this->assertEquals('#0ea5e9', wu_accent('default'));
     }
+
+    public function testDesignTokenDefinition(): void {
+        $cssPath = dirname(__DIR__, 2) . '/assets/css/nubuilder-next.css';
+        $this->assertFileExists($cssPath);
+        $css = file_get_contents($cssPath);
+        $this->assertStringContainsString('--color-success:', $css);
+        $this->assertStringContainsString('--color-info:', $css);
+        $this->assertStringContainsString('--surface-elevated:', $css);
+        $this->assertStringContainsString('--focus-ring:', $css);
+        $this->assertStringContainsString('--font-3xl:', $css);
+    }
+
+    public function testSkeletonLoaderClasses(): void {
+        $cssPath = dirname(__DIR__, 2) . '/assets/css/nubuilder-next.css';
+        $css = file_get_contents($cssPath);
+        $this->assertStringContainsString('.nu-skeleton', $css);
+        $this->assertStringContainsString('.nu-skeleton-text', $css);
+        $this->assertStringContainsString('.nu-skeleton-card', $css);
+    }
 }

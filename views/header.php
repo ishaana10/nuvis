@@ -130,11 +130,13 @@ declare(strict_types=1);
         </script>
         <?php endif; ?>
 
-        <button class="nu-btn nu-btn-ghost" title="Toggle theme"
+        <button class="nu-btn nu-btn-ghost" id="nuThemeToggleBtn" title="Theme: Auto (System)"
                 onclick="(function(){
-                    var t=document.documentElement.getAttribute('data-theme');
+                    var btn=document.getElementById('nuThemeToggleBtn');
+                    var t=document.documentElement.getAttribute('data-theme')||'auto';
                     var n=t==='light'?'dark':t==='dark'?'auto':'light';
                     document.documentElement.setAttribute('data-theme',n);
+                    if(btn) btn.title = 'Theme: ' + (n==='light'?'Light':n==='dark'?'Dark':'Auto (System)');
                     try{localStorage.setItem('nu-theme',n);}catch(e){}
                 })()">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
