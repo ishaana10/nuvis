@@ -273,8 +273,13 @@ class NuDatabase {
         // Self-healing: Ensure nu_system_settings table exists and is populated
         if (!$sessionActive || empty($_SESSION['_nu_system_settings_ensured'])) {
             try {
-                $tableExists = $this->pdo->query("SHOW TABLES LIKE 'nu_system_settings'")->fetch();
-                if (!$tableExists) {
+                $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+                $hasSys = false;
+                try {
+                    $hasSys = (bool)$this->pdo->query($driver === 'sqlite' ? "SELECT name FROM sqlite_master WHERE type='table' AND name='nu_system_settings'" : "SHOW TABLES LIKE 'nu_system_settings'")->fetch();
+                } catch (Exception $e) {}
+
+                if (!$hasSys) {
                     $this->pdo->exec("CREATE TABLE `nu_system_settings` (
                         `setting_key` VARCHAR(50) NOT NULL,
                         `setting_value` LONGTEXT DEFAULT NULL,

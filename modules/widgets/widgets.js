@@ -706,6 +706,10 @@
               .then(function (r) { return r.json(); })
               .then(function (d) {
                 if (d && d.widget) {
+                  var bodyEl = card.querySelector('.nu-widget-body');
+                  if (bodyEl && d.html) {
+                    bodyEl.innerHTML = d.html;
+                  }
                   // Re-render chart if canvas exists
                   initCharts();
                 }
