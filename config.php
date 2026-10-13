@@ -37,6 +37,20 @@ if (PHP_SAPI !== 'cli' && !headers_sent()) {
     header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://code.jquery.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; frame-ancestors 'self';");
 }
 
+// ─── Redis ────────────────────────────────────────────────────────────────────
+$nuConfig['redis'] = [
+    'enabled'     => false, // Set true in config.local.php or env when active
+    'scheme'      => 'unix',
+    'path'        => '/home/ictfjcom/.redis/redis.sock',
+    'host'        => '127.0.0.1',
+    'port'        => 6379,
+    'password'    => null,
+    'database'    => 0,
+    'prefix'      => 'nuvis:',
+    'timeout'     => 2.5,
+    'default_ttl' => 300,
+];
+
 // ─── Features ─────────────────────────────────────────────────────────────────
 $nuConfig['enable2FA']         = false;
 $nuConfig['enableAPI']         = true;
@@ -95,14 +109,34 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode',  '1');
     ini_set('session.cookie_httponly',  '1');
     ini_set('session.cookie_samesite',  'Lax');
-    ini_set('session.cookie_secure',    $nuConfig['sessionCookieSecure'] ? '1' : '0');
+    ini_set('session.cookie_secure',    !empty($nuConfig['sessionCookieSecure']) ? '1' : '0');
     ini_set('session.use_only_cookies', '1');
-    ini_set('session.gc_maxlifetime',   (string)$nuConfig['sessionTimeout']);
+    ini_set('session.gc_maxlifetime',   (string)($nuConfig['sessionTimeout'] ?? 3600));
     // Derive cookie_path from baseUrl so it works on any install path
-    $_cookiePath = rtrim(parse_url($nuConfig['baseUrl'], PHP_URL_PATH) ?: '/nbv5u/m/', '/') . '/';
+    $_cookiePath = rtrim(parse_url($nuConfig['baseUrl'] ?? '/nbv5u/m/', PHP_URL_PATH) ?: '/nbv5u/m/', '/') . '/';
     ini_set('session.cookie_path', $_cookiePath);
     unset($_cookiePath);
     session_name('nu5sess');
+
+    // Register Redis session handler if Redis is enabled and extension exists
+    if (!empty($nuConfig['redis']['enabled']) && extension_loaded('redis')) {
+        try {
+            require_once NU_ROOT . '/core/Cache.php';
+            require_once NU_ROOT . '/core/RedisSessionHandler.php';
+            $cache = NuCache::getInstance();
+            if ($cache->isEnabled() && $cache->client()) {
+                $handler = new NuRedisSessionHandler(
+                    $cache->client(),
+                    ($nuConfig['redis']['prefix'] ?? 'nuvis:') . 'sess:',
+                    (int)($nuConfig['sessionTimeout'] ?? 1800)
+                );
+                session_set_save_handler($handler, true);
+            }
+        } catch (\Throwable $e) {
+            error_log('[SessionBootstrap] Redis sessions fallback: ' . $e->getMessage());
+        }
+    }
+
     session_start();
 }
 
