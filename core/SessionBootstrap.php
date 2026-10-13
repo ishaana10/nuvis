@@ -25,5 +25,24 @@ if (isset($nuConfig['baseUrl'])) {
 session_name('NUVISSESSID');                    // avoid default PHPSESSID
 
 if (session_status() === PHP_SESSION_NONE) {
+    // Register Redis session handler if Redis is enabled and extension exists
+    if (!empty($nuConfig['redis']['enabled']) && extension_loaded('redis')) {
+        try {
+            require_once NU_ROOT . '/core/Cache.php';
+            require_once NU_ROOT . '/core/RedisSessionHandler.php';
+            $cache = NuCache::getInstance();
+            if ($cache->isEnabled() && $cache->client()) {
+                $handler = new NuRedisSessionHandler(
+                    $cache->client(),
+                    ($nuConfig['redis']['prefix'] ?? 'nuvis:') . 'sess:',
+                    (int)($nuConfig['sessionTimeout'] ?? 1800)
+                );
+                session_set_save_handler($handler, true);
+            }
+        } catch (\Throwable $e) {
+            error_log('[SessionBootstrap] Redis sessions fallback: ' . $e->getMessage());
+        }
+    }
+
     session_start();
 }
