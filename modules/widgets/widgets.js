@@ -499,7 +499,7 @@
       var wrap = document.getElementById('nuWPreviewWrap');
       var prev = document.getElementById('nuWPreview');
       wrap.style.display = 'block';
-      prev.innerHTML = '<span style="color:#888">Loading...</span>';
+      prev.innerHTML = '<div style="padding:8px;"><div class="nu-skeleton nu-skeleton-text" style="width:60%;"></div><div class="nu-skeleton nu-skeleton-card" style="height:60px;"></div></div>';
       if (!cfg.sql) { prev.innerHTML = '<em>No SQL to preview.</em>'; return; }
       fetch(API + '?action=run_sql', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({sql:cfg.sql}) })
         .then(function (r) { return r.json(); })
