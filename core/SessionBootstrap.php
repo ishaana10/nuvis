@@ -1,0 +1,29 @@
+<?php
+// core/SessionBootstrap.php
+declare(strict_types=1);
+
+global $nuConfig;
+
+ini_set('session.use_strict_mode', '1');
+ini_set('session.use_only_cookies', '1');
+ini_set('session.cookie_httponly', '1');
+
+$cookieSecure = isset($nuConfig['sessionCookieSecure']) && $nuConfig['sessionCookieSecure'] === false ? '0' : '1';
+ini_set('session.cookie_secure', $cookieSecure);
+
+$sameSite = $nuConfig['sessionCookieSameSite'] ?? 'Strict';
+ini_set('session.cookie_samesite', (string)$sameSite);
+
+ini_set('session.cookie_lifetime', '0');        // session cookie (dies on browser close)
+ini_set('session.gc_maxlifetime', (string)($nuConfig['sessionTimeout'] ?? 1800));
+
+if (isset($nuConfig['baseUrl'])) {
+    $_cookiePath = rtrim(parse_url((string)$nuConfig['baseUrl'], PHP_URL_PATH) ?: '/', '/') . '/';
+    ini_set('session.cookie_path', $_cookiePath);
+}
+
+session_name('NUVISSESSID');                    // avoid default PHPSESSID
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}

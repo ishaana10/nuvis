@@ -187,6 +187,12 @@ function nu_create_record($table, $data) {
     } catch (\Throwable $whe) {
         error_log('[Webhook API Insert Trigger Error] ' . $whe->getMessage());
     }
+    try {
+        if (class_exists('NuAudit')) {
+            $audit = new NuAudit();
+            $audit->logChange('create', $table, $newId, null, $clean);
+        }
+    } catch (\Throwable $t) {}
     return $newId;
 }
 
@@ -216,7 +222,8 @@ function nu_update_record($table, $id, $data) {
         $clean['updated_by'] = $currentUserId;
     }
 
-    $pk     = nu_get_pk($table);
+    $old = nu_get_record($table, $id);
+    $pk  = nu_get_pk($table);
     $sets   = []; $params = [];
     foreach ($clean as $key => $value) {
         $sets[] = "`" . nu_safe_column($key) . "` = ?";
@@ -235,12 +242,19 @@ function nu_update_record($table, $id, $data) {
     } catch (\Throwable $whe) {
         error_log('[Webhook API Update Trigger Error] ' . $whe->getMessage());
     }
+    try {
+        if (class_exists('NuAudit')) {
+            $audit = new NuAudit();
+            $audit->logChange('update', $table, $id, $old, $clean);
+        }
+    } catch (\Throwable $t) {}
     return true;
 }
 
 function nu_delete_record($table, $id) {
     if (!$id) throw new Exception('ID required');
-    $pk = nu_get_pk($table);
+    $old = nu_get_record($table, $id);
+    $pk  = nu_get_pk($table);
     nu_q("DELETE FROM `{$table}` WHERE `{$pk}` = ?", [$id]);
     try {
         require_once __DIR__ . '/../core/WebhookSender.php';
@@ -252,6 +266,12 @@ function nu_delete_record($table, $id) {
     } catch (\Throwable $whe) {
         error_log('[Webhook API Delete Trigger Error] ' . $whe->getMessage());
     }
+    try {
+        if (class_exists('NuAudit')) {
+            $audit = new NuAudit();
+            $audit->logChange('delete', $table, $id, $old, null);
+        }
+    } catch (\Throwable $t) {}
     return true;
 }
 
@@ -264,6 +284,14 @@ try {
         case 'GET':
             if ($id !== null && $id !== '') {
                 $record = nu_get_record($table, $id);
+                if (in_array($table, ['nu_users', 'nu_user_meta', 'nu_password_history', 'nu_api_tokens'], true)) {
+                    try {
+                        if (class_exists('NuAudit')) {
+                            $audit = new NuAudit();
+                            $audit->logChange('read', $table, $id, null, null, ['fields' => array_keys($record ?: [])]);
+                        }
+                    } catch (\Throwable $t) {}
+                }
                 nu_json(['success' => true, 'data' => $record, 'record' => $record]);
             }
             $filters = $_GET;
