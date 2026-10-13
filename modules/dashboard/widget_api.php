@@ -44,7 +44,15 @@ function wu_json(array $data): never {
 }
 
 function wu_safe_sql(string $sql, int $userId): string {
-    return str_replace('{{user_id}}', (string)$userId, $sql);
+    $role = (string)($_SESSION['nu_role'] ?? '');
+    $replacements = [
+        '{{user_id}}'    => (string)$userId,
+        '{{role}}'       => $role,
+        '{{today}}'      => date('Y-m-d'),
+        '{{this_month}}' => date('Y-m-01'),
+        '{{this_year}}'  => date('Y-01-01'),
+    ];
+    return strtr($sql, $replacements);
 }
 
 /**

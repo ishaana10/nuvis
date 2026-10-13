@@ -70,7 +70,9 @@ $nuConfig['userHeaderFormat'] = '{name} | {location}';
 $nuConfig['apiRateLimit'] = 1000;
 $nuConfig['apiKeyHeader'] = 'X-API-Key';
 $nuConfig['enableWebhookDemo'] = true;
-$nuConfig['enableGitUpdater'] = false;
+$nuConfig['enableGitUpdater'] = (!empty($_SESSION['nu_user']['usr_role']) && strtolower((string)$_SESSION['nu_user']['usr_role']) === 'globeadmin')
+    || (!empty($_SESSION['nu_role']) && strtolower((string)$_SESSION['nu_role']) === 'globeadmin')
+    || (!empty($_SESSION['usr_role']) && strtolower((string)$_SESSION['usr_role']) === 'globeadmin');
 $nuConfig['allowApiKeyQueryParam'] = false;
 
 // ─── PHP Error Handling ───────────────────────────────────────────────────────
