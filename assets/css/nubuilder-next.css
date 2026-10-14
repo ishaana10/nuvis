@@ -10,27 +10,31 @@
   --sidebar-w-collapsed: 60px;
   --header-h: 60px;
 
-  /* Brand */
-  --primary: #0ea5e9;
-  --primary-hover: #0284c7;
+  /* Brand / Primary Accent */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
   --primary-fg: #ffffff;
+  --color-primary: #2563eb;
 
   /* Surfaces */
-  --bg-app: #f1f5f9;
-  --bg-sidebar: #0b1120;
-  --bg-sidebar-hover: rgba(255,255,255,.07);
-  --bg-sidebar-active: rgba(14,165,233,.18);
+  --bg-app: #f8fafc;
+  --bg-sidebar: #0f172a;
+  --bg-sidebar-hover: rgba(255,255,255,.08);
+  --bg-sidebar-active: rgba(37,99,235,.22);
   --bg-card: #ffffff;
-  --bg-subtle: #f8fafc;
-  --bg-hover: rgba(0,0,0,.04);
+  --bg-subtle: #f1f5f9;
+  --bg-hover: rgba(15,23,42,.04);
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8fafc;
   --surface-elevated: #ffffff;
-  --focus-ring: rgba(14, 165, 233, 0.25);
+  --focus-ring: rgba(37, 99, 235, 0.3);
 
   /* Text */
   --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --text-sidebar: #cbd5e1;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-muted: #64748b;
+  --text-sidebar: #e2e8f0;
 
   /* Typography Scale */
   --font-xs: 0.75rem;
@@ -42,26 +46,26 @@
   --font-3xl: 2.25rem;
 
   /* Borders & radius */
-  --border-color: #e2e8f0;
+  --border-color: #cbd5e1;
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
-  --shadow-md: 0 4px 12px rgba(0,0,0,.10);
-  --shadow-lg: 0 10px 25px -5px rgba(0,0,0,.08);
+  --shadow-sm: 0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
+  --shadow-md: 0 4px 12px rgba(15,23,42,.12), 0 2px 4px rgba(15,23,42,.06);
+  --shadow-lg: 0 12px 28px -6px rgba(15,23,42,.15);
 
   /* Status / Semantic Colors */
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --color-info: #3b82f6;
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+  --info: #2563eb;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-info: #2563eb;
 
   /* Spacing scale */
   --space-1: 0.25rem;
@@ -72,28 +76,45 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
 
-  --transition: .2s ease;
+  --transition: .18s cubic-bezier(.4,0,.2,1);
 }
 
 [data-theme="dark"] {
-  --bg-app: #0f172a;
-  --bg-card: #1e293b;
-  --bg-subtle: #0f172a;
-  --bg-hover: rgba(255,255,255,.06);
-  --surface-elevated: #334155;
-  --focus-ring: rgba(14, 165, 233, 0.4);
+  --primary: #38bdf8;
+  --primary-hover: #0284c7;
+  --primary-fg: #0f172a;
+  --color-primary: #38bdf8;
+
+  --bg-app: #090d16;
+  --bg-card: #131c2e;
+  --bg-subtle: #1e293b;
+  --bg-hover: rgba(255,255,255,.07);
+  --bg-surface: #131c2e;
+  --bg-elevated: #1e293b;
+  --surface-elevated: #1e293b;
+  --focus-ring: rgba(56, 189, 248, 0.4);
+
   --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
+  --text-secondary: #e2e8f0;
+  --text-tertiary: #94a3b8;
   --text-muted: #94a3b8;
+  --text-sidebar: #f1f5f9;
+
   --border-color: #334155;
-  --input-bg: #1e293b;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
-  --shadow-md: 0 4px 12px rgba(0,0,0,.4);
-  --shadow-lg: 0 10px 25px -5px rgba(0,0,0,.4);
+  --input-bg: #0f172a;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+  --shadow-md: 0 4px 14px rgba(0,0,0,.5);
+  --shadow-lg: 0 12px 30px rgba(0,0,0,.6);
+
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #38bdf8;
   --color-success: #4ade80;
   --color-warning: #fbbf24;
   --color-error: #f87171;
-  --color-info: #60a5fa;
+  --color-info: #38bdf8;
 }
 
 /* ══ Reset / Base ═══════════════════════════════════════════════════════════ */
@@ -391,54 +412,62 @@ body {
 
 /* ══ Form / Field Components ════════════════════════════════════════════════ */
 .nu-field { margin-bottom: 16px; }
-.nu-field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary); }
-.nu-input {
+.nu-field label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--text-secondary); letter-spacing: 0.01em; }
+.nu-input, .nu-select {
   width: 100%; padding: 9px 12px;
-  border: 1px solid var(--border-color); border-radius: var(--radius-sm);
-  background: var(--input-bg, #fff); color: var(--text-primary);
-  font-size: 14px; font-family: inherit;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  border: 1px solid var(--border-color); border-radius: var(--radius-md);
+  background: var(--input-bg, var(--bg-card)); color: var(--text-primary);
+  font-size: 13.5px; font-family: inherit; font-weight: 500;
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
 }
-.nu-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(14,165,233,.12); }
+.nu-input:focus, .nu-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
 .nu-input[disabled] { opacity: .5; cursor: not-allowed; }
 
 /* ══ Buttons ════════════════════════════════════════════════════════════════ */
 .nu-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 9px 18px; border: none; border-radius: var(--radius-sm);
-  font-size: 14px; font-weight: 500; font-family: inherit;
-  cursor: pointer; transition: background var(--transition), transform .1s;
-  text-decoration: none; white-space: nowrap;
+  padding: 8px 16px; border: 1px solid transparent; border-radius: var(--radius-md);
+  font-size: 13.5px; font-weight: 600; font-family: inherit;
+  cursor: pointer; transition: all var(--transition);
+  text-decoration: none; white-space: nowrap; user-select: none;
 }
-.nu-btn:active { transform: scale(.97); }
-.nu-btn-primary { background: var(--primary); color: #fff; }
-.nu-btn-primary:hover { background: var(--primary-hover); }
-.nu-btn-ghost { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); }
+.nu-btn:active { transform: translateY(1px); }
+.nu-btn-primary { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); box-shadow: 0 2px 4px rgba(37,99,235,.2); }
+.nu-btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); box-shadow: 0 4px 12px rgba(37,99,235,.35); }
+.nu-btn-ghost { background: var(--bg-card); border-color: var(--border-color); color: var(--text-primary); }
 .nu-btn-ghost:hover { background: var(--bg-hover); border-color: var(--primary); color: var(--primary); }
-.nu-btn-danger { background: #ef4444; color: #fff; }
-.nu-btn-danger:hover { background: #dc2626; }
-.nu-btn-sm { padding: 5px 12px; font-size: 12px; }
+.nu-btn-danger { background: var(--error); color: #fff; border-color: var(--error); }
+.nu-btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+.nu-btn-sm { padding: 5px 12px; font-size: 12px; border-radius: var(--radius-sm); }
 .nu-btn-block { width: 100%; }
 
 /* ══ Cards ══════════════════════════════════════════════════════════════════ */
 .nu-card {
   background: var(--bg-card); border: 1px solid var(--border-color);
-  border-radius: var(--radius-md); padding: 20px; box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition), border-color var(--transition);
 }
-.nu-card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.nu-card:hover { box-shadow: var(--shadow-md); }
+.nu-card-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary); }
 
 /* ══ Tables ══════════════════════════════════════════════════════════════════*/
-.nu-table-wrap { overflow-x: auto; }
+.nu-table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-color); }
 .nu-table {
-  width: 100%; border-collapse: collapse; font-size: 13px;
+  width: 100%; border-collapse: collapse; font-size: 13.5px;
 }
 .nu-table th, .nu-table td {
-  padding: 10px 14px; text-align: left;
+  padding: 11px 16px; text-align: left;
   border-bottom: 1px solid var(--border-color);
 }
 .nu-table th {
-  font-weight: 600; color: var(--text-secondary);
-  background: var(--bg-subtle); font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+  font-weight: 700; color: var(--text-primary);
+  background: var(--bg-subtle); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
+}
+.nu-table td {
+  color: var(--text-primary);
+}
+.nu-table tbody tr {
+  transition: background-color var(--transition);
 }
 .nu-table tbody tr:hover { background: var(--bg-hover); }
 
