@@ -1,14 +1,14 @@
 <?php
-// nuBuilder Next - Migration Tool from nuBuilder Forte 4.9
-// Run this once after installing nuBuilder Next
+// Nuvis StudioX - Migration Tool from nuBuilder Forte 4.9
+// Run this once after installing Nuvis StudioX
 
 require_once 'config.php';
 require_once 'core/Database.php';
 
 $db = NuDatabase::getInstance();
-$sourceDb = 'nubuilder_forte'; // Change to your current nuBuilder database name
+$sourceDb = 'nubuilder_forte'; // Change to your current Nuvis StudioX database name
 
-echo "Starting migration from nuBuilder Forte...
+echo "Starting migration from Nuvis StudioX Forte 4.9...
 ";
 
 // 1. Migrate Users

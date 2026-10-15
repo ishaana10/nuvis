@@ -1,6 +1,6 @@
-# nuvis
+# Nuvis StudioX
 
-A modern, responsive rebuild of the nuvis low-code platform — PHP/MySQL, fully self-hosted.
+A premium, modern web development application for **Nuvis Technologies** (`web.nuvistechnologies.com.fj`) — PHP/MySQL, fully self-hosted low-code platform.
 
 >  **Host:** A2Hosting (cPanel) · **Stack:** PHP8.1+, MySQL 5.7+, Apache
 
