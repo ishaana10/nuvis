@@ -27,7 +27,7 @@ The security test suite (`tests/Security/`) validates critical controls:
 - **`AuthBypassTest`**: Ensures unauthenticated users cannot access protected modules.
 - **`SqlInjectionTest`**: Verifies parameterized queries and SQL placeholder escaping (`resolveHashes`).
 - **`CsrfTest`**: Validates 64-character token generation and validation.
-- **`SessionSecurityTest`**: Asserts strict session flags (`HttpOnly`, `Secure`, `SameSite=Strict`, `NUVISSESSID`).
+- **`SessionSecurityTest`**: Asserts strict session flags (`HttpOnly`, `Secure`, `SameSite=Strict`, `nuvisstudioxssid`).
 
 ---
 

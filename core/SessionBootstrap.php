@@ -22,7 +22,7 @@ if (isset($nuConfig['baseUrl'])) {
     ini_set('session.cookie_path', $_cookiePath);
 }
 
-session_name('NUVISSESSID');                    // avoid default PHPSESSID
+session_name('nuvisstudioxssid');               // avoid default PHPSESSID
 
 if (session_status() === PHP_SESSION_NONE) {
     // Register Redis session handler if Redis is enabled and extension exists
