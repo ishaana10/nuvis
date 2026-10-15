@@ -135,18 +135,23 @@ if ($action === 'start_redis_daemon') {
         @touch('/home/ictfjcom/.redis.on');
     }
 
-    // Persist enable flag to config file if present
-    $configFilePath = dirname(__DIR__) . '/config.php';
-    if (file_exists($configFilePath)) {
-        $configContent = file_get_contents($configFilePath);
-        if ($configContent !== false) {
-            $updatedContent = preg_replace(
-                "/'redis'\s*=>\s*\[(\s*'enabled'\s*=>\s*)(false|true)/i",
-                "'redis' => [\$1true",
-                $configContent
-            );
-            if ($updatedContent !== null && $updatedContent !== $configContent) {
-                file_put_contents($configFilePath, $updatedContent);
+    // Persist enable flag to config files if present
+    $configFiles = [
+        dirname(__DIR__) . '/config.php',
+        dirname(__DIR__) . '/config.local.php'
+    ];
+    foreach ($configFiles as $configFilePath) {
+        if (file_exists($configFilePath)) {
+            $configContent = file_get_contents($configFilePath);
+            if ($configContent !== false) {
+                $updatedContent = preg_replace(
+                    "/('enabled'\s*=>\s*)(false|true)/i",
+                    '$1true',
+                    $configContent
+                );
+                if ($updatedContent !== null && $updatedContent !== $configContent) {
+                    file_put_contents($configFilePath, $updatedContent);
+                }
             }
         }
     }
@@ -173,18 +178,23 @@ if ($action === 'toggle_redis_config') {
     $input = json_decode(file_get_contents('php://input'), true);
     $enable = !empty($input['enable']);
 
-    $configFilePath = dirname(__DIR__) . '/config.php';
-    if (file_exists($configFilePath)) {
-        $configContent = file_get_contents($configFilePath);
-        if ($configContent !== false) {
-            $targetVal = $enable ? 'true' : 'false';
-            $updatedContent = preg_replace(
-                "/'redis'\s*=>\s*\[(\s*'enabled'\s*=>\s*)(false|true)/i",
-                "'redis' => [\$1" . $targetVal,
-                $configContent
-            );
-            if ($updatedContent !== null) {
-                file_put_contents($configFilePath, $updatedContent);
+    $configFiles = [
+        dirname(__DIR__) . '/config.php',
+        dirname(__DIR__) . '/config.local.php'
+    ];
+    $targetVal = $enable ? 'true' : 'false';
+    foreach ($configFiles as $configFilePath) {
+        if (file_exists($configFilePath)) {
+            $configContent = file_get_contents($configFilePath);
+            if ($configContent !== false) {
+                $updatedContent = preg_replace(
+                    "/('enabled'\s*=>\s*)(false|true)/i",
+                    '$1' . $targetVal,
+                    $configContent
+                );
+                if ($updatedContent !== null && $updatedContent !== $configContent) {
+                    file_put_contents($configFilePath, $updatedContent);
+                }
             }
         }
     }
