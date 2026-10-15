@@ -1,5 +1,5 @@
 <?php
-// nuBuilder Next - Migration script to add Multi-Project Support
+// Nuvis StudioX - Migration script to add Multi-Project Support
 
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/core/Database.php';

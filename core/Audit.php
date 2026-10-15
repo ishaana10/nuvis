@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// nuBuilder Next - Audit Trail
+// Nuvis StudioX - Audit Trail
 
 class NuAudit {
     private $db;

@@ -241,7 +241,7 @@ function nu_menu_mode_label(array $m): string {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h3 class="nu-card-title">Menu Builder</h3>
       <?php if ($auth->hasPermission('menus','create')): ?>
-      <button class="nu-btn nu-btn-primary" onclick="nuMenuBuilder.open()">+ New Item</button>
+      <button class="nu-btn nu-btn-primary" onclick="nuMeNuvis StudioX.open()">+ New Item</button>
       <?php endif; ?>
     </div>
 
@@ -253,7 +253,7 @@ function nu_menu_mode_label(array $m): string {
             <line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>
           </svg>
           <p style="margin-bottom:12px;">No menu items yet.</p>
-          <button class="nu-btn nu-btn-primary" onclick="nuMenuBuilder.open()">+ New Item</button>
+          <button class="nu-btn nu-btn-primary" onclick="nuMeNuvis StudioX.open()">+ New Item</button>
         </div>
         <?php else: ?>
         <?php
@@ -292,10 +292,10 @@ function nu_menu_mode_label(array $m): string {
               <span class="nb-menu-order-badge"><?= $order ?></span>
               <div class="nb-menu-actions">
                 <?php if (!$isChild): ?>
-                <button class="nb-menu-btn" onclick="nuMenuBuilder.addChild(<?= $mid ?>, '<?= $label ?>')">+ Child</button>
+                <button class="nb-menu-btn" onclick="nuMeNuvis StudioX.addChild(<?= $mid ?>, '<?= $label ?>')">+ Child</button>
                 <?php endif; ?>
-                <button class="nb-menu-btn" onclick="nuMenuBuilder.edit(<?= $mid ?>)">&#x270E; Edit</button>
-                <button class="nb-menu-btn del" onclick="nuMenuBuilder.del(<?= $mid ?>, '<?= $label ?>')">Delete</button>
+                <button class="nb-menu-btn" onclick="nuMeNuvis StudioX.edit(<?= $mid ?>)">&#x270E; Edit</button>
+                <button class="nb-menu-btn del" onclick="nuMeNuvis StudioX.del(<?= $mid ?>, '<?= $label ?>')">Delete</button>
               </div>
             </div>
         <?php
@@ -324,7 +324,7 @@ function nu_menu_mode_label(array $m): string {
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h3 class="nu-card-title" id="menuBuilderTitle">New Menu Item</h3>
-      <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nuMenuBuilder.close()">&#x2715; Cancel</button>
+      <button class="nu-btn nu-btn-ghost nu-btn-sm" onclick="nuMeNuvis StudioX.close()">&#x2715; Cancel</button>
     </div>
 
     <!-- Live preview -->
@@ -351,27 +351,27 @@ function nu_menu_mode_label(array $m): string {
     <div style="margin-bottom:16px;">
       <label class="nu-label" style="margin-bottom:8px;display:block;">Item Type</label>
       <div class="nb-mtype-cards" id="nbMenuTypeCards">
-        <label class="nb-mtype-card selected" data-type="form" onclick="nuMenuBuilder.selectType('form',this)">
+        <label class="nb-mtype-card selected" data-type="form" onclick="nuMeNuvis StudioX.selectType('form',this)">
           <input type="radio" name="menuItemType" value="form" checked>
           <div class="nb-mtype-icon">&#x229E;</div><div class="nb-mtype-label">Form</div>
         </label>
-        <label class="nb-mtype-card" data-type="report" onclick="nuMenuBuilder.selectType('report',this)">
+        <label class="nb-mtype-card" data-type="report" onclick="nuMeNuvis StudioX.selectType('report',this)">
           <input type="radio" name="menuItemType" value="report">
           <div class="nb-mtype-icon">&#x1F4CA;</div><div class="nb-mtype-label">Report</div>
         </label>
-        <label class="nb-mtype-card" data-type="query" onclick="nuMenuBuilder.selectType('query',this)">
+        <label class="nb-mtype-card" data-type="query" onclick="nuMeNuvis StudioX.selectType('query',this)">
           <input type="radio" name="menuItemType" value="query">
           <div class="nb-mtype-icon">&#x1F50D;</div><div class="nb-mtype-label">Query</div>
         </label>
-        <label class="nb-mtype-card" data-type="url" onclick="nuMenuBuilder.selectType('url',this)">
+        <label class="nb-mtype-card" data-type="url" onclick="nuMeNuvis StudioX.selectType('url',this)">
           <input type="radio" name="menuItemType" value="url">
           <div class="nb-mtype-icon">&#x1F517;</div><div class="nb-mtype-label">URL</div>
         </label>
-        <label class="nb-mtype-card" data-type="group" onclick="nuMenuBuilder.selectType('group',this)">
+        <label class="nb-mtype-card" data-type="group" onclick="nuMeNuvis StudioX.selectType('group',this)">
           <input type="radio" name="menuItemType" value="group">
           <div class="nb-mtype-icon">&#x1F4C2;</div><div class="nb-mtype-label">Group</div>
         </label>
-        <label class="nb-mtype-card" data-type="divider" onclick="nuMenuBuilder.selectType('divider',this)">
+        <label class="nb-mtype-card" data-type="divider" onclick="nuMeNuvis StudioX.selectType('divider',this)">
           <input type="radio" name="menuItemType" value="divider">
           <div class="nb-mtype-icon">&mdash;</div><div class="nb-mtype-label">Divider</div>
         </label>
@@ -383,7 +383,7 @@ function nu_menu_mode_label(array $m): string {
       <div class="nb-fp">
         <label>Label</label>
         <input type="text" id="menuLabel" class="nu-input" placeholder="e.g. Customers"
-               oninput="nuMenuBuilder.updatePreview()">
+               oninput="nuMeNuvis StudioX.updatePreview()">
       </div>
 
       <div class="nb-fp" id="menuTargetWrap">
@@ -477,12 +477,12 @@ function nu_menu_mode_label(array $m): string {
             </label>
             <div class="nb-mode-pill-row">
               <button type="button" class="nb-mode-pill selected" id="pillDefaultBrowse"
-                      onclick="nuMenuBuilder.setDefaultView('browse')">
+                      onclick="nuMeNuvis StudioX.setDefaultView('browse')">
                 <span class="nb-mode-pill-icon">&#x1F5C2;</span>
                 <span class="nb-mode-pill-label">Browse</span>
               </button>
               <button type="button" class="nb-mode-pill" id="pillDefaultPreview"
-                      onclick="nuMenuBuilder.setDefaultView('preview')">
+                      onclick="nuMeNuvis StudioX.setDefaultView('preview')">
                 <span class="nb-mode-pill-icon">&#x1F441;</span>
                 <span class="nb-mode-pill-label">Preview</span>
               </button>
@@ -496,12 +496,12 @@ function nu_menu_mode_label(array $m): string {
             </label>
             <div class="nb-mode-pill-row">
               <button type="button" class="nb-mode-pill selected" id="pillBrowseInline"
-                      onclick="nuMenuBuilder.setBrowseMode('inline')">
+                      onclick="nuMeNuvis StudioX.setBrowseMode('inline')">
                 <span class="nb-mode-pill-icon">&#x1F4F0;</span>
                 <span class="nb-mode-pill-label">Inline</span>
               </button>
               <button type="button" class="nb-mode-pill" id="pillBrowsePopup"
-                      onclick="nuMenuBuilder.setBrowseMode('popup')">
+                      onclick="nuMeNuvis StudioX.setBrowseMode('popup')">
                 <span class="nb-mode-pill-icon">&#x1F5D4;</span>
                 <span class="nb-mode-pill-label">Popup</span>
               </button>
@@ -515,12 +515,12 @@ function nu_menu_mode_label(array $m): string {
             </label>
             <div class="nb-mode-pill-row">
               <button type="button" class="nb-mode-pill selected" id="pillPreviewInline"
-                      onclick="nuMenuBuilder.setPreviewMode('inline')">
+                      onclick="nuMeNuvis StudioX.setPreviewMode('inline')">
                 <span class="nb-mode-pill-icon">&#x1F4F0;</span>
                 <span class="nb-mode-pill-label">Inline</span>
               </button>
               <button type="button" class="nb-mode-pill" id="pillPreviewPopup"
-                      onclick="nuMenuBuilder.setPreviewMode('popup')">
+                      onclick="nuMeNuvis StudioX.setPreviewMode('popup')">
                 <span class="nb-mode-pill-icon">&#x1F5D4;</span>
                 <span class="nb-mode-pill-label">Popup</span>
               </button>
@@ -535,9 +535,9 @@ function nu_menu_mode_label(array $m): string {
         <label>Icon</label>
 
         <div class="nb-icon-tabs">
-          <button type="button" class="nb-icon-tab active" onclick="nuMenuBuilder.switchIconTab('builtin',this)">Built-in Icons</button>
-          <button type="button" class="nb-icon-tab" onclick="nuMenuBuilder.switchIconTab('external',this)">External / URL</button>
-          <button type="button" class="nb-icon-tab" onclick="nuMenuBuilder.switchIconTab('emoji',this)">Emoji / Custom</button>
+          <button type="button" class="nb-icon-tab active" onclick="nuMeNuvis StudioX.switchIconTab('builtin',this)">Built-in Icons</button>
+          <button type="button" class="nb-icon-tab" onclick="nuMeNuvis StudioX.switchIconTab('external',this)">External / URL</button>
+          <button type="button" class="nb-icon-tab" onclick="nuMeNuvis StudioX.switchIconTab('emoji',this)">Emoji / Custom</button>
         </div>
 
         <div class="nb-icon-tab-pane active" id="nbIconPaneBuiltin">
@@ -575,7 +575,7 @@ function nu_menu_mode_label(array $m): string {
             ?>
             <button type="button" class="nb-icon-btn<?= $key === 'default' ? ' selected' : '' ?>"
                     data-icon="<?= $key ?>"
-                    onclick="nuMenuBuilder.selectIcon('<?= $key ?>', this)">
+                    onclick="nuMeNuvis StudioX.selectIcon('<?= $key ?>', this)">
               <svg viewBox="0 0 24 24"><?= $svgBody ?></svg>
               <span><?= $key ?></span>
             </button>
@@ -587,7 +587,7 @@ function nu_menu_mode_label(array $m): string {
           <p style="font-size:11px;color:var(--text-tertiary);margin:0 0 6px;">Paste a URL to any <strong>.svg</strong>, <strong>.png</strong> or <strong>.ico</strong> image.</p>
           <input type="text" id="menuIconExtUrl" class="nu-input"
                  placeholder="https://cdn.example.com/icons/my-icon.svg"
-                 oninput="nuMenuBuilder.setExternalIcon(this.value)">
+                 oninput="nuMeNuvis StudioX.setExternalIcon(this.value)">
           <div id="nbExtIconPreview" style="margin-top:8px;display:none;align-items:center;gap:8px;">
             <img id="nbExtIconImg" src="" style="width:28px;height:28px;object-fit:contain;" alt="icon preview">
             <span style="font-size:11px;color:var(--text-secondary);">Preview</span>
@@ -597,7 +597,7 @@ function nu_menu_mode_label(array $m): string {
         <div class="nb-icon-tab-pane" id="nbIconPaneEmoji">
           <p style="font-size:11px;color:var(--text-tertiary);margin:0 0 6px;">Type any emoji or short text.</p>
           <input type="text" id="menuIconCustom" class="nu-input" placeholder="e.g. &#x1F4CA; or &#x2605;"
-                 oninput="nuMenuBuilder.setCustomIcon(this.value)">
+                 oninput="nuMeNuvis StudioX.setCustomIcon(this.value)">
         </div>
 
       </div><!-- end icon fp-full -->
@@ -605,8 +605,8 @@ function nu_menu_mode_label(array $m): string {
     </div><!-- end nb-fp-grid -->
 
     <div class="nb-menu-save-bar">
-      <button type="button" class="nu-btn nu-btn-ghost" onclick="nuMenuBuilder.close()">Cancel</button>
-      <button type="button" class="nu-btn nu-btn-primary" onclick="nuMenuBuilder.save()">&#x1F4BE; Save Item</button>
+      <button type="button" class="nu-btn nu-btn-ghost" onclick="nuMeNuvis StudioX.close()">Cancel</button>
+      <button type="button" class="nu-btn nu-btn-primary" onclick="nuMeNuvis StudioX.save()">&#x1F4BE; Save Item</button>
     </div>
   </div>
 
@@ -705,7 +705,7 @@ if (!window._nbMenusModuleInit) {
     }
   }
 
-  window.nuMenuBuilder = {
+  window.nuMeNuvis StudioX = {
 
     _currentIconMode: 'builtin',
 
