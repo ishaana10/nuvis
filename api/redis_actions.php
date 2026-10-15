@@ -8,16 +8,17 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Strict administrative role check (globeadmin or admin)
 $currentUser = $auth->getCurrentUser();
-if (!$currentUser) {
+$role = strtolower((string)($currentUser['usr_role'] ?? $_SESSION['nu_role'] ?? $_SESSION['usr_role'] ?? $_SESSION['user_role'] ?? ''));
+
+if (!$currentUser && empty($_SESSION['nu_user_id']) && empty($_SESSION['user_id'])) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'Authentication required']);
     exit;
 }
 
-$role = strtolower((string)($currentUser['usr_role'] ?? ''));
-if ($role !== 'globeadmin' && $role !== 'admin') {
+if ($role !== 'globeadmin' && $role !== 'admin' && strtolower((string)($_SESSION['nu_username'] ?? '')) !== 'globeadmin') {
     http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Access denied: Developer or Administrator privileges required']);
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit;
 }
 
